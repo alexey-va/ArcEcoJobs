@@ -12,6 +12,20 @@ Build:
 
 The production artifact is `build/libs/ArcEcoJobs-0.1.0.jar`.
 
+Read-only lab GUI acceptance:
+
+```bash
+cd ../scripts/player-bot
+npm run qa:arcecojobs
+ARC_ECOJOBS_QA_LOCALE=en_US npm run qa:arcecojobs
+ARC_ECOJOBS_QA_ROLE=player npm run qa:arcecojobs
+```
+
+The scenario uses only `/jobs` and fixed read-only menu routes. It never joins
+or leaves a job, grants a voucher, clicks a voucher preset, or changes
+LuckPerms. The admin run covers every screen and both pages of the 50-level
+scale; player mode additionally proves that the management entry stays hidden.
+
 ## Money integration
 
 Every EcoJobs `give_money.args.amount` expression for job `<id>` must multiply

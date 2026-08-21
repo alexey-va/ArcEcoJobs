@@ -1,0 +1,332 @@
+prefix: '<#92bed8>Jobs <#666666>• '
+
+common:
+  back-name: '<#92bed8>Back'
+  back-lore: '<#8c8c8c>Return to the previous screen'
+  previous-name: '<#92bed8>Previous page'
+  previous-lore: '<#8c8c8c>Page <page> of <pages>'
+  next-name: '<#92bed8>Next page'
+  next-lore: '<#8c8c8c>Page <page> of <pages>'
+  close-name: '<#92bed8>Close'
+  loading: '<#8c8c8c>Loading data…'
+  none: '<#8c8c8c>None'
+  all-jobs: 'All jobs'
+  type-all: 'money and XP'
+  type-xp: 'XP'
+  type-money: 'money'
+  permanent: 'permanent'
+
+message:
+  player-only: '<prefix><#e6fff3>Only a player can use this command.'
+  not-ready: '<prefix><#e6fff3>Jobs are still loading. Try again in a few seconds.'
+  no-permission: '<prefix><#e36d6d>You do not have permission.'
+  unknown-subcommand: '<prefix><#e36d6d>Unknown command. Use <#92bed8>/arcjobs help<#e36d6d>.'
+  reload-ok: '<prefix><#79c99e>Configuration and locales reloaded.'
+  reload-failed: '<prefix><#e36d6d>Could not reload configuration: <reason>'
+  invalid-job: '<prefix><#e36d6d>Job <job> was not found.'
+  joined: '<prefix><#79c99e>You selected <job><#79c99e>.'
+  join-failed: '<prefix><#e36d6d>Could not join <job><#e36d6d>. Check the limit and price.'
+  left: '<prefix><#e6fff3>You left <job><#e6fff3>.'
+  leave-failed: '<prefix><#e36d6d>Could not leave <job><#e36d6d>. Check the leave price.'
+  booster-invalid: '<prefix><#e36d6d>This voucher is damaged or was not issued by RusCrafting.'
+  booster-expired: '<prefix><#e36d6d>This voucher has expired.'
+  booster-busy: '<prefix><#e6fff3>Your previous voucher is still being activated. Please wait.'
+  booster-redeemed: '<prefix><#79c99e><multiplier> boost for <jobs> is active for <duration>.'
+  booster-already-used: '<prefix><#e6fff3>This voucher has already been used.'
+  booster-save-failed: '<prefix><#e36d6d>Could not save the boost. The voucher was not consumed.'
+  booster-unknown: '<prefix><#e36d6d>Booster preset <id> was not found.'
+  booster-disabled: '<prefix><#e36d6d>Booster preset <id> is disabled.'
+  booster-given: '<prefix><#79c99e>Gave <amount> × <id> to <player>.'
+  booster-received: '<prefix><#e6fff3>You received <amount> × <item><#e6fff3>.'
+  inventory-full: '<prefix><#e36d6d>The player does not have enough inventory space.'
+  player-not-found: '<prefix><#e36d6d>Player <player> was not found.'
+  invalid-number: '<prefix><#e36d6d>Invalid number: <value>.'
+  invalid-duration: '<prefix><#e36d6d>Invalid duration: <value>. Examples: 30m, 2h, 1d12h.'
+  invalid-type: '<prefix><#e36d6d>Type must be ALL, XP, or MONEY.'
+  invalid-jobs: '<prefix><#e36d6d>Unknown jobs: <jobs>.'
+  boost-granted: '<prefix><#79c99e>Granted <player> a <multiplier> boost for <duration>.'
+  boost-revoked: '<prefix><#e6fff3>Removed boosts: <count>.'
+  boost-empty: '<prefix><#e6fff3><player> has no active boosts.'
+  boost-list-header: '<prefix><#e6fff3>Active boosts for <player>:'
+  boost-list-entry: '<#666666>  • <#92bed8><instance> <#e6fff3>— <type>, <multiplier>, <jobs>, <duration>'
+  boosters-header: '<prefix><#e6fff3>Available booster presets:'
+  boosters-entry: '<#666666>  • <#92bed8><id> <#e6fff3>— <type>, <multiplier>, <duration>, <jobs>'
+  inspect-header: '<prefix><#e6fff3>Voucher <id>: <type>, <multiplier>, <duration>, <jobs>.'
+  diagnose-ok: '<prefix><#79c99e>EcoJobs, LuckPerms, and PlaceholderAPI are available. Jobs: <jobs>, money integration: <money>.'
+  diagnose-problems: '<prefix><#e36d6d>Diagnostics found problems: <problems>'
+
+command:
+  help:
+    - '<#92bed8><b>RusCrafting Jobs</b>'
+    - '<#666666>• <#e6fff3>/arcjobs <#8c8c8c>— open the menu'
+    - '<#666666>• <#e6fff3>/arcjobs boost list <#8c8c8c>— active boosts'
+    - '<#666666>• <#e6fff3>Right-click a voucher <#8c8c8c>— activate a boost'
+  admin-help:
+    - '<#666666>• <#e6fff3>/arcjobs reload'
+    - '<#666666>• <#e6fff3>/arcjobs boosters list'
+    - '<#666666>• <#e6fff3>/arcjobs booster inspect <id|hand>'
+    - '<#666666>• <#e6fff3>/arcjobs booster give <player> <id> [amount] [--duration 1h] [--multiplier 2] [--type ALL] [--jobs all]'
+    - '<#666666>• <#e6fff3>/arcjobs boost grant <player> <duration> <multiplier> [type] [jobs]'
+    - '<#666666>• <#e6fff3>/arcjobs boost revoke <player> <instance|all>'
+    - '<#666666>• <#e6fff3>/arcjobs diagnose'
+
+menu:
+  main:
+    title: '<#92bed8>Jobs'
+    profile-name: '<#e6fff3><player>'
+    profile-lore:
+      - '<#8c8c8c>Your profession journey'
+      - ''
+      - '<#e6fff3>Active: <#92bed8><active>/<limit>'
+      - '<#e6fff3>Total level: <#92bed8><level>'
+    catalog-name: '<#92bed8>Job catalog'
+    catalog-lore:
+      - '<#e6fff3>Every available path'
+      - '<#8c8c8c>Compare progress and choose a job'
+      - ''
+      - '<#92bed8>Click to open'
+    active-name: '<#92bed8>My jobs'
+    active-lore:
+      - '<#e6fff3>Active jobs: <#92bed8><active>'
+      - '<#8c8c8c>Continue progressing or change direction'
+      - ''
+      - '<#92bed8>Click to open'
+    leaderboard-name: '<#92bed8>Leaders'
+    leaderboard-lore:
+      - '<#e6fff3>Overall and per-job rankings'
+      - '<#8c8c8c>Compared by level and XP'
+      - ''
+      - '<#92bed8>Click to open'
+    boosts-name: '<#92bed8>Boosts'
+    boosts-lore:
+      - '<#e6fff3>Active: <#92bed8><count>'
+      - '<#8c8c8c>Money, XP, jobs, and time remaining'
+      - ''
+      - '<#92bed8>Click to open'
+    help-name: '<#92bed8>How jobs work'
+    help-lore:
+      - '<#e6fff3>Levels, rewards, and boosters'
+      - '<#8c8c8c>A concise guide without command clutter'
+      - ''
+      - '<#92bed8>Click to open'
+    admin-name: '<#d8a657>Management'
+    admin-lore:
+      - '<#e6fff3>Diagnostics and booster presets'
+      - '<#8c8c8c>Available to administrators'
+      - ''
+      - '<#d8a657>Click to open'
+
+  catalog:
+    title: '<#92bed8>Job catalog'
+    title-active: '<#92bed8>My jobs'
+    job-lore:
+      - '<description>'
+      - ''
+      - '<#e6fff3>Level: <#92bed8><level>/<max>'
+      - '<#e6fff3>Status: <state>'
+      - '<#e6fff3>Workers: <#92bed8><workers>'
+      - ''
+      - '<#92bed8>Click to open the job card'
+    state-active: '<#79c99e>active'
+    state-available: '<#92bed8>available'
+    state-locked: '<#e36d6d>locked'
+    empty-name: '<#8c8c8c>No active jobs'
+    empty-lore:
+      - '<#e6fff3>Open the catalog and choose a path.'
+
+  job:
+    title: '<#92bed8><job>'
+    overview-name: '<#e6fff3><job>'
+    overview-lore:
+      - '<description>'
+      - ''
+      - '<#e6fff3>Level: <#92bed8><level>/<max>'
+      - '<#e6fff3>XP: <#92bed8><xp>/<required>'
+      - '<#e6fff3>Progress: <#92bed8><progress>%'
+      - '<#e6fff3>Status: <state>'
+    scale-name: '<#92bed8>Level scale'
+    scale-lore:
+      - '<#e6fff3>All levels and native EcoJobs rewards'
+      - '<#8c8c8c>Maximum level: <max>'
+      - ''
+      - '<#92bed8>Click to open'
+    leaderboard-name: '<#92bed8>Job leaders'
+    leaderboard-lore:
+      - '<#e6fff3>Your rank: <#92bed8><rank>'
+      - '<#8c8c8c>Ranked by level and current XP'
+      - ''
+      - '<#92bed8>Click to open'
+    boosts-name: '<#92bed8>Job boosts'
+    boosts-lore:
+      - '<#e6fff3>XP: <#92bed8><xp_multiplier>'
+      - '<#e6fff3>Money: <#92bed8><money_multiplier>'
+      - '<#8c8c8c>Details and remaining time'
+      - ''
+      - '<#92bed8>Click to open'
+    join-name: '<#79c99e>Select this job'
+    join-lore:
+      - '<#e6fff3>Free slots: <#92bed8><free>'
+      - '<#8c8c8c>EcoJobs will check availability and price'
+      - ''
+      - '<#79c99e>Click to join'
+    unavailable-name: '<#e36d6d>Job unavailable'
+    unavailable-lore:
+      - '<#8c8c8c>Unlock the job or free an active slot.'
+    leave-name: '<#e36d6d>Leave this job'
+    leave-lore:
+      - '<#e6fff3>Your progress follows the EcoJobs rules'
+      - '<#8c8c8c>You will be asked to confirm'
+      - ''
+      - '<#e36d6d>Click to continue'
+
+  leave:
+    title: '<#e36d6d>Leave <job>?'
+    confirm-name: '<#e36d6d>Yes, leave the job'
+    confirm-lore:
+      - '<#e6fff3>Job: <job>'
+      - '<#8c8c8c>EcoJobs will apply the configured leave price'
+      - ''
+      - '<#e36d6d>Click to confirm'
+    cancel-name: '<#79c99e>Stay'
+    cancel-lore:
+      - '<#8c8c8c>Return to the job card'
+
+  levels:
+    title: '<#92bed8><job> · levels'
+    reached-name: '<#79c99e>Level <level>'
+    current-name: '<#d8a657>Level <level>'
+    future-name: '<#e6fff3>Level <level>'
+    lore:
+      - '<#e6fff3>Required XP: <#92bed8><required>'
+      - '<#8c8c8c>Level rewards:'
+      - '<rewards>'
+      - ''
+      - '<status>'
+    status-reached: '<#79c99e>Reached'
+    status-current: '<#d8a657>Current level'
+    status-future: '<#8c8c8c>Not reached yet'
+    no-rewards: '<#8c8c8c>  No separate reward'
+
+  leaderboard:
+    selector-title: '<#92bed8>Leaders'
+    global-name: '<#92bed8>Overall ranking'
+    global-lore:
+      - '<#e6fff3>Total level across every job'
+      - '<#8c8c8c>Current XP breaks equal-level ties'
+      - ''
+      - '<#92bed8>Click to open'
+    job-lore:
+      - '<#e6fff3>Ranking for <job>'
+      - '<#8c8c8c>Level, XP, and your position'
+      - ''
+      - '<#92bed8>Click to open'
+    title-global: '<#92bed8>Overall ranking'
+    title-job: '<#92bed8>Leaders · <job>'
+    entry-name: '<rank_color> <#e6fff3><player>'
+    entry-global-lore:
+      - '<#e6fff3>Total level: <#92bed8><level>'
+      - '<#e6fff3>Current XP: <#92bed8><xp>'
+    entry-job-lore:
+      - '<#e6fff3>Level: <#92bed8><level>'
+      - '<#e6fff3>Current XP: <#92bed8><xp>'
+    self-name: '<#92bed8>Your rank'
+    self-lore:
+      - '<#e6fff3>Position: <#92bed8><rank>'
+      - '<#e6fff3>Level: <#92bed8><level>'
+      - '<#e6fff3>XP: <#92bed8><xp>'
+    empty-name: '<#8c8c8c>No ranking yet'
+    empty-lore:
+      - '<#e6fff3>The first result appears after someone progresses.'
+
+  boosts:
+    title: '<#92bed8>Active boosts'
+    title-job: '<#92bed8>Boosts · <job>'
+    summary-name: '<#e6fff3>Combined effect'
+    summary-lore:
+      - '<#e6fff3>XP: <#92bed8><xp_multiplier>'
+      - '<#e6fff3>Money: <#92bed8><money_multiplier>'
+      - '<#8c8c8c>Matching boosts do not multiply together'
+    entry-name: '<#92bed8><multiplier> · <type>'
+    entry-lore:
+      - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - '<#e6fff3>Remaining: <#92bed8><duration>'
+      - '<#8c8c8c>ID: <instance>'
+    empty-name: '<#8c8c8c>No active boosts'
+    empty-lore:
+      - '<#e6fff3>Use a signed RusCrafting voucher.'
+      - '<#8c8c8c>Right-click a voucher to bind it to your account.'
+
+  help:
+    title: '<#92bed8>Jobs help'
+    jobs-name: '<#92bed8>Jobs'
+    jobs-lore:
+      - '<#e6fff3>Select jobs up to your permitted limit.'
+      - '<#e6fff3>Useful actions grant XP and money.'
+      - '<#8c8c8c>Conditions and rewards vary by job.'
+    levels-name: '<#92bed8>Levels'
+    levels-lore:
+      - '<#e6fff3>Gain enough XP to unlock the next level.'
+      - '<#e6fff3>The job card shows the native EcoJobs scale.'
+      - '<#8c8c8c>Progress remains owned by the jobs engine.'
+    boosts-name: '<#92bed8>Boosters'
+    boosts-lore:
+      - '<#e6fff3>A boost can affect XP, money, or both.'
+      - '<#e6fff3>It can cover all or selected jobs.'
+      - '<#8c8c8c>The boosts screen shows effect and expiry.'
+    commands-name: '<#92bed8>Commands'
+    commands-lore:
+      - '<#e6fff3>/jobs <#8c8c8c>— open this menu'
+      - '<#e6fff3>/arcjobs boost list <#8c8c8c>— boosts in chat'
+      - '<#e6fff3>Right-click a voucher <#8c8c8c>— activate it'
+
+  admin:
+    title: '<#d8a657>Jobs management'
+    status-name: '<#d8a657>Integration status'
+    status-lore:
+      - '<#e6fff3>EcoJobs: <ecojobs>'
+      - '<#e6fff3>LuckPerms: <luckperms>'
+      - '<#e6fff3>PlaceholderAPI: <papi>'
+      - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - '<#e6fff3>Money formulas: <money>'
+    reload-name: '<#d8a657>Reload configuration'
+    reload-lore:
+      - '<#e6fff3>Reload config, boosters, and locales'
+      - '<#8c8c8c>Does not reload EcoJobs'
+      - ''
+      - '<#d8a657>Click to reload'
+    presets-name: '<#d8a657>Booster presets'
+    presets-lore:
+      - '<#e6fff3>Configured: <#92bed8><count>'
+      - '<#8c8c8c>Open the list and give yourself a test voucher'
+      - ''
+      - '<#d8a657>Click to open'
+    help-name: '<#d8a657>Admin commands'
+    help-lore:
+      - '<#e6fff3>/arcjobs booster give …'
+      - '<#e6fff3>/arcjobs boost grant …'
+      - '<#e6fff3>/arcjobs boost revoke …'
+      - '<#8c8c8c>Full syntax: /arcjobs help'
+    presets-title: '<#d8a657>Booster presets'
+    preset-lore:
+      - '<#e6fff3>Type: <#92bed8><type>'
+      - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
+      - '<#e6fff3>Duration: <#92bed8><duration>'
+      - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - ''
+      - '<#d8a657>Left-click: give yourself one voucher'
+
+booster:
+  workday:
+    name: '<#92bed8><b>Workday voucher</b>'
+  focused-xp:
+    name: '<#92bed8><b>Mastery draught</b>'
+  common:
+    lore:
+      - '<#8c8c8c>Personal job booster'
+      - ''
+      - '<#e6fff3>Effect: <#92bed8><type>'
+      - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
+      - '<#e6fff3>Duration: <#92bed8><duration>'
+      - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - ''
+      - '<#92bed8>Right-click to activate'

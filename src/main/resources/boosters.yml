@@ -1,0 +1,36 @@
+boosters:
+  workday:
+    enabled: true
+    type: ALL
+    multiplier: 1.5
+    duration: 1h
+    jobs: [all]
+    item:
+      material: EXPERIENCE_BOTTLE
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.workday.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  focused-xp:
+    enabled: true
+    type: XP
+    multiplier: 2.0
+    duration: 30m
+    jobs: [all]
+    item:
+      material: HONEY_BOTTLE
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.focused-xp.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs

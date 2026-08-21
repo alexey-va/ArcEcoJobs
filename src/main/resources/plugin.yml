@@ -1,0 +1,32 @@
+name: ArcEcoJobs
+version: '${version}'
+main: ru.ruscrafting.ecojobs.paper.ArcEcoJobsPlugin
+api-version: '1.21.11'
+authors: [RusCrafting]
+description: Rich EcoJobs interface and LuckPerms-backed boosts
+depend: [EcoJobs, LuckPerms, PlaceholderAPI]
+commands:
+  arcjobs:
+    description: RusCrafting jobs interface
+    aliases: [ajobs]
+    usage: /arcjobs
+permissions:
+  arcecojobs.use:
+    default: true
+  arcecojobs.booster.use:
+    default: true
+  arcecojobs.admin:
+    default: op
+    children:
+      arcecojobs.admin.reload: true
+      arcecojobs.admin.booster: true
+      arcecojobs.admin.boost: true
+      arcecojobs.admin.diagnose: true
+  arcecojobs.admin.reload:
+    default: op
+  arcecojobs.admin.booster:
+    default: op
+  arcecojobs.admin.boost:
+    default: op
+  arcecojobs.admin.diagnose:
+    default: op

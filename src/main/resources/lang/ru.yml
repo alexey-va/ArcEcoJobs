@@ -1,0 +1,332 @@
+prefix: '<#92bed8>Работы <#666666>• '
+
+common:
+  back-name: '<#92bed8>Назад'
+  back-lore: '<#8c8c8c>Вернуться на предыдущий экран'
+  previous-name: '<#92bed8>Предыдущая страница'
+  previous-lore: '<#8c8c8c>Страница <page> из <pages>'
+  next-name: '<#92bed8>Следующая страница'
+  next-lore: '<#8c8c8c>Страница <page> из <pages>'
+  close-name: '<#92bed8>Закрыть'
+  loading: '<#8c8c8c>Данные загружаются…'
+  none: '<#8c8c8c>Нет'
+  all-jobs: 'Все профессии'
+  type-all: 'деньги и опыт'
+  type-xp: 'опыт'
+  type-money: 'деньги'
+  permanent: 'навсегда'
+
+message:
+  player-only: '<prefix><#e6fff3>Эту команду может выполнить только игрок.'
+  not-ready: '<prefix><#e6fff3>Профессии ещё загружаются. Попробуйте через несколько секунд.'
+  no-permission: '<prefix><#e36d6d>Недостаточно прав.'
+  unknown-subcommand: '<prefix><#e36d6d>Неизвестная команда. Используйте <#92bed8>/arcjobs help<#e36d6d>.'
+  reload-ok: '<prefix><#79c99e>Конфигурация и локализация обновлены.'
+  reload-failed: '<prefix><#e36d6d>Не удалось обновить конфигурацию: <reason>'
+  invalid-job: '<prefix><#e36d6d>Профессия <job> не найдена.'
+  joined: '<prefix><#79c99e>Вы выбрали профессию <job><#79c99e>.'
+  join-failed: '<prefix><#e36d6d>Не удалось вступить в профессию <job><#e36d6d>. Проверьте лимит и цену.'
+  left: '<prefix><#e6fff3>Вы покинули профессию <job><#e6fff3>.'
+  leave-failed: '<prefix><#e36d6d>Не удалось покинуть профессию <job><#e36d6d>. Проверьте цену выхода.'
+  booster-invalid: '<prefix><#e36d6d>Этот талон повреждён или не принадлежит RusCrafting.'
+  booster-expired: '<prefix><#e36d6d>Срок действия этого талона уже истёк.'
+  booster-busy: '<prefix><#e6fff3>Предыдущий талон ещё активируется. Подождите немного.'
+  booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> действует <duration>.'
+  booster-already-used: '<prefix><#e6fff3>Этот талон уже был использован.'
+  booster-save-failed: '<prefix><#e36d6d>Не удалось сохранить усиление. Талон не потрачен.'
+  booster-unknown: '<prefix><#e36fff>Набор усилителей <id> не найден.'
+  booster-disabled: '<prefix><#e36d6d>Набор усилителей <id> отключён.'
+  booster-given: '<prefix><#79c99e>Выдано <amount> × <id> игроку <player>.'
+  booster-received: '<prefix><#e6fff3>Вы получили <amount> × <item><#e6fff3>.'
+  inventory-full: '<prefix><#e36d6d>В инвентаре игрока недостаточно места.'
+  player-not-found: '<prefix><#e36d6d>Игрок <player> не найден.'
+  invalid-number: '<prefix><#e36d6d>Некорректное число: <value>.'
+  invalid-duration: '<prefix><#e36d6d>Некорректный срок: <value>. Пример: 30m, 2h, 1d12h.'
+  invalid-type: '<prefix><#e36d6d>Тип должен быть ALL, XP или MONEY.'
+  invalid-jobs: '<prefix><#e36d6d>Неизвестные профессии: <jobs>.'
+  boost-granted: '<prefix><#79c99e>Игроку <player> выдано усиление <multiplier> на <duration>.'
+  boost-revoked: '<prefix><#e6fff3>Удалено усилений: <count>.'
+  boost-empty: '<prefix><#e6fff3>У игрока <player> нет активных усилений.'
+  boost-list-header: '<prefix><#e6fff3>Активные усиления игрока <player>:'
+  boost-list-entry: '<#666666>  • <#92bed8><instance> <#e6fff3>— <type>, <multiplier>, <jobs>, <duration>'
+  boosters-header: '<prefix><#e6fff3>Доступные наборы усилителей:'
+  boosters-entry: '<#666666>  • <#92bed8><id> <#e6fff3>— <type>, <multiplier>, <duration>, <jobs>'
+  inspect-header: '<prefix><#e6fff3>Талон <id>: <type>, <multiplier>, <duration>, <jobs>.'
+  diagnose-ok: '<prefix><#79c99e>EcoJobs, LuckPerms и PlaceholderAPI доступны. Профессий: <jobs>, денежная интеграция: <money>.'
+  diagnose-problems: '<prefix><#e36d6d>Диагностика обнаружила проблемы: <problems>'
+
+command:
+  help:
+    - '<#92bed8><b>Работы RusCrafting</b>'
+    - '<#666666>• <#e6fff3>/arcjobs <#8c8c8c>— открыть меню'
+    - '<#666666>• <#e6fff3>/arcjobs boost list <#8c8c8c>— активные усиления'
+    - '<#666666>• <#e6fff3>ПКМ талоном <#8c8c8c>— активировать усиление'
+  admin-help:
+    - '<#666666>• <#e6fff3>/arcjobs reload'
+    - '<#666666>• <#e6fff3>/arcjobs boosters list'
+    - '<#666666>• <#e6fff3>/arcjobs booster inspect <id|hand>'
+    - '<#666666>• <#e6fff3>/arcjobs booster give <player> <id> [amount] [--duration 1h] [--multiplier 2] [--type ALL] [--jobs all]'
+    - '<#666666>• <#e6fff3>/arcjobs boost grant <player> <duration> <multiplier> [type] [jobs]'
+    - '<#666666>• <#e6fff3>/arcjobs boost revoke <player> <instance|all>'
+    - '<#666666>• <#e6fff3>/arcjobs diagnose'
+
+menu:
+  main:
+    title: '<#92bed8>Работы'
+    profile-name: '<#e6fff3><player>'
+    profile-lore:
+      - '<#8c8c8c>Ваш путь в профессиях'
+      - ''
+      - '<#e6fff3>Активно: <#92bed8><active>/<limit>'
+      - '<#e6fff3>Суммарный уровень: <#92bed8><level>'
+    catalog-name: '<#92bed8>Каталог профессий'
+    catalog-lore:
+      - '<#e6fff3>Все доступные направления'
+      - '<#8c8c8c>Сравните прогресс и выберите профессию'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    active-name: '<#92bed8>Мои профессии'
+    active-lore:
+      - '<#e6fff3>Активных профессий: <#92bed8><active>'
+      - '<#8c8c8c>Продолжите развитие или смените направление'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    leaderboard-name: '<#92bed8>Лидеры'
+    leaderboard-lore:
+      - '<#e6fff3>Общий рейтинг и топы профессий'
+      - '<#8c8c8c>Сравнение по уровню и опыту'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    boosts-name: '<#92bed8>Усиления'
+    boosts-lore:
+      - '<#e6fff3>Активно: <#92bed8><count>'
+      - '<#8c8c8c>Деньги, опыт, профессии и остаток времени'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    help-name: '<#92bed8>Как работают профессии'
+    help-lore:
+      - '<#e6fff3>Уровни, награды и усилители'
+      - '<#8c8c8c>Краткая памятка без лишних команд'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    admin-name: '<#d8a657>Управление'
+    admin-lore:
+      - '<#e6fff3>Диагностика и наборы усилителей'
+      - '<#8c8c8c>Доступно администраторам'
+      - ''
+      - '<#d8a657>Нажмите, чтобы открыть'
+
+  catalog:
+    title: '<#92bed8>Каталог профессий'
+    title-active: '<#92bed8>Мои профессии'
+    job-lore:
+      - '<description>'
+      - ''
+      - '<#e6fff3>Уровень: <#92bed8><level>/<max>'
+      - '<#e6fff3>Состояние: <state>'
+      - '<#e6fff3>Работников: <#92bed8><workers>'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть карточку'
+    state-active: '<#79c99e>выбрана'
+    state-available: '<#92bed8>доступна'
+    state-locked: '<#e36d6d>закрыта'
+    empty-name: '<#8c8c8c>Нет активных профессий'
+    empty-lore:
+      - '<#e6fff3>Откройте каталог и выберите направление.'
+
+  job:
+    title: '<#92bed8><job>'
+    overview-name: '<#e6fff3><job>'
+    overview-lore:
+      - '<description>'
+      - ''
+      - '<#e6fff3>Уровень: <#92bed8><level>/<max>'
+      - '<#e6fff3>Опыт: <#92bed8><xp>/<required>'
+      - '<#e6fff3>Прогресс: <#92bed8><progress>%'
+      - '<#e6fff3>Состояние: <state>'
+    scale-name: '<#92bed8>Шкала уровней'
+    scale-lore:
+      - '<#e6fff3>Все уровни и родные награды EcoJobs'
+      - '<#8c8c8c>Максимальный уровень: <max>'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    leaderboard-name: '<#92bed8>Лидеры профессии'
+    leaderboard-lore:
+      - '<#e6fff3>Ваше место: <#92bed8><rank>'
+      - '<#8c8c8c>Рейтинг по уровню и текущему опыту'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    boosts-name: '<#92bed8>Усиления профессии'
+    boosts-lore:
+      - '<#e6fff3>Опыт: <#92bed8><xp_multiplier>'
+      - '<#e6fff3>Деньги: <#92bed8><money_multiplier>'
+      - '<#8c8c8c>Подробности и остаток времени'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    join-name: '<#79c99e>Выбрать профессию'
+    join-lore:
+      - '<#e6fff3>Свободных мест: <#92bed8><free>'
+      - '<#8c8c8c>EcoJobs проверит доступность и цену'
+      - ''
+      - '<#79c99e>Нажмите, чтобы вступить'
+    unavailable-name: '<#e36d6d>Профессия недоступна'
+    unavailable-lore:
+      - '<#8c8c8c>Нужна разблокировка или свободное место.'
+    leave-name: '<#e36d6d>Покинуть профессию'
+    leave-lore:
+      - '<#e6fff3>Ваш прогресс сохранится по правилам EcoJobs'
+      - '<#8c8c8c>Перед выходом потребуется подтверждение'
+      - ''
+      - '<#e36d6d>Нажмите, чтобы продолжить'
+
+  leave:
+    title: '<#e36d6d>Покинуть <job>?'
+    confirm-name: '<#e36d6d>Да, покинуть профессию'
+    confirm-lore:
+      - '<#e6fff3>Профессия: <job>'
+      - '<#8c8c8c>EcoJobs применит настроенную цену выхода'
+      - ''
+      - '<#e36d6d>Нажмите для подтверждения'
+    cancel-name: '<#79c99e>Остаться'
+    cancel-lore:
+      - '<#8c8c8c>Вернуться к карточке профессии'
+
+  levels:
+    title: '<#92bed8><job> · уровни'
+    reached-name: '<#79c99e>Уровень <level>'
+    current-name: '<#d8a657>Уровень <level>'
+    future-name: '<#e6fff3>Уровень <level>'
+    lore:
+      - '<#e6fff3>Нужно опыта: <#92bed8><required>'
+      - '<#8c8c8c>Награды уровня:'
+      - '<rewards>'
+      - ''
+      - '<status>'
+    status-reached: '<#79c99e>Пройден'
+    status-current: '<#d8a657>Текущий уровень'
+    status-future: '<#8c8c8c>Ещё не достигнут'
+    no-rewards: '<#8c8c8c>  Без отдельной награды'
+
+  leaderboard:
+    selector-title: '<#92bed8>Лидеры'
+    global-name: '<#92bed8>Общий рейтинг'
+    global-lore:
+      - '<#e6fff3>Сумма уровней всех профессий'
+      - '<#8c8c8c>При равенстве учитывается текущий опыт'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    job-lore:
+      - '<#e6fff3>Рейтинг профессии <job>'
+      - '<#8c8c8c>Уровень, опыт и ваше место'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть'
+    title-global: '<#92bed8>Общий рейтинг'
+    title-job: '<#92bed8>Лидеры · <job>'
+    entry-name: '<rank_color> <#e6fff3><player>'
+    entry-global-lore:
+      - '<#e6fff3>Суммарный уровень: <#92bed8><level>'
+      - '<#e6fff3>Текущий опыт: <#92bed8><xp>'
+    entry-job-lore:
+      - '<#e6fff3>Уровень: <#92bed8><level>'
+      - '<#e6fff3>Текущий опыт: <#92bed8><xp>'
+    self-name: '<#92bed8>Ваше место'
+    self-lore:
+      - '<#e6fff3>Позиция: <#92bed8><rank>'
+      - '<#e6fff3>Уровень: <#92bed8><level>'
+      - '<#e6fff3>Опыт: <#92bed8><xp>'
+    empty-name: '<#8c8c8c>Рейтинг пока пуст'
+    empty-lore:
+      - '<#e6fff3>Первый результат появится после развития профессии.'
+
+  boosts:
+    title: '<#92bed8>Активные усиления'
+    title-job: '<#92bed8>Усиления · <job>'
+    summary-name: '<#e6fff3>Итоговый эффект'
+    summary-lore:
+      - '<#e6fff3>Опыт: <#92bed8><xp_multiplier>'
+      - '<#e6fff3>Деньги: <#92bed8><money_multiplier>'
+      - '<#8c8c8c>Совпадающие усиления не перемножаются'
+    entry-name: '<#92bed8><multiplier> · <type>'
+    entry-lore:
+      - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - '<#e6fff3>Осталось: <#92bed8><duration>'
+      - '<#8c8c8c>ID: <instance>'
+    empty-name: '<#8c8c8c>Нет активных усилений'
+    empty-lore:
+      - '<#e6fff3>Используйте подписанный талон RusCrafting.'
+      - '<#8c8c8c>ПКМ талоном активирует его на вашем аккаунте.'
+
+  help:
+    title: '<#92bed8>Справка по работам'
+    jobs-name: '<#92bed8>Профессии'
+    jobs-lore:
+      - '<#e6fff3>Выберите до разрешённого лимита профессий.'
+      - '<#e6fff3>Полезные действия приносят опыт и деньги.'
+      - '<#8c8c8c>Условия и награды зависят от профессии.'
+    levels-name: '<#92bed8>Уровни'
+    levels-lore:
+      - '<#e6fff3>Новый уровень открывается после набора опыта.'
+      - '<#e6fff3>Карточка показывает точную родную шкалу EcoJobs.'
+      - '<#8c8c8c>Прогресс хранится движком профессий.'
+    boosts-name: '<#92bed8>Усилители'
+    boosts-lore:
+      - '<#e6fff3>Усилитель может влиять на опыт, деньги или оба.'
+      - '<#e6fff3>Он бывает общим или для отдельных профессий.'
+      - '<#8c8c8c>Срок и эффект видны в разделе усилений.'
+    commands-name: '<#92bed8>Команды'
+    commands-lore:
+      - '<#e6fff3>/jobs <#8c8c8c>— открыть это меню'
+      - '<#e6fff3>/arcjobs boost list <#8c8c8c>— усиления в чате'
+      - '<#e6fff3>ПКМ талоном <#8c8c8c>— активировать'
+
+  admin:
+    title: '<#d8a657>Управление работами'
+    status-name: '<#d8a657>Состояние интеграций'
+    status-lore:
+      - '<#e6fff3>EcoJobs: <ecojobs>'
+      - '<#e6fff3>LuckPerms: <luckperms>'
+      - '<#e6fff3>PlaceholderAPI: <papi>'
+      - '<#e6fff3>Профессий: <#92bed8><jobs>'
+      - '<#e6fff3>Денежные формулы: <money>'
+    reload-name: '<#d8a657>Обновить конфигурацию'
+    reload-lore:
+      - '<#e6fff3>Перечитать config, boosters и локализацию'
+      - '<#8c8c8c>Не перезагружает EcoJobs'
+      - ''
+      - '<#d8a657>Нажмите, чтобы обновить'
+    presets-name: '<#d8a657>Наборы усилителей'
+    presets-lore:
+      - '<#e6fff3>Настроено: <#92bed8><count>'
+      - '<#8c8c8c>Откройте список и выдайте тестовый талон себе'
+      - ''
+      - '<#d8a657>Нажмите, чтобы открыть'
+    help-name: '<#d8a657>Команды администратора'
+    help-lore:
+      - '<#e6fff3>/arcjobs booster give …'
+      - '<#e6fff3>/arcjobs boost grant …'
+      - '<#e6fff3>/arcjobs boost revoke …'
+      - '<#8c8c8c>Полный синтаксис: /arcjobs help'
+    presets-title: '<#d8a657>Наборы усилителей'
+    preset-lore:
+      - '<#e6fff3>Тип: <#92bed8><type>'
+      - '<#e6fff3>Множитель: <#92bed8><multiplier>'
+      - '<#e6fff3>Срок: <#92bed8><duration>'
+      - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - ''
+      - '<#d8a657>ЛКМ: выдать себе один талон'
+
+booster:
+  workday:
+    name: '<#92bed8><b>Талон рабочего дня</b>'
+  focused-xp:
+    name: '<#92bed8><b>Настой мастерства</b>'
+  common:
+    lore:
+      - '<#8c8c8c>Личный усилитель профессий'
+      - ''
+      - '<#e6fff3>Эффект: <#92bed8><type>'
+      - '<#e6fff3>Множитель: <#92bed8><multiplier>'
+      - '<#e6fff3>Срок: <#92bed8><duration>'
+      - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - ''
+      - '<#92bed8>Нажмите ПКМ, чтобы активировать'

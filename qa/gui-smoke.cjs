@@ -160,7 +160,7 @@ async function runScenario (bot, config) {
   window = await clickNext(bot, 31)
   state = snapshot(window)
   record(results, 'per-job leaderboard', 'job ranking with an explicit self-rank card', state,
-    /Leaders|Лидеры/i.test(state.title) && hasSlot(state, 40))
+    /Leaders|Лидеры/i.test(state.title) && hasSlot(state, 49))
 
   window = await clickNext(bot, 45)
   window = await clickNext(bot, 33)
@@ -177,7 +177,7 @@ async function runScenario (bot, config) {
   window = await clickNext(bot, 4)
   state = snapshot(window)
   record(results, 'global leaderboard', 'overall ranking with an explicit self-rank card', state,
-    /Overall|Общий/i.test(state.title) && hasSlot(state, 40))
+    /Overall|Общий/i.test(state.title) && hasSlot(state, 49))
 
   window = await openJobs(bot)
   window = await clickNext(bot, 30)

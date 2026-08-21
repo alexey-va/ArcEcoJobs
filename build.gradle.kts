@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.0"
+version = "0.1.1"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 repositories {
@@ -30,6 +30,14 @@ dependencies {
 
     testImplementation("io.kotest:kotest-runner-junit5:6.0.7")
     testImplementation("io.kotest:kotest-assertions-core:6.0.7")
+    testImplementation("io.mockk:mockk:1.14.7")
+    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    testImplementation("com.willfp:EcoJobs:2026.33") { isTransitive = false }
+    testImplementation("com.willfp:eco:2026.33") { isTransitive = false }
+    testImplementation("com.willfp:libreforge:2026.33") { isTransitive = false }
+    testImplementation("com.willfp:libreforge-loader:2026.33") { isTransitive = false }
+    testImplementation("net.luckperms:api:5.5")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
     testImplementation("org.yaml:snakeyaml:2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

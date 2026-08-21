@@ -23,6 +23,8 @@ class BoostDomainTest : StringSpec({
         val encoded = BoostNodeCodec.encode(BoostType.MONEY, 175, "miner", id)
         BoostNodeCodec.decode(encoded) shouldBe DecodedBoostNode(BoostType.MONEY, 175, "miner", id)
         BoostNodeCodec.decode("other.permission") shouldBe null
+        BoostNodeCodec.isValidScope("MINER_2") shouldBe true
+        BoostNodeCodec.isValidScope("miner.two") shouldBe false
     }
 
     "effective multiplier uses the strongest applicable instance" {

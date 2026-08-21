@@ -8,6 +8,7 @@ import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
 import ru.ruscrafting.ecojobs.config.JobsLocale
+import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.util.logging.Level
@@ -33,12 +34,13 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             locale = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
             ecoJobs = EcoJobsBridge { settings }
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
-            boosts = BoostService(this, luckPerms) { settings }
+            boosts = BoostService(this, luckPerms, settings = { settings })
             vouchers = VoucherService(
                 this,
                 locale,
                 { settings },
                 { ecoJobs.jobs().map { it.id }.toSet() },
+                ecoJobs::names,
                 SigningKeyStore.loadOrCreate(dataFolder.toPath()),
             )
             expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts).also {
@@ -84,7 +86,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private fun finishInitialization() {
         check(!initialized) { "ArcEcoJobs is already initialized" }
-        boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, ecoJobs.jobs().map { it.id }.toSet())
+        val jobIds = validatedJobIds()
+        boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
         locale.validate(boosterRegistry.values())
         enforceMoneyIntegration()
         val menu = JobsMenu(
@@ -104,16 +107,24 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private fun reloadPlugin(): Result<Unit> = runCatching {
         val candidateSettings = AddonSettings.load(dataFolder.resolve("config.yml"))
+        val jobIds = validatedJobIds()
         val candidateBoosters = BoosterRegistry.load(
             dataFolder.resolve("boosters.yml"),
             candidateSettings,
-            ecoJobs.jobs().map { it.id }.toSet(),
+            jobIds,
         )
         enforceMoneyIntegration(candidateSettings)
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
         boosterRegistry = candidateBoosters
         ecoJobs.invalidateLeaderboards()
+    }
+
+    private fun validatedJobIds(): Set<String> = ecoJobs.jobs().map { it.id }.toSet().also { jobIds ->
+        val invalid = jobIds.filterNot(BoostNodeCodec::isValidScope)
+        require(invalid.isEmpty()) {
+            "EcoJobs job IDs cannot be encoded as LuckPerms boost scopes: ${invalid.joinToString(", ")}"
+        }
     }
 
     private fun enforceMoneyIntegration(candidate: AddonSettings = settings) {

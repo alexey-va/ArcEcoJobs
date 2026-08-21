@@ -19,10 +19,21 @@ import java.util.concurrent.ConcurrentHashMap
 
 enum class GrantResult { GRANTED, ALREADY_USED, FAILED }
 
-class BoostService(
+internal fun interface BoostNodeFactory {
+    fun create(permission: String, expiry: Instant?): Node
+}
+
+private object LuckPermsBoostNodeFactory : BoostNodeFactory {
+    override fun create(permission: String, expiry: Instant?): Node = Node.builder(permission).apply {
+        if (expiry != null) expiry(expiry)
+    }.build()
+}
+
+class BoostService internal constructor(
     private val plugin: JavaPlugin,
     private val luckPerms: LuckPerms,
     private val settings: () -> AddonSettings,
+    private val nodeFactory: BoostNodeFactory = LuckPermsBoostNodeFactory,
 ) {
     private data class CacheEntry(val validUntilMillis: Long, val boosts: List<BoostInstance>)
 
@@ -119,16 +130,32 @@ class BoostService(
                 return@whenComplete
             }
             val expiry = Instant.now().plusSeconds(payload.durationSeconds)
-            payload.jobs.forEach { scope ->
-                user.data().add(
-                    Node.builder(BoostNodeCodec.encode(payload.type, payload.multiplierBasisPoints, scope, payload.voucherId))
-                        .expiry(expiry)
-                        .build(),
-                )
+            val nodes = runCatching {
+                payload.jobs.map { scope ->
+                    nodeFactory.create(
+                        BoostNodeCodec.encode(payload.type, payload.multiplierBasisPoints, scope, payload.voucherId),
+                        expiry,
+                    )
+                }.toMutableList().apply {
+                    if (addUsedMarker) add(nodeFactory.create(usedKey, null))
+                }
+            }.getOrElse {
+                onMain { callback(GrantResult.FAILED) }
+                return@whenComplete
             }
-            if (addUsedMarker) user.data().add(Node.builder(usedKey).build())
-            luckPerms.userManager.saveUser(user).whenComplete { _, saveFailure ->
-                if (saveFailure == null) cache.remove(uuid)
+            val save = runCatching {
+                nodes.forEach { user.data().add(it) }
+                luckPerms.userManager.saveUser(user)
+            }.getOrElse {
+                nodes.forEach { node -> runCatching { user.data().remove(node) } }
+                onMain { callback(GrantResult.FAILED) }
+                return@whenComplete
+            }
+            save.whenComplete { _, saveFailure ->
+                if (saveFailure != null) {
+                    nodes.forEach { node -> runCatching { user.data().remove(node) } }
+                }
+                cache.remove(uuid)
                 onMain { callback(if (saveFailure == null) GrantResult.GRANTED else GrantResult.FAILED) }
             }
         }

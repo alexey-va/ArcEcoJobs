@@ -66,10 +66,12 @@ object BoostNodeCodec {
     const val USED_PREFIX = "arcecojobs.voucher.used"
     private val scopePattern = Regex("[a-z0-9_-]{1,48}")
 
+    fun isValidScope(scope: String): Boolean = scopePattern.matches(scope.lowercase())
+
     fun encode(type: BoostType, multiplierBasisPoints: Int, scope: String, instanceId: UUID): String {
         val normalizedScope = scope.lowercase()
         require(multiplierBasisPoints in 101..100_000) { "Multiplier basis points out of range" }
-        require(scopePattern.matches(normalizedScope)) { "Invalid boost scope" }
+        require(isValidScope(normalizedScope)) { "Invalid boost scope" }
         return "$PREFIX.${type.token}.$multiplierBasisPoints.$normalizedScope.$instanceId"
     }
 

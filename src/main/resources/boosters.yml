@@ -1,7 +1,7 @@
 boosters:
   workday:
     enabled: true
-    type: ALL
+    # Optional: ALL by default. XP and MONEY are also supported.
     multiplier: 1.5
     duration: 1h
     jobs: [all]

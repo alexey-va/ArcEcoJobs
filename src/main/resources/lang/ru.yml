@@ -34,7 +34,7 @@ message:
   booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> действует <duration>.'
   booster-already-used: '<prefix><#e6fff3>Этот талон уже был использован.'
   booster-save-failed: '<prefix><#e36d6d>Не удалось сохранить усиление. Талон не потрачен.'
-  booster-unknown: '<prefix><#e36fff>Набор усилителей <id> не найден.'
+  booster-unknown: '<prefix><#e36d6d>Набор усилителей <id> не найден.'
   booster-disabled: '<prefix><#e36d6d>Набор усилителей <id> отключён.'
   booster-given: '<prefix><#79c99e>Выдано <amount> × <id> игроку <player>.'
   booster-received: '<prefix><#e6fff3>Вы получили <amount> × <item><#e6fff3>.'
@@ -312,8 +312,13 @@ menu:
       - '<#e6fff3>Множитель: <#92bed8><multiplier>'
       - '<#e6fff3>Срок: <#92bed8><duration>'
       - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - '<#e6fff3>Состояние: <state>'
       - ''
-      - '<#d8a657>ЛКМ: выдать себе один талон'
+      - '<action>'
+    preset-state-enabled: '<#79c99e>включён'
+    preset-state-disabled: '<#e36d6d>отключён'
+    preset-action-enabled: '<#d8a657>ЛКМ: выдать себе один талон'
+    preset-action-disabled: '<#8c8c8c>Выдача отключена в конфигурации'
 
 booster:
   workday:

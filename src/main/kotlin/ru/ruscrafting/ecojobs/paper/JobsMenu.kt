@@ -36,7 +36,7 @@ sealed interface JobsView {
     data class JobCard(val jobId: String, val back: JobsView) : JobsView
     data class LeaveConfirm(val jobId: String, val back: JobsView) : JobsView
     data class Levels(val jobId: String, val page: Int, val back: JobsView) : JobsView
-    data class LeaderboardSelector(val back: JobsView) : JobsView
+    data class LeaderboardSelector(val page: Int, val back: JobsView) : JobsView
     data class Leaderboard(val jobId: String?, val page: Int, val back: JobsView) : JobsView
     data class Boosts(val jobId: String?, val page: Int, val back: JobsView) : JobsView
     data class Help(val back: JobsView) : JobsView
@@ -135,7 +135,7 @@ class JobsMenu(
         when (slot) {
             20 -> open(player, JobsView.Catalog(false, 1, JobsView.Main))
             22 -> open(player, JobsView.Catalog(true, 1, JobsView.Main))
-            24 -> open(player, JobsView.LeaderboardSelector(JobsView.Main))
+            24 -> open(player, JobsView.LeaderboardSelector(1, JobsView.Main))
             30 -> open(player, JobsView.Boosts(null, 1, JobsView.Main))
             32 -> open(player, JobsView.Help(JobsView.Main))
             49 -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(JobsView.Main))
@@ -281,20 +281,25 @@ class JobsMenu(
     }
 
     private fun openLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector) {
-        val inventory = inventory(player, view, 54, "menu.leaderboard.selector-title")
+        val jobs = ecoJobs.jobs()
+        val pages = pageCount(jobs.size, contentSlots.size)
+        val currentView = view.copy(page = view.page.coerceIn(1, pages))
+        val inventory = inventory(player, currentView, 54, "menu.leaderboard.selector-title")
         inventory.setItem(4, item(Material.NETHER_STAR, player, "menu.leaderboard.global-name", "menu.leaderboard.global-lore"))
-        ecoJobs.jobs().take(contentSlots.size).forEachIndexed { index, job ->
+        jobs.page(currentView.page, contentSlots.size).forEachIndexed { index, job ->
             inventory.setItem(contentSlots[index], jobItem(job, player, "menu.leaderboard.job-lore", mapOf("job" to ecoJobs.name(job))))
         }
-        navigation(inventory, player, view.back, 1, 1)
+        navigation(inventory, player, currentView.back, currentView.page, pages)
         player.openInventory(inventory)
     }
 
     private fun clickLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector, slot: Int) {
         if (slot == 4) return open(player, JobsView.Leaderboard(null, 1, view))
         val index = contentSlots.indexOf(slot)
-        if (index >= 0) ecoJobs.jobs().getOrNull(index)?.let { return open(player, JobsView.Leaderboard(it.id, 1, view)) }
-        if (slot == 45) open(player, view.back) else if (slot == 53) player.closeInventory()
+        if (index >= 0) ecoJobs.jobs().getOrNull((view.page - 1) * contentSlots.size + index)?.let {
+            return open(player, JobsView.Leaderboard(it.id, 1, view))
+        }
+        clickPaged(player, view, slot, pageCount(ecoJobs.jobs().size, contentSlots.size))
     }
 
     private fun openLeaderboard(player: Player, view: JobsView.Leaderboard) {
@@ -318,7 +323,7 @@ class JobsMenu(
             )))
         }
         val own = rankings.firstOrNull { it.uuid == player.uniqueId }
-        inventory.setItem(40, item(Material.NAME_TAG, player, "menu.leaderboard.self-name", "menu.leaderboard.self-lore", mapOf(
+        inventory.setItem(49, item(Material.NAME_TAG, player, "menu.leaderboard.self-name", "menu.leaderboard.self-lore", mapOf(
             "rank" to text(ecoJobs.rank(player, job)?.toString() ?: "—"),
             "level" to text(own?.level ?: 0),
             "xp" to text(number.format(own?.xp ?: 0.0)),
@@ -420,6 +425,14 @@ class JobsMenu(
                     "multiplier" to text(Multipliers.format(preset.multiplierBasisPoints)),
                     "duration" to text(DurationParser.format(preset.duration)),
                     "jobs" to jobsLabel(preset.jobs, player),
+                    "state" to locale.render(
+                        if (preset.enabled) "menu.admin.preset-state-enabled" else "menu.admin.preset-state-disabled",
+                        player,
+                    ),
+                    "action" to locale.render(
+                        if (preset.enabled) "menu.admin.preset-action-enabled" else "menu.admin.preset-action-disabled",
+                        player,
+                    ),
                 )).map { it.decoration(TextDecoration.ITALIC, false) })
             }
             inventory.setItem(contentSlots[index], preview)
@@ -432,6 +445,10 @@ class JobsMenu(
         val presets = boosters().values()
         val index = contentSlots.indexOf(slot)
         if (index >= 0) presets.getOrNull((view.page - 1) * contentSlots.size + index)?.let { preset ->
+            if (!preset.enabled) {
+                player.sendMessage(locale.render("message.booster-disabled", player, mapOf("id" to text(preset.id))))
+                return
+            }
             val leftovers = player.inventory.addItem(vouchers.create(preset, player))
             if (leftovers.isEmpty()) {
                 player.sendMessage(locale.render("message.booster-received", player, mapOf(
@@ -449,6 +466,7 @@ class JobsMenu(
             45 -> open(player, when (view) {
                 is JobsView.Catalog -> view.back
                 is JobsView.Levels -> view.back
+                is JobsView.LeaderboardSelector -> view.back
                 is JobsView.Leaderboard -> view.back
                 is JobsView.Boosts -> view.back
                 is JobsView.Presets -> view.back
@@ -457,6 +475,7 @@ class JobsMenu(
             47 -> when (view) {
                 is JobsView.Catalog -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Levels -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
+                is JobsView.LeaderboardSelector -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Leaderboard -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Boosts -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Presets -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
@@ -465,6 +484,7 @@ class JobsMenu(
             51 -> when (view) {
                 is JobsView.Catalog -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Levels -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
+                is JobsView.LeaderboardSelector -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Leaderboard -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Boosts -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Presets -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
@@ -567,7 +587,7 @@ class JobsMenu(
     }
 
     private fun jobsLabel(jobs: Set<String>, player: Player): Component =
-        if ("all" in jobs) locale.allJobs(player) else text(jobs.sorted().joinToString(", "))
+        if ("all" in jobs) locale.allJobs(player) else ecoJobs.names(jobs)
 
     private fun backItem(player: Player): ItemStack = item(Material.ARROW, player, "common.back-name", "common.back-lore")
     private fun closeItem(player: Player): ItemStack = item(Material.BARRIER, player, "common.close-name")

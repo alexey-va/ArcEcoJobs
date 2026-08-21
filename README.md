@@ -10,7 +10,7 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.0.jar`.
+The production artifact is `build/libs/ArcEcoJobs-0.1.1.jar`.
 
 Read-only lab GUI acceptance:
 

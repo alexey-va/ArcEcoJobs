@@ -37,6 +37,7 @@ class VoucherService(
     private val locale: JobsLocale,
     private val settings: () -> AddonSettings,
     private val validJobIds: () -> Set<String>,
+    private val jobNames: (Set<String>) -> Component,
     signingKey: ByteArray,
 ) {
     private val signer = VoucherSigner(signingKey)
@@ -131,7 +132,7 @@ class VoucherService(
         "type" to locale.type(payload.type, audience),
         "multiplier" to locale.text(Multipliers.format(payload.multiplierBasisPoints)),
         "duration" to locale.text(DurationParser.format(Duration.ofSeconds(payload.durationSeconds))),
-        "jobs" to if ("all" in payload.jobs) locale.allJobs(audience) else locale.text(payload.jobs.sorted().joinToString(", ")),
+        "jobs" to if ("all" in payload.jobs) locale.allJobs(audience) else jobNames(payload.jobs),
     )
 
     private fun validatePayload(payload: VoucherPayload) {

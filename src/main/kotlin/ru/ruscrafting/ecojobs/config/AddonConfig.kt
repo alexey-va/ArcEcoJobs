@@ -30,7 +30,7 @@ data class AddonSettings(
             require(defaultLocale in setOf("ru", "en")) { "locale.default must be ru or en" }
             val min = Multipliers.toBasisPoints(yaml.getDouble("boosts.minimum-multiplier", 1.01))
             val max = Multipliers.toBasisPoints(yaml.getDouble("boosts.maximum-multiplier", 10.0))
-            require(min in 101..100_000 && max >= min) { "Invalid boost multiplier bounds" }
+            require(min in 101..100_000 && max in min..100_000) { "Invalid boost multiplier bounds" }
             require(yaml.getString("boosts.stacking", "MAX").equals("MAX", true)) {
                 "Only MAX boost stacking is supported"
             }
@@ -89,8 +89,9 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
             for (rawId in section.getKeys(false)) {
                 val id = rawId.lowercase()
                 require(idPattern.matches(id)) { "Invalid booster id: $rawId" }
+                require(id !in parsed) { "Duplicate booster id after normalization: $rawId" }
                 val path = "boosters.$rawId"
-                val type = BoostType.parse(yaml.getString("$path.type")) ?: error("Invalid type for booster $id")
+                val type = BoostType.parse(yaml.getString("$path.type", "ALL")) ?: error("Invalid type for booster $id")
                 val multiplier = Multipliers.toBasisPoints(yaml.getDouble("$path.multiplier"))
                 require(multiplier in settings.minimumMultiplierBasisPoints..settings.maximumMultiplierBasisPoints) {
                     "Multiplier for booster $id is outside configured bounds"
@@ -104,8 +105,22 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
                 require("all" !in jobs || jobs.size == 1) { "Booster $id cannot combine all with job IDs" }
                 val material = Material.matchMaterial(yaml.getString("$path.item.material") ?: "")
                     ?: error("Invalid material for booster $id")
-                val modelData = yaml.getInt("$path.item.custom-model-data").takeIf { it > 0 }
-                val itemModel = yaml.getString("$path.item.item-model")?.takeIf(String::isNotBlank)
+                val rawModelData = yaml.get("$path.item.custom-model-data")
+                val modelData = when (rawModelData) {
+                    null -> null
+                    is Number -> {
+                        val numeric = rawModelData.toDouble()
+                        val integral = rawModelData.toLong()
+                        require(numeric.isFinite() && numeric == integral.toDouble() && integral in 0..Int.MAX_VALUE.toLong()) {
+                            "custom-model-data for booster $id must be a non-negative integer"
+                        }
+                        integral.toInt().takeIf { it > 0 }
+                    }
+                    else -> error("custom-model-data for booster $id must be an integer")
+                }
+                val itemModel = yaml.getString("$path.item.item-model")?.takeIf(String::isNotBlank)?.also { raw ->
+                    require(NamespacedKey.fromString(raw) != null) { "Invalid item-model for booster $id: $raw" }
+                }
                 val flags = yaml.getStringList("$path.item.flags").map { rawFlag ->
                     runCatching { ItemFlag.valueOf(rawFlag.uppercase()) }
                         .getOrElse { error("Invalid item flag for booster $id: $rawFlag") }

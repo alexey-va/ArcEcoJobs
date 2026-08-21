@@ -14,6 +14,7 @@ import com.willfp.ecojobs.api.leaveJob
 import com.willfp.ecojobs.jobs.Job
 import com.willfp.ecojobs.jobs.Jobs
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.JoinConfiguration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
@@ -67,6 +68,10 @@ class EcoJobsBridge(private val settings: () -> AddonSettings) {
 
     fun name(job: Job): Component = legacy(job.name)
     fun description(job: Job): Component = legacy(job.description)
+    fun names(jobIds: Set<String>): Component = Component.join(
+        JoinConfiguration.separator(Component.text(", ")),
+        jobIds.sorted().map { id -> job(id)?.let(::name) ?: Component.text(id) },
+    )
     fun legacy(raw: String): Component = if ('§' in raw) legacySection.deserialize(raw) else legacyAmpersand.deserialize(raw)
 
     fun rewards(player: Player, job: Job, level: Int): List<Component> =

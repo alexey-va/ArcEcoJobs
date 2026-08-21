@@ -268,7 +268,7 @@ class JobsCommand(
     )
 
     private fun jobsLabel(jobs: Set<String>, sender: CommandSender): Component =
-        if ("all" in jobs) locale.allJobs(sender) else text(jobs.sorted().joinToString(", "))
+        if ("all" in jobs) locale.allJobs(sender) else ecoJobs.names(jobs)
 
     private fun offline(name: String): OfflinePlayer? = Bukkit.getOfflinePlayerIfCached(name)
         ?: Bukkit.getPlayerExact(name)
@@ -281,28 +281,76 @@ class JobsCommand(
     private fun text(value: Any?): Component = locale.text(value)
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> {
+        val canManageBoosters = sender.hasPermission("arcecojobs.admin.booster")
+        val canManageBoosts = sender.hasPermission("arcecojobs.admin.boost")
         val options = when (args.size) {
-            1 -> listOf("help", "boost") + if (sender.hasPermission("arcecojobs.admin")) listOf("reload", "boosters", "booster", "diagnose") else emptyList()
+            1 -> buildList {
+                addAll(listOf("help", "boost"))
+                if (sender.hasPermission("arcecojobs.admin.reload")) add("reload")
+                if (canManageBoosters) addAll(listOf("boosters", "booster"))
+                if (sender.hasPermission("arcecojobs.admin.diagnose")) add("diagnose")
+            }
             2 -> when (args[0].lowercase()) {
-                "boosters" -> listOf("list")
-                "booster" -> listOf("inspect", "give")
-                "boost" -> listOf("list", "grant", "revoke")
+                "boosters" -> if (canManageBoosters) listOf("list") else emptyList()
+                "booster" -> if (canManageBoosters) listOf("inspect", "give") else emptyList()
+                "boost" -> listOf("list") + if (canManageBoosts) listOf("grant", "revoke") else emptyList()
                 else -> emptyList()
             }
             3 -> when (args[0].lowercase() to args[1].lowercase()) {
-                "booster" to "inspect" -> boosters().values().map { it.id } + "hand"
-                "booster" to "give", "boost" to "grant", "boost" to "revoke" -> Bukkit.getOnlinePlayers().map(Player::getName)
+                "booster" to "inspect" -> if (canManageBoosters) boosters().values().map { it.id } + "hand" else emptyList()
+                "booster" to "give" -> if (canManageBoosters) onlinePlayers() else emptyList()
+                "boost" to "list" -> if (canManageBoosts) onlinePlayers() else emptyList()
+                "boost" to "grant", "boost" to "revoke" -> if (canManageBoosts) onlinePlayers() else emptyList()
                 else -> emptyList()
             }
             4 -> when (args[0].lowercase() to args[1].lowercase()) {
-                "booster" to "give" -> boosters().values().map { it.id }
+                "booster" to "give" -> if (canManageBoosters) boosters().values().map { it.id } else emptyList()
+                "boost" to "grant" -> if (canManageBoosts) listOf("30m", "1h", "1d") else emptyList()
+                "boost" to "revoke" -> if (canManageBoosts) revokeSuggestions(args[2]) else emptyList()
                 else -> emptyList()
             }
-            else -> if (args[0].equals("booster", true) && args[1].equals("give", true)) {
-                listOf("--duration", "--multiplier", "--type", "--jobs")
+            5 -> when (args[0].lowercase() to args[1].lowercase()) {
+                "booster" to "give" -> if (canManageBoosters) listOf("1") + unusedOverrideFlags(args) else emptyList()
+                "boost" to "grant" -> if (canManageBoosts) listOf("1.25", "1.5", "2") else emptyList()
+                else -> emptyList()
+            }
+            6 -> when (args[0].lowercase() to args[1].lowercase()) {
+                "booster" to "give" -> if (canManageBoosters) boosterOverrideSuggestions(args) else emptyList()
+                "boost" to "grant" -> if (canManageBoosts) BoostType.entries.map(BoostType::name) else emptyList()
+                else -> emptyList()
+            }
+            7 -> when (args[0].lowercase() to args[1].lowercase()) {
+                "booster" to "give" -> if (canManageBoosters) boosterOverrideSuggestions(args) else emptyList()
+                "boost" to "grant" -> if (canManageBoosts) jobSuggestions() else emptyList()
+                else -> emptyList()
+            }
+            else -> if (
+                canManageBoosters &&
+                args.getOrNull(0)?.equals("booster", true) == true &&
+                args.getOrNull(1)?.equals("give", true) == true
+            ) {
+                boosterOverrideSuggestions(args)
             } else emptyList()
         }
         val prefix = args.lastOrNull().orEmpty()
         return options.filter { it.startsWith(prefix, true) }
     }
+
+    private fun boosterOverrideSuggestions(args: Array<out String>): List<String> = when (args.getOrNull(args.lastIndex - 1)?.lowercase()) {
+        "--duration" -> listOf("30m", "1h", "1d")
+        "--multiplier" -> listOf("1.25", "1.5", "2")
+        "--type" -> BoostType.entries.map(BoostType::name)
+        "--jobs" -> jobSuggestions()
+        else -> unusedOverrideFlags(args)
+    }
+
+    private fun unusedOverrideFlags(args: Array<out String>): List<String> {
+        val used = args.map(String::lowercase).toSet()
+        return listOf("--duration", "--multiplier", "--type", "--jobs").filterNot(used::contains)
+    }
+
+    private fun jobSuggestions(): List<String> = listOf("all") + ecoJobs.jobs().map { it.id }
+    private fun onlinePlayers(): List<String> = Bukkit.getOnlinePlayers().map(Player::getName)
+    private fun revokeSuggestions(playerName: String): List<String> = listOf("all") +
+        (Bukkit.getPlayerExact(playerName)?.let(boosts::active).orEmpty().map { it.instanceId.toString().take(8) })
 }

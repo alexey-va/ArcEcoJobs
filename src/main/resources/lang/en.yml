@@ -312,8 +312,13 @@ menu:
       - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
       - '<#e6fff3>Duration: <#92bed8><duration>'
       - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - '<#e6fff3>Status: <state>'
       - ''
-      - '<#d8a657>Left-click: give yourself one voucher'
+      - '<action>'
+    preset-state-enabled: '<#79c99e>enabled'
+    preset-state-disabled: '<#e36d6d>disabled'
+    preset-action-enabled: '<#d8a657>Left-click: give yourself one voucher'
+    preset-action-disabled: '<#8c8c8c>Issuing is disabled in configuration'
 
 booster:
   workday:

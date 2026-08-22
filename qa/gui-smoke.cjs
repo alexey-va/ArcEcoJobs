@@ -192,6 +192,19 @@ async function runScenario (bot, config) {
       state.openMs < 1500 && state.catalogIconInventoryDelta === 0 &&
       !hasNamedItem(state, /^(?:Close|Закрыть)$/i))
 
+  window = await clickNext(bot, 19)
+  window = await clickNext(bot, 29)
+  state = snapshot(window)
+  const hunterLevelLore = state.slots.find((item) => /(?:Level|Уровень) 1$/.test(item.name))?.lore ?? []
+  record(results, 'hunter level lore', 'each reward is a separate lore row and money uses a postfix coin glyph', state,
+      hunterLevelLore.length >= 6 &&
+      hunterLevelLore.every((line) => !/[\u0000-\u001f\u007f]/u.test(line)) &&
+      // Mineflayer currently decodes the glyph's two UTF-16 surrogate units as six U+FFFD characters.
+      hunterLevelLore.some((line) => /\d(?:[\d ,.]*\d)?\s(?:💰|\uFFFD{6})(?:\s|$)/u.test(line)) &&
+      hunterLevelLore.every((line) => !line.includes('$')))
+
+  window = await clickNext(bot, 45)
+  window = await clickNext(bot, 45)
   window = await clickNext(bot, 10)
   state = snapshot(window)
   record(results, 'job card', 'overview, levels, leaderboard, boosts, and join/leave action', state,

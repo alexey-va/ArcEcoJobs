@@ -2,7 +2,6 @@ package ru.ruscrafting.ecojobs.paper
 
 import com.willfp.ecojobs.jobs.Job
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.JoinConfiguration
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -283,13 +282,11 @@ class JobsMenu(
                 else -> Triple(Material.RED_DYE, "menu.levels.future-name", "menu.levels.status-future")
             }
             val rewards = ecoJobs.rewards(player, job, level).ifEmpty { listOf(locale.render("menu.levels.no-rewards", player)) }
-            val rewardBlock = Component.join(JoinConfiguration.newlines(), rewards)
             inventory.setItem(contentSlots[index], item(state.first, player, state.second, "menu.levels.lore", mapOf(
                 "level" to text(level),
                 "required" to text(number.format(job.getExpForLevel(level))),
-                "rewards" to rewardBlock,
                 "status" to locale.render(state.third, player),
-            )))
+            ), loreBlocks = mapOf("rewards" to rewards)))
         }
         navigation(inventory, player, currentView.back, currentView.page, pages)
         player.openInventory(inventory)
@@ -561,10 +558,13 @@ class JobsMenu(
         namePath: String,
         lorePath: String? = null,
         values: Map<String, Component> = emptyMap(),
+        loreBlocks: Map<String, List<Component>> = emptyMap(),
     ): ItemStack = ItemStack(material).apply {
         editMeta { meta ->
             meta.displayName(locale.render(namePath, player, values).decoration(TextDecoration.ITALIC, false))
-            if (lorePath != null) meta.lore(locale.lines(lorePath, player, values).map { it.decoration(TextDecoration.ITALIC, false) })
+            if (lorePath != null) {
+                meta.lore(locale.lines(lorePath, player, values, loreBlocks).map { it.decoration(TextDecoration.ITALIC, false) })
+            }
         }
     }
 

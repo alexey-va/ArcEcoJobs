@@ -39,13 +39,17 @@ class JobsLocale(
         path: String,
         audience: CommandSender? = null,
         values: Map<String, Component> = emptyMap(),
+        blocks: Map<String, List<Component>> = emptyMap(),
     ): List<Component> {
         val selected = select(audience)
         val fallback = fallback()
         val strings = listValue(selected, path)
             ?: listValue(fallback, path)
             ?: error("Locale list is missing: $path")
-        return strings.map { deserialize(it, audience, values) }
+        return strings.flatMap { raw ->
+            blocks.entries.firstOrNull { (name) -> raw == "<$name>" }?.value
+                ?: listOf(deserialize(raw, audience, values))
+        }
     }
 
     fun text(value: Any?): Component = Component.text(value?.toString().orEmpty())

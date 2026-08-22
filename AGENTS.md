@@ -10,7 +10,9 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
   console commands or introduce another boost database.
 - Signed voucher items must remain non-forgeable, replay-safe, and idempotent
   across servers. Nodes that accept the same vouchers must share `secret.key`
-  through the private secret workflow. Never log the key or signed payload.
+  through the private secret workflow. The file is newline-terminated Base64
+  text encoding at least 32 random bytes, never raw binary. Never log the key
+  or signed payload.
 - All player text belongs in `lang/ru.yml` and `lang/en.yml`; keys stay equal
   and dynamic values use non-parsing Adventure placeholders.
 - Inventory titles do not include the chat prefix. Item names and lore are

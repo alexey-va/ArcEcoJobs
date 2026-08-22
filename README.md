@@ -40,10 +40,12 @@ are applied independently through `PlayerJobExpGainEvent`.
 
 ## Voucher safety
 
-The first start creates `plugins/ArcEcoJobs/secret.key`. Keep it private and
-back it up with the runtime secrets. Every ArcEcoJobs node that accepts the
-same vouchers must receive the same key through the secret workflow. Losing
-or replacing it invalidates all previously issued voucher items. Voucher
+The first start creates `plugins/ArcEcoJobs/secret.key`. The file is a
+newline-terminated Base64 encoding of at least 32 random bytes; do not write
+raw binary key bytes to it. Keep it private and back it up with the runtime
+secrets. Every ArcEcoJobs node that accepts the same vouchers must receive the
+same file through the secret workflow. Losing or replacing it invalidates all
+previously issued voucher items. Voucher
 configuration supports Bukkit persistent data, which is the stable namespaced
 NBT surface; arbitrary raw NBT
 is deliberately unsupported because it is version-sensitive and could replace

@@ -32,7 +32,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         try {
             settings = AddonSettings.load(dataFolder.resolve("config.yml"))
             locale = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
-            ecoJobs = EcoJobsBridge { settings }
+            ecoJobs = EcoJobsBridge(this) { settings }
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
             boosts = BoostService(this, luckPerms, settings = { settings })
             vouchers = VoucherService(
@@ -64,6 +64,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         bootstrapTaskId = null
         runCatching { expansion?.unregister() }
         expansion = null
+        if (::ecoJobs.isInitialized) ecoJobs.shutdown()
     }
 
     private fun scheduleBootstrap() {
@@ -91,7 +92,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         locale.validate(boosterRegistry.values())
         enforceMoneyIntegration()
         val menu = JobsMenu(
-            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, ::reloadPlugin,
+            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, ::reloadPlugin,
         )
         val command = JobsCommand(
             { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, menu, ::reloadPlugin,
@@ -102,6 +103,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         }
         server.pluginManager.registerEvents(JobsListener({ settings }, locale, menu, boosts, vouchers), this)
         initialized = true
+        ecoJobs.prepareLeaderboards()
         logger.info("ArcEcoJobs enabled with ${ecoJobs.jobs().size} jobs and ${boosterRegistry.values().size} booster presets")
     }
 
@@ -118,6 +120,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         settings = candidateSettings
         boosterRegistry = candidateBoosters
         ecoJobs.invalidateLeaderboards()
+        ecoJobs.prepareLeaderboards()
     }
 
     private fun validatedJobIds(): Set<String> = ecoJobs.jobs().map { it.id }.toSet().also { jobIds ->

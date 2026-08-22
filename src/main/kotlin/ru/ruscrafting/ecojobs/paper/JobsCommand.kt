@@ -96,7 +96,7 @@ class JobsCommand(
                     "id" to text(inspection.payload.presetId),
                     "type" to locale.type(inspection.payload.type, sender),
                     "multiplier" to text(Multipliers.format(inspection.payload.multiplierBasisPoints)),
-                    "duration" to text(DurationParser.format(Duration.ofSeconds(inspection.payload.durationSeconds))),
+                    "duration" to text(locale.duration(Duration.ofSeconds(inspection.payload.durationSeconds), sender)),
                     "jobs" to jobsLabel(inspection.payload.jobs, sender),
                 ))
                 else -> message(sender, "message.booster-invalid")
@@ -168,7 +168,7 @@ class JobsCommand(
             if (result == GrantResult.GRANTED) message(sender, "message.boost-granted", mapOf(
                 "player" to text(target.name ?: args[0]),
                 "multiplier" to text(Multipliers.format(multiplier)),
-                "duration" to text(DurationParser.format(duration)),
+                "duration" to text(locale.duration(duration, sender)),
             )) else message(sender, "message.booster-save-failed")
         }
         return true
@@ -255,7 +255,7 @@ class JobsCommand(
         "id" to text(preset.id),
         "type" to locale.type(preset.type, sender),
         "multiplier" to text(Multipliers.format(preset.multiplierBasisPoints)),
-        "duration" to text(DurationParser.format(preset.duration)),
+        "duration" to text(locale.duration(preset.duration, sender)),
         "jobs" to jobsLabel(preset.jobs, sender),
     )
 
@@ -263,7 +263,7 @@ class JobsCommand(
         "instance" to text(boost.instanceId.toString().take(8)),
         "type" to locale.type(boost.type, sender),
         "multiplier" to text(Multipliers.format(boost.multiplierBasisPoints)),
-        "duration" to text(DurationParser.format(Duration.between(java.time.Instant.now(), boost.expiresAt).coerceAtLeast(Duration.ZERO))),
+        "duration" to text(locale.duration(Duration.between(java.time.Instant.now(), boost.expiresAt).coerceAtLeast(Duration.ZERO), sender)),
         "jobs" to jobsLabel(boost.jobs, sender),
     )
 

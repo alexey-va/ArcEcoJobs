@@ -18,6 +18,12 @@ class BoostDomainTest : StringSpec({
         DurationParser.parse("0s") shouldBe null
     }
 
+    "duration formatter uses Russian units on Russian surfaces" {
+        val duration = Duration.ofDays(1).plusHours(2).plusMinutes(30)
+        DurationParser.format(duration) shouldBe "1d 2h 30m"
+        DurationParser.format(duration, russian = true) shouldBe "1д 2ч 30м"
+    }
+
     "node codec round trips all signed dimensions" {
         val id = UUID.randomUUID()
         val encoded = BoostNodeCodec.encode(BoostType.MONEY, 175, "miner", id)

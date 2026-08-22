@@ -21,7 +21,7 @@ data class AddonSettings(
     val maximumMultiplierBasisPoints: Int,
     val maximumBoostDuration: Duration,
     val requireMoneyPlaceholder: Boolean,
-    val fillerMaterial: Material,
+    val guiItems: GuiItems,
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -38,7 +38,7 @@ data class AddonSettings(
                 defaultLocale = defaultLocale,
                 useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
                 interceptEcoJobsRoot = yaml.getBoolean("commands.intercept-ecojobs-root", true),
-                leaderboardCache = Duration.ofSeconds(yaml.getLong("leaderboards.cache-seconds", 30).coerceIn(5, 3600)),
+                leaderboardCache = Duration.ofSeconds(yaml.getLong("leaderboards.cache-seconds", 300).coerceIn(30, 3600)),
                 leaderboardEntriesPerPage = yaml.getInt("leaderboards.entries-per-page", 10).coerceIn(5, 28),
                 boostCacheMillis = yaml.getLong("boosts.cache-millis", 1000).coerceIn(100, 10_000),
                 minimumMultiplierBasisPoints = min,
@@ -46,9 +46,87 @@ data class AddonSettings(
                 maximumBoostDuration = DurationParser.parse(yaml.getString("boosts.maximum-duration", "30d")!!)
                     ?: error("boosts.maximum-duration is invalid"),
                 requireMoneyPlaceholder = yaml.getBoolean("boosts.require-money-placeholder", true),
-                fillerMaterial = Material.matchMaterial(yaml.getString("gui.filler-material", "BLACK_STAINED_GLASS_PANE")!!)
-                    ?: error("gui.filler-material is invalid"),
+                guiItems = GuiItems.load(yaml),
             )
+        }
+    }
+}
+
+data class GuiItemDefinition(
+    val material: Material,
+    val customModelData: Int?,
+)
+
+data class GuiItems(
+    val background: GuiItemDefinition,
+    val back: GuiItemDefinition,
+    val previous: GuiItemDefinition,
+    val next: GuiItemDefinition,
+    val close: GuiItemDefinition,
+    val confirm: GuiItemDefinition,
+    val cancel: GuiItemDefinition,
+    val refresh: GuiItemDefinition,
+    val catalog: GuiItemDefinition,
+) {
+    companion object {
+        fun vanilla(): GuiItems = GuiItems(
+            background = GuiItemDefinition(Material.GRAY_STAINED_GLASS_PANE, null),
+            back = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+            previous = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+            next = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+            close = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
+            confirm = GuiItemDefinition(Material.GREEN_STAINED_GLASS_PANE, null),
+            cancel = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
+            refresh = GuiItemDefinition(Material.BLACK_STAINED_GLASS_PANE, null),
+            catalog = GuiItemDefinition(Material.COMPASS, null),
+        )
+
+        fun load(yaml: YamlConfiguration): GuiItems {
+            val fallback = vanilla()
+            return GuiItems(
+                background = loadItem(
+                    yaml,
+                    "gui.items.background",
+                    fallback.background,
+                    legacyMaterialPath = "gui.filler-material",
+                ),
+                back = loadItem(yaml, "gui.items.back", fallback.back),
+                previous = loadItem(yaml, "gui.items.previous", fallback.previous),
+                next = loadItem(yaml, "gui.items.next", fallback.next),
+                close = loadItem(yaml, "gui.items.close", fallback.close),
+                confirm = loadItem(yaml, "gui.items.confirm", fallback.confirm),
+                cancel = loadItem(yaml, "gui.items.cancel", fallback.cancel),
+                refresh = loadItem(yaml, "gui.items.refresh", fallback.refresh),
+                catalog = loadItem(yaml, "gui.items.catalog", fallback.catalog),
+            )
+        }
+
+        private fun loadItem(
+            yaml: YamlConfiguration,
+            path: String,
+            fallback: GuiItemDefinition,
+            legacyMaterialPath: String? = null,
+        ): GuiItemDefinition {
+            val rawMaterial = yaml.getString("$path.material")
+                ?: legacyMaterialPath?.let(yaml::getString)
+                ?: fallback.material.name
+            val material = Material.matchMaterial(rawMaterial)
+                ?: error("$path.material is invalid")
+            require(material.isItem && !material.isAir) { "$path.material must be a usable item" }
+            val rawModelData = yaml.get("$path.custom-model-data")
+            val modelData = when (rawModelData) {
+                null -> null
+                is Number -> {
+                    val numeric = rawModelData.toDouble()
+                    val integral = rawModelData.toLong()
+                    require(numeric.isFinite() && numeric == integral.toDouble() && integral in 0..Int.MAX_VALUE.toLong()) {
+                        "$path.custom-model-data must be a non-negative integer"
+                    }
+                    integral.toInt().takeIf { it > 0 }
+                }
+                else -> error("$path.custom-model-data must be an integer")
+            }
+            return GuiItemDefinition(material, modelData)
         }
     }
 }

@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.JoinConfiguration
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.OfflinePlayer
@@ -15,14 +16,15 @@ import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
+import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
+import ru.ruscrafting.ecojobs.config.GuiItemDefinition
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostType
-import ru.ruscrafting.ecojobs.domain.DurationParser
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.text.DecimalFormat
@@ -45,6 +47,7 @@ sealed interface JobsView {
 }
 
 class JobsMenu(
+    private val plugin: JavaPlugin,
     private val settings: () -> AddonSettings,
     private val locale: JobsLocale,
     private val ecoJobs: EcoJobsBridge,
@@ -59,6 +62,8 @@ class JobsMenu(
     }
 
     private val number = DecimalFormat("#,##0.##")
+    private val plain = PlainTextComponentSerializer.plainText()
+    private val pendingClicks = mutableSetOf<java.util.UUID>()
     private val contentSlots = listOf(
         10, 11, 12, 13, 14, 15, 16,
         19, 20, 21, 22, 23, 24, 25,
@@ -87,20 +92,33 @@ class JobsMenu(
         event.isCancelled = true
         if (event.clickedInventory !== event.view.topInventory) return
         val player = event.whoClicked as? Player ?: return
+        if (!pendingClicks.add(player.uniqueId)) return
         val slot = event.rawSlot
-        when (val view = holder.view) {
-            JobsView.Main -> clickMain(player, slot)
-            is JobsView.Catalog -> clickCatalog(player, view, slot)
-            is JobsView.JobCard -> clickJobCard(player, view, slot)
-            is JobsView.LeaveConfirm -> clickLeave(player, view, slot)
-            is JobsView.Levels -> clickPaged(player, view, slot, pageCount(ecoJobs.job(view.jobId)?.maxLevel ?: 0, contentSlots.size))
-            is JobsView.LeaderboardSelector -> clickLeaderboardSelector(player, view, slot)
-            is JobsView.Leaderboard -> clickPaged(player, view, slot, pageCount(ecoJobs.rankings(view.jobId?.let(ecoJobs::job)).size, settings().leaderboardEntriesPerPage))
-            is JobsView.Boosts -> clickPaged(player, view, slot, pageCount(applicableBoosts(player, view.jobId).size, contentSlots.size))
-            is JobsView.Help -> if (slot == 36) open(player, view.back) else if (slot == 44) player.closeInventory()
-            is JobsView.Admin -> clickAdmin(player, view, slot)
-            is JobsView.Presets -> clickPresets(player, view, slot)
-        }
+        plugin.server.scheduler.runTask(plugin, Runnable {
+            try {
+                if (player.openInventory.topInventory.holder !== holder) return@Runnable
+                when (val view = holder.view) {
+                    JobsView.Main -> clickMain(player, slot)
+                    is JobsView.Catalog -> clickCatalog(player, view, slot)
+                    is JobsView.JobCard -> clickJobCard(player, view, slot)
+                    is JobsView.LeaveConfirm -> clickLeave(player, view, slot)
+                    is JobsView.Levels -> clickPaged(player, view, slot, pageCount(ecoJobs.job(view.jobId)?.maxLevel ?: 0, contentSlots.size))
+                    is JobsView.LeaderboardSelector -> clickLeaderboardSelector(player, view, slot)
+                    is JobsView.Leaderboard -> clickPaged(
+                        player,
+                        view,
+                        slot,
+                        pageCount(ecoJobs.rankings(view.jobId?.let(ecoJobs::job))?.size ?: 0, settings().leaderboardEntriesPerPage),
+                    )
+                    is JobsView.Boosts -> clickPaged(player, view, slot, pageCount(applicableBoosts(player, view.jobId).size, contentSlots.size))
+                    is JobsView.Help -> if (slot == 36) open(player, view.back) else if (slot == 44) player.closeInventory()
+                    is JobsView.Admin -> clickAdmin(player, view, slot)
+                    is JobsView.Presets -> clickPresets(player, view, slot)
+                }
+            } finally {
+                pendingClicks.remove(player.uniqueId)
+            }
+        })
     }
 
     fun onDrag(event: InventoryDragEvent) {
@@ -115,7 +133,7 @@ class JobsMenu(
             "limit" to text(ecoJobs.limit(player)),
             "level" to text(ecoJobs.totalLevel(player)),
         )))
-        inventory.setItem(20, item(Material.COMPASS, player, "menu.main.catalog-name", "menu.main.catalog-lore"))
+        inventory.setItem(20, item(settings().guiItems.catalog, player, "menu.main.catalog-name", "menu.main.catalog-lore"))
         inventory.setItem(22, item(Material.WRITABLE_BOOK, player, "menu.main.active-name", "menu.main.active-lore", mapOf(
             "active" to text(ecoJobs.activeJobs(player).size),
         )))
@@ -159,7 +177,7 @@ class JobsMenu(
                 "level" to text(ecoJobs.level(player, job)),
                 "max" to text(job.maxLevel),
                 "state" to state,
-                "workers" to text(ecoJobs.workers(job)),
+                "workers" to text(ecoJobs.onlineWorkers(job)),
             )))
         }
         if (jobs.isEmpty()) inventory.setItem(22, item(Material.GRAY_DYE, player, "menu.catalog.empty-name", "menu.catalog.empty-lore"))
@@ -179,7 +197,7 @@ class JobsMenu(
 
     private fun openJobCard(player: Player, view: JobsView.JobCard) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
-        val inventory = inventory(player, view, 54, "menu.job.title", mapOf("job" to ecoJobs.name(job)))
+        val inventory = inventory(player, view, 54, "menu.job.title", mapOf("job" to titleText(ecoJobs.name(job))))
         val active = ecoJobs.active(player, job)
         val state = locale.render(
             if (active) "menu.catalog.state-active" else if (ecoJobs.has(player, job)) "menu.catalog.state-available" else "menu.catalog.state-locked",
@@ -235,9 +253,9 @@ class JobsMenu(
 
     private fun openLeave(player: Player, view: JobsView.LeaveConfirm) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
-        val inventory = inventory(player, view, 27, "menu.leave.title", mapOf("job" to ecoJobs.name(job)))
-        inventory.setItem(11, item(Material.RED_CONCRETE, player, "menu.leave.confirm-name", "menu.leave.confirm-lore", mapOf("job" to ecoJobs.name(job))))
-        inventory.setItem(15, item(Material.LIME_CONCRETE, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
+        val inventory = inventory(player, view, 27, "menu.leave.title", mapOf("job" to titleText(ecoJobs.name(job))))
+        inventory.setItem(11, item(settings().guiItems.confirm, player, "menu.leave.confirm-name", "menu.leave.confirm-lore", mapOf("job" to ecoJobs.name(job))))
+        inventory.setItem(15, item(settings().guiItems.cancel, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
         player.openInventory(inventory)
     }
 
@@ -259,7 +277,7 @@ class JobsMenu(
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
         val pages = pageCount(job.maxLevel, contentSlots.size)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
-        val inventory = inventory(player, currentView, 54, "menu.levels.title", mapOf("job" to ecoJobs.name(job)))
+        val inventory = inventory(player, currentView, 54, "menu.levels.title", mapOf("job" to titleText(ecoJobs.name(job))))
         val playerLevel = ecoJobs.level(player, job)
         ((currentView.page - 1) * contentSlots.size + 1..minOf(currentView.page * contentSlots.size, job.maxLevel)).forEachIndexed { index, level ->
             val state = when {
@@ -305,16 +323,29 @@ class JobsMenu(
     private fun openLeaderboard(player: Player, view: JobsView.Leaderboard) {
         val job = view.jobId?.let(ecoJobs::job)
         if (view.jobId != null && job == null) return open(player, view.back)
+        val titlePath = if (job == null) "menu.leaderboard.title-global" else "menu.leaderboard.title-job"
+        val titleValues = mapOf("job" to (job?.let(ecoJobs::name)?.let(::titleText) ?: Component.empty()))
         val rankings = ecoJobs.rankings(job)
+        if (rankings == null) {
+            val loadingView = view.copy(page = view.page.coerceAtLeast(1))
+            val inventory = inventory(player, loadingView, 54, titlePath, titleValues)
+            inventory.setItem(22, item(Material.CLOCK, player, "menu.leaderboard.loading-name", "menu.leaderboard.loading-lore"))
+            navigation(inventory, player, loadingView.back, 1, 1)
+            player.openInventory(inventory)
+            ecoJobs.prepareLeaderboards { result ->
+                val current = player.openInventory.topInventory.holder as? Holder
+                if (!player.isOnline || current?.view != loadingView) return@prepareLeaderboards
+                if (result.isSuccess) open(player, loadingView) else openLeaderboardFailure(player, loadingView, titlePath, titleValues)
+            }
+            return
+        }
         val pageSize = settings().leaderboardEntriesPerPage
         val pages = pageCount(rankings.size, pageSize)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
-        val titlePath = if (job == null) "menu.leaderboard.title-global" else "menu.leaderboard.title-job"
-        val inventory = inventory(player, currentView, 54, titlePath, mapOf("job" to (job?.let(ecoJobs::name) ?: Component.empty())))
+        val inventory = inventory(player, currentView, 54, titlePath, titleValues)
         rankings.page(currentView.page, pageSize).forEachIndexed { index, entry ->
             val rank = (currentView.page - 1) * pageSize + index + 1
-            val offline = Bukkit.getOfflinePlayer(entry.uuid)
-            inventory.setItem(contentSlots[index], playerHead(offline, player, "menu.leaderboard.entry-name", if (job == null) "menu.leaderboard.entry-global-lore" else "menu.leaderboard.entry-job-lore", mapOf(
+            inventory.setItem(contentSlots[index], playerHead(entry.uuid, entry.name, player, "menu.leaderboard.entry-name", if (job == null) "menu.leaderboard.entry-global-lore" else "menu.leaderboard.entry-job-lore", mapOf(
                 "rank_color" to rankLabel(rank),
                 "rank" to text(rank),
                 "player" to text(entry.name),
@@ -333,6 +364,18 @@ class JobsMenu(
         player.openInventory(inventory)
     }
 
+    private fun openLeaderboardFailure(
+        player: Player,
+        view: JobsView.Leaderboard,
+        titlePath: String,
+        titleValues: Map<String, Component>,
+    ) {
+        val inventory = inventory(player, view, 54, titlePath, titleValues)
+        inventory.setItem(22, item(Material.REDSTONE_TORCH, player, "menu.leaderboard.failed-name", "menu.leaderboard.failed-lore"))
+        navigation(inventory, player, view.back, 1, 1)
+        player.openInventory(inventory)
+    }
+
     private fun openBoosts(player: Player, view: JobsView.Boosts) {
         val job = view.jobId?.let(ecoJobs::job)
         if (view.jobId != null && job == null) return open(player, view.back)
@@ -344,7 +387,7 @@ class JobsMenu(
             currentView,
             54,
             if (job == null) "menu.boosts.title" else "menu.boosts.title-job",
-            mapOf("job" to (job?.let(ecoJobs::name) ?: Component.empty())),
+            mapOf("job" to (job?.let(ecoJobs::name)?.let(::titleText) ?: Component.empty())),
         )
         val summaryJobs = job?.let { listOf(it.id) } ?: ecoJobs.jobs().map { it.id }
         val summaryXp = summaryJobs.maxOfOrNull { boosts.multiplier(player, it, BoostType.XP) } ?: 1.0
@@ -363,7 +406,7 @@ class JobsMenu(
 
     private fun openHelp(player: Player, view: JobsView.Help) {
         val inventory = inventory(player, view, 45, "menu.help.title")
-        inventory.setItem(10, item(Material.COMPASS, player, "menu.help.jobs-name", "menu.help.jobs-lore"))
+        inventory.setItem(10, item(settings().guiItems.catalog, player, "menu.help.jobs-name", "menu.help.jobs-lore"))
         inventory.setItem(12, item(Material.REPEATER, player, "menu.help.levels-name", "menu.help.levels-lore"))
         inventory.setItem(14, item(Material.EXPERIENCE_BOTTLE, player, "menu.help.boosts-name", "menu.help.boosts-lore"))
         inventory.setItem(16, item(Material.WRITABLE_BOOK, player, "menu.help.commands-name", "menu.help.commands-lore"))
@@ -385,7 +428,7 @@ class JobsMenu(
             "jobs" to text(ecoJobs.jobs().size),
             "money" to bad,
         )))
-        inventory.setItem(20, item(Material.REPEATER, player, "menu.admin.reload-name", "menu.admin.reload-lore"))
+        inventory.setItem(20, item(settings().guiItems.refresh, player, "menu.admin.reload-name", "menu.admin.reload-lore"))
         inventory.setItem(22, item(Material.CHEST, player, "menu.admin.presets-name", "menu.admin.presets-lore", mapOf("count" to text(boosters().values().size))))
         inventory.setItem(24, item(Material.COMMAND_BLOCK, player, "menu.admin.help-name", "menu.admin.help-lore"))
         inventory.setItem(36, backItem(player))
@@ -423,7 +466,7 @@ class JobsMenu(
                 meta.lore(locale.lines("menu.admin.preset-lore", player, mapOf(
                     "type" to locale.type(preset.type, player),
                     "multiplier" to text(Multipliers.format(preset.multiplierBasisPoints)),
-                    "duration" to text(DurationParser.format(preset.duration)),
+                    "duration" to text(locale.duration(preset.duration, player)),
                     "jobs" to jobsLabel(preset.jobs, player),
                     "state" to locale.render(
                         if (preset.enabled) "menu.admin.preset-state-enabled" else "menu.admin.preset-state-disabled",
@@ -496,10 +539,10 @@ class JobsMenu(
 
     private fun navigation(inventory: Inventory, player: Player, back: JobsView, page: Int, pages: Int) {
         inventory.setItem(45, backItem(player))
-        if (page > 1) inventory.setItem(47, item(Material.ARROW, player, "common.previous-name", "common.previous-lore", mapOf(
+        if (page > 1) inventory.setItem(47, item(settings().guiItems.previous, player, "common.previous-name", "common.previous-lore", mapOf(
             "page" to text(page), "pages" to text(pages),
         )))
-        if (page < pages) inventory.setItem(51, item(Material.ARROW, player, "common.next-name", "common.next-lore", mapOf(
+        if (page < pages) inventory.setItem(51, item(settings().guiItems.next, player, "common.next-name", "common.next-lore", mapOf(
             "page" to text(page), "pages" to text(pages),
         )))
         inventory.setItem(53, closeItem(player))
@@ -515,9 +558,7 @@ class JobsMenu(
         val holder = Holder(view)
         val inventory = player.server.createInventory(holder, size, locale.render(titlePath, player, values))
         holder.backing = inventory
-        val filler = ItemStack(settings().fillerMaterial).apply {
-            editMeta { it.displayName(Component.empty()) }
-        }
+        val filler = styledItem(settings().guiItems.background).apply { editMeta { it.displayName(Component.empty()) } }
         repeat(size) { inventory.setItem(it, filler) }
         return inventory
     }
@@ -533,6 +574,23 @@ class JobsMenu(
             meta.displayName(locale.render(namePath, player, values).decoration(TextDecoration.ITALIC, false))
             if (lorePath != null) meta.lore(locale.lines(lorePath, player, values).map { it.decoration(TextDecoration.ITALIC, false) })
         }
+    }
+
+    private fun item(
+        definition: GuiItemDefinition,
+        player: Player,
+        namePath: String,
+        lorePath: String? = null,
+        values: Map<String, Component> = emptyMap(),
+    ): ItemStack = styledItem(definition).apply {
+        editMeta { meta ->
+            meta.displayName(locale.render(namePath, player, values).decoration(TextDecoration.ITALIC, false))
+            if (lorePath != null) meta.lore(locale.lines(lorePath, player, values).map { it.decoration(TextDecoration.ITALIC, false) })
+        }
+    }
+
+    private fun styledItem(definition: GuiItemDefinition): ItemStack = ItemStack(definition.material).apply {
+        definition.customModelData?.let { modelData -> editMeta { it.setCustomModelData(modelData) } }
     }
 
     private fun jobItem(
@@ -568,6 +626,17 @@ class JobsMenu(
         values: Map<String, Component>,
     ): ItemStack = playerHead(player as OfflinePlayer, player, namePath, lorePath, values)
 
+    private fun playerHead(
+        uuid: java.util.UUID,
+        name: String,
+        audience: Player,
+        namePath: String,
+        lorePath: String,
+        values: Map<String, Component>,
+    ): ItemStack = item(Material.PLAYER_HEAD, audience, namePath, lorePath, values).apply {
+        editMeta(SkullMeta::class.java) { it.setOwnerProfile(Bukkit.createPlayerProfile(uuid, name.take(16))) }
+    }
+
     private fun boostItem(player: Player, boost: BoostInstance): ItemStack = item(
         Material.EXPERIENCE_BOTTLE,
         player,
@@ -577,7 +646,7 @@ class JobsMenu(
             "multiplier" to text(Multipliers.format(boost.multiplierBasisPoints)),
             "type" to locale.type(boost.type, player),
             "jobs" to jobsLabel(boost.jobs, player),
-            "duration" to text(DurationParser.format(Duration.between(Instant.now(), boost.expiresAt).coerceAtLeast(Duration.ZERO))),
+            "duration" to text(locale.duration(Duration.between(Instant.now(), boost.expiresAt).coerceAtLeast(Duration.ZERO), player)),
             "instance" to text(boost.instanceId.toString().take(8)),
         ),
     )
@@ -589,9 +658,10 @@ class JobsMenu(
     private fun jobsLabel(jobs: Set<String>, player: Player): Component =
         if ("all" in jobs) locale.allJobs(player) else ecoJobs.names(jobs)
 
-    private fun backItem(player: Player): ItemStack = item(Material.ARROW, player, "common.back-name", "common.back-lore")
-    private fun closeItem(player: Player): ItemStack = item(Material.BARRIER, player, "common.close-name")
+    private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "common.back-name", "common.back-lore")
+    private fun closeItem(player: Player): ItemStack = item(settings().guiItems.close, player, "common.close-name")
     private fun text(value: Any?): Component = locale.text(value)
+    private fun titleText(value: Component): Component = Component.text(plain.serialize(value))
     private fun formatMultiplier(multiplier: Double): String = Multipliers.format(Multipliers.toBasisPoints(multiplier))
     private fun rankLabel(rank: Int): Component = Component.text("#$rank", when (rank) {
         1 -> NamedTextColor.GOLD

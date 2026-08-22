@@ -42,22 +42,37 @@ function snapshot (window) {
   return {
     title: componentText(window?.title),
     slots: (window?.slots ?? [])
-      .map((item, slot) => item ? { slot, name: itemName(item), type: item.name, count: item.count } : null)
+      .map((item, slot) => {
+        if (!item) return null
+        const lore = (item.customLore ?? []).map(componentText)
+        return {
+          slot,
+          name: itemName(item),
+          type: item.name,
+          count: item.count,
+          ...(lore.length > 0 ? { lore } : {})
+        }
+      })
       .filter(Boolean)
   }
 }
 
+function isFiller (item) {
+  return item.type === 'gray_stained_glass_pane' && /Gray Stained Glass Pane/i.test(item.name)
+}
+
 function compactSnapshot (observed) {
   if (!observed?.slots) return observed
-  const meaningful = observed.slots.filter((item) => !item.type.endsWith('_stained_glass_pane'))
+  const meaningful = observed.slots.filter((item) => !isFiller(item))
   const items = meaningful.length <= 18
     ? meaningful
     : [...meaningful.slice(0, 12), ...meaningful.slice(-6)]
-  return { title: observed.title, items }
+  const { slots, title, ...details } = observed
+  return { title, ...details, items }
 }
 
 function hasSlot (state, slot) {
-  return state.slots.some((item) => item.slot === slot && !item.type.endsWith('_stained_glass_pane'))
+  return state.slots.some((item) => item.slot === slot && !isFiller(item))
 }
 
 function hasNamedItem (state, pattern) {
@@ -67,7 +82,7 @@ function hasNamedItem (state, pattern) {
 function countCatalogCards (state) {
   return state.slots.filter((item) =>
     item.slot >= 10 && item.slot <= 43 &&
-    !item.type.endsWith('_stained_glass_pane') &&
+    !isFiller(item) &&
     !['arrow', 'barrier'].includes(item.type)
   ).length
 }
@@ -103,12 +118,34 @@ async function openJobs (bot) {
 }
 
 async function clickNext (bot, slot) {
+  return (await clickNextMeasured(bot, slot)).window
+}
+
+async function clickNextMeasured (bot, slot) {
   await wait(350)
   const next = waitForWindow(bot)
+  const startedAt = Date.now()
   await bot.clickWindow(slot, 0, 0)
   const window = await next
+  const openMs = Date.now() - startedAt
   await wait(450)
-  return window
+  return { window, openMs }
+}
+
+async function waitForCurrentWindow (bot, predicate, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const state = snapshot(bot.currentWindow)
+    if (predicate(state)) return bot.currentWindow
+    await wait(50)
+  }
+  throw new Error(`window state timeout: ${JSON.stringify(compactSnapshot(snapshot(bot.currentWindow)))}`)
+}
+
+function inventoryCount (bot, type) {
+  return bot.inventory.items()
+    .filter((item) => item.name === type)
+    .reduce((total, item) => total + item.count, 0)
 }
 
 async function runScenario (bot, config) {
@@ -136,10 +173,15 @@ async function runScenario (bot, config) {
     /My jobs|Мои профессии/i.test(state.title) && hasSlot(state, 45))
 
   window = await openJobs(bot)
-  window = await clickNext(bot, 20)
+  const compassBefore = inventoryCount(bot, 'compass')
+  const catalogOpen = await clickNextMeasured(bot, 20)
+  window = catalogOpen.window
   state = snapshot(window)
-  record(results, 'catalog', 'catalog with exactly ten job cards', state,
-    /catalog|Каталог/i.test(state.title) && countCatalogCards(state) === 10)
+  state.openMs = catalogOpen.openMs
+  state.compassInventoryDelta = inventoryCount(bot, 'compass') - compassBefore
+  record(results, 'catalog', 'catalog opens under 1.5 s, keeps the selector protected, and has ten job cards', state,
+    /catalog|Каталог/i.test(state.title) && countCatalogCards(state) === 10 &&
+      state.openMs < 1500 && state.compassInventoryDelta === 0)
 
   window = await clickNext(bot, 10)
   state = snapshot(window)
@@ -158,6 +200,9 @@ async function runScenario (bot, config) {
 
   window = await clickNext(bot, 45)
   window = await clickNext(bot, 31)
+  if (!hasSlot(snapshot(window), 49)) {
+    window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 49))
+  }
   state = snapshot(window)
   record(results, 'per-job leaderboard', 'job ranking with an explicit self-rank card', state,
     /Leaders|Лидеры/i.test(state.title) && hasSlot(state, 49))
@@ -175,6 +220,9 @@ async function runScenario (bot, config) {
     hasSlot(state, 4) && countCatalogCards(state) === 10)
 
   window = await clickNext(bot, 4)
+  if (!hasSlot(snapshot(window), 49)) {
+    window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 49))
+  }
   state = snapshot(window)
   record(results, 'global leaderboard', 'overall ranking with an explicit self-rank card', state,
     /Overall|Общий/i.test(state.title) && hasSlot(state, 49))
@@ -195,13 +243,38 @@ async function runScenario (bot, config) {
     window = await openJobs(bot)
     window = await clickNext(bot, 49)
     state = snapshot(window)
+    const commandLore = state.slots.find((item) => item.slot === 24)?.lore ?? []
     record(results, 'admin menu', 'integration status, reload, presets, and command reference', state,
-      [4, 20, 22, 24, 36].every((slot) => hasSlot(state, slot)))
+      [4, 20, 22, 24, 36].every((slot) => hasSlot(state, slot)) && commandLore.length >= 13)
 
+    window = await clickNext(bot, 20)
+    state = snapshot(window)
+    record(results, 'admin reload', 'configuration reload returns to the admin menu', state,
+      /management|Управление/i.test(state.title) && hasSlot(state, 20))
+
+    const coldLeaderboardStartedAt = Date.now()
+    window = await openJobs(bot)
+    window = await clickNext(bot, 24)
+    window = await clickNext(bot, 4)
+    if (!hasSlot(snapshot(window), 49)) {
+      window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 49))
+    }
+    state = snapshot(window)
+    state.rebuildMs = Date.now() - coldLeaderboardStartedAt
+    record(results, 'cold leaderboard refresh', 'invalidated ranking refreshes in the background within 10 s', state,
+      hasSlot(state, 49) && state.rebuildMs < 10000)
+
+    window = await openJobs(bot)
+    window = await clickNext(bot, 49)
     window = await clickNext(bot, 22)
     state = snapshot(window)
-    record(results, 'booster presets', 'two config-driven signed voucher previews', state,
-      state.slots.filter((item) => item.type === 'experience_bottle' || item.type === 'honey_bottle').length === 2)
+    const voucherItems = state.slots.filter((item) => item.type === 'experience_bottle' || item.type === 'honey_bottle')
+    const voucherLore = voucherItems.flatMap((item) => item.lore ?? [])
+    const localizedDuration = russian
+      ? voucherLore.some((line) => /\d+[чм]/u.test(line)) && voucherLore.every((line) => !/\d+[hm](?:\s|$)/i.test(line))
+      : voucherLore.some((line) => /\d+[hm](?:\s|$)/i.test(line))
+    record(results, 'booster presets', 'two signed previews with locale-specific duration units', state,
+      voucherItems.length === 2 && localizedDuration)
   }
 
   return results

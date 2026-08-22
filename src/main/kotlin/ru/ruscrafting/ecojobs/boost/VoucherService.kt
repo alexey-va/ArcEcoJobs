@@ -11,7 +11,6 @@ import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostType
-import ru.ruscrafting.ecojobs.domain.DurationParser
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
 import ru.ruscrafting.ecojobs.domain.VoucherSigner
@@ -131,7 +130,7 @@ class VoucherService(
     fun displayValues(payload: VoucherPayload, audience: Player): Map<String, Component> = mapOf(
         "type" to locale.type(payload.type, audience),
         "multiplier" to locale.text(Multipliers.format(payload.multiplierBasisPoints)),
-        "duration" to locale.text(DurationParser.format(Duration.ofSeconds(payload.durationSeconds))),
+        "duration" to locale.text(locale.duration(Duration.ofSeconds(payload.durationSeconds), audience)),
         "jobs" to if ("all" in payload.jobs) locale.allJobs(audience) else jobNames(payload.jobs),
     )
 

@@ -6,7 +6,7 @@ commands:
   intercept-ecojobs-root: true
 
 leaderboards:
-  cache-seconds: 30
+  cache-seconds: 300
   entries-per-page: 10
 
 boosts:
@@ -18,4 +18,22 @@ boosts:
   require-money-placeholder: true
 
 gui:
-  filler-material: BLACK_STAINED_GLASS_PANE
+  items:
+    background:
+      material: GRAY_STAINED_GLASS_PANE
+    back:
+      material: BLUE_STAINED_GLASS_PANE
+    previous:
+      material: BLUE_STAINED_GLASS_PANE
+    next:
+      material: BLUE_STAINED_GLASS_PANE
+    close:
+      material: RED_STAINED_GLASS_PANE
+    confirm:
+      material: GREEN_STAINED_GLASS_PANE
+    cancel:
+      material: RED_STAINED_GLASS_PANE
+    refresh:
+      material: BLACK_STAINED_GLASS_PANE
+    catalog:
+      material: COMPASS

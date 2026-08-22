@@ -118,25 +118,27 @@ object DurationParser {
         return Duration.ofSeconds(seconds)
     }
 
-    fun format(duration: Duration): String {
+    fun format(duration: Duration, russian: Boolean = false): String {
         var seconds = duration.seconds.coerceAtLeast(0)
         val parts = mutableListOf<String>()
+        val units = if (russian) mapOf('d' to "д", 'h' to "ч", 'm' to "м", 's' to "с")
+        else mapOf('d' to "d", 'h' to "h", 'm' to "m", 's' to "s")
         val days = seconds / 86_400
         if (days > 0) {
-            parts += "${days}d"
+            parts += "$days${units.getValue('d')}"
             seconds %= 86_400
         }
         val hours = seconds / 3_600
         if (hours > 0) {
-            parts += "${hours}h"
+            parts += "$hours${units.getValue('h')}"
             seconds %= 3_600
         }
         val minutes = seconds / 60
         if (minutes > 0) {
-            parts += "${minutes}m"
+            parts += "$minutes${units.getValue('m')}"
             seconds %= 60
         }
-        if (seconds > 0 || parts.isEmpty()) parts += "${seconds}s"
+        if (seconds > 0 || parts.isEmpty()) parts += "$seconds${units.getValue('s')}"
         return parts.joinToString(" ")
     }
 }

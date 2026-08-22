@@ -72,7 +72,7 @@ command:
 
 menu:
   main:
-    title: '<#92bed8>Jobs'
+    title: '<#20252b>Jobs'
     profile-name: '<#e6fff3><player>'
     profile-lore:
       - '<#8c8c8c>Your profession journey'
@@ -117,14 +117,14 @@ menu:
       - '<#d8a657>Click to open'
 
   catalog:
-    title: '<#92bed8>Job catalog'
-    title-active: '<#92bed8>My jobs'
+    title: '<#20252b>Job catalog'
+    title-active: '<#20252b>My jobs'
     job-lore:
       - '<description>'
       - ''
       - '<#e6fff3>Level: <#92bed8><level>/<max>'
       - '<#e6fff3>Status: <state>'
-      - '<#e6fff3>Workers: <#92bed8><workers>'
+      - '<#e6fff3>Working now: <#92bed8><workers>'
       - ''
       - '<#92bed8>Click to open the job card'
     state-active: '<#79c99e>active'
@@ -135,7 +135,7 @@ menu:
       - '<#e6fff3>Open the catalog and choose a path.'
 
   job:
-    title: '<#92bed8><job>'
+    title: '<#20252b><job>'
     overview-name: '<#e6fff3><job>'
     overview-lore:
       - '<description>'
@@ -180,7 +180,7 @@ menu:
       - '<#e36d6d>Click to continue'
 
   leave:
-    title: '<#e36d6d>Leave <job>?'
+    title: '<#20252b>Leave <job>?'
     confirm-name: '<#e36d6d>Yes, leave the job'
     confirm-lore:
       - '<#e6fff3>Job: <job>'
@@ -192,7 +192,7 @@ menu:
       - '<#8c8c8c>Return to the job card'
 
   levels:
-    title: '<#92bed8><job> · levels'
+    title: '<#20252b><job> · levels'
     reached-name: '<#79c99e>Level <level>'
     current-name: '<#d8a657>Level <level>'
     future-name: '<#e6fff3>Level <level>'
@@ -208,7 +208,7 @@ menu:
     no-rewards: '<#8c8c8c>  No separate reward'
 
   leaderboard:
-    selector-title: '<#92bed8>Leaders'
+    selector-title: '<#20252b>Leaders'
     global-name: '<#92bed8>Overall ranking'
     global-lore:
       - '<#e6fff3>Total level across every job'
@@ -220,8 +220,8 @@ menu:
       - '<#8c8c8c>Level, XP, and your position'
       - ''
       - '<#92bed8>Click to open'
-    title-global: '<#92bed8>Overall ranking'
-    title-job: '<#92bed8>Leaders · <job>'
+    title-global: '<#20252b>Overall ranking'
+    title-job: '<#20252b>Leaders · <job>'
     entry-name: '<rank_color> <#e6fff3><player>'
     entry-global-lore:
       - '<#e6fff3>Total level: <#92bed8><level>'
@@ -237,10 +237,18 @@ menu:
     empty-name: '<#8c8c8c>No ranking yet'
     empty-lore:
       - '<#e6fff3>The first result appears after someone progresses.'
+    loading-name: '<#d8a657>Building the ranking…'
+    loading-lore:
+      - '<#e6fff3>Profiles are read in the background without freezing the server.'
+      - '<#8c8c8c>This menu will refresh automatically.'
+    failed-name: '<#e36d6d>Ranking temporarily unavailable'
+    failed-lore:
+      - '<#e6fff3>Job data could not be read.'
+      - '<#8c8c8c>Go back and try opening the ranking later.'
 
   boosts:
-    title: '<#92bed8>Active boosts'
-    title-job: '<#92bed8>Boosts · <job>'
+    title: '<#20252b>Active boosts'
+    title-job: '<#20252b>Boosts · <job>'
     summary-name: '<#e6fff3>Combined effect'
     summary-lore:
       - '<#e6fff3>XP: <#92bed8><xp_multiplier>'
@@ -257,7 +265,7 @@ menu:
       - '<#8c8c8c>Right-click a voucher to bind it to your account.'
 
   help:
-    title: '<#92bed8>Jobs help'
+    title: '<#20252b>Jobs help'
     jobs-name: '<#92bed8>Jobs'
     jobs-lore:
       - '<#e6fff3>Select jobs up to your permitted limit.'
@@ -280,7 +288,7 @@ menu:
       - '<#e6fff3>Right-click a voucher <#8c8c8c>— activate it'
 
   admin:
-    title: '<#d8a657>Jobs management'
+    title: '<#20252b>Jobs management'
     status-name: '<#d8a657>Integration status'
     status-lore:
       - '<#e6fff3>EcoJobs: <ecojobs>'
@@ -302,11 +310,20 @@ menu:
       - '<#d8a657>Click to open'
     help-name: '<#d8a657>Admin commands'
     help-lore:
-      - '<#e6fff3>/arcjobs booster give …'
-      - '<#e6fff3>/arcjobs boost grant …'
-      - '<#e6fff3>/arcjobs boost revoke …'
-      - '<#8c8c8c>Full syntax: /arcjobs help'
-    presets-title: '<#d8a657>Booster presets'
+      - '<#92bed8>/arcjobs reload'
+      - '<#8c8c8c>Reload configs and locales'
+      - '<#92bed8>/arcjobs boosters list'
+      - '<#92bed8>/arcjobs booster inspect <id|hand>'
+      - '<#92bed8>/arcjobs booster give <player> <preset> [amount] …'
+      - '<#8c8c8c>Issue a signed booster voucher'
+      - '<#92bed8>/arcjobs boost list [player]'
+      - '<#92bed8>/arcjobs boost grant <player> <duration> <multiplier> …'
+      - '<#92bed8>/arcjobs boost revoke <player> <id|all>'
+      - '<#8c8c8c>Manage active boosts'
+      - '<#92bed8>/arcjobs diagnose'
+      - ''
+      - '<#d8a657>Click to print full syntax in chat'
+    presets-title: '<#20252b>Booster presets'
     preset-lore:
       - '<#e6fff3>Type: <#92bed8><type>'
       - '<#e6fff3>Multiplier: <#92bed8><multiplier>'

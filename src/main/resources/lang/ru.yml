@@ -72,7 +72,7 @@ command:
 
 menu:
   main:
-    title: '<#92bed8>Работы'
+    title: '<#20252b>Работы'
     profile-name: '<#e6fff3><player>'
     profile-lore:
       - '<#8c8c8c>Ваш путь в профессиях'
@@ -117,14 +117,14 @@ menu:
       - '<#d8a657>Нажмите, чтобы открыть'
 
   catalog:
-    title: '<#92bed8>Каталог профессий'
-    title-active: '<#92bed8>Мои профессии'
+    title: '<#20252b>Каталог профессий'
+    title-active: '<#20252b>Мои профессии'
     job-lore:
       - '<description>'
       - ''
       - '<#e6fff3>Уровень: <#92bed8><level>/<max>'
       - '<#e6fff3>Состояние: <state>'
-      - '<#e6fff3>Работников: <#92bed8><workers>'
+      - '<#e6fff3>Сейчас работают: <#92bed8><workers>'
       - ''
       - '<#92bed8>Нажмите, чтобы открыть карточку'
     state-active: '<#79c99e>выбрана'
@@ -135,7 +135,7 @@ menu:
       - '<#e6fff3>Откройте каталог и выберите направление.'
 
   job:
-    title: '<#92bed8><job>'
+    title: '<#20252b><job>'
     overview-name: '<#e6fff3><job>'
     overview-lore:
       - '<description>'
@@ -180,7 +180,7 @@ menu:
       - '<#e36d6d>Нажмите, чтобы продолжить'
 
   leave:
-    title: '<#e36d6d>Покинуть <job>?'
+    title: '<#20252b>Покинуть <job>?'
     confirm-name: '<#e36d6d>Да, покинуть профессию'
     confirm-lore:
       - '<#e6fff3>Профессия: <job>'
@@ -192,7 +192,7 @@ menu:
       - '<#8c8c8c>Вернуться к карточке профессии'
 
   levels:
-    title: '<#92bed8><job> · уровни'
+    title: '<#20252b><job> · уровни'
     reached-name: '<#79c99e>Уровень <level>'
     current-name: '<#d8a657>Уровень <level>'
     future-name: '<#e6fff3>Уровень <level>'
@@ -208,7 +208,7 @@ menu:
     no-rewards: '<#8c8c8c>  Без отдельной награды'
 
   leaderboard:
-    selector-title: '<#92bed8>Лидеры'
+    selector-title: '<#20252b>Лидеры'
     global-name: '<#92bed8>Общий рейтинг'
     global-lore:
       - '<#e6fff3>Сумма уровней всех профессий'
@@ -220,8 +220,8 @@ menu:
       - '<#8c8c8c>Уровень, опыт и ваше место'
       - ''
       - '<#92bed8>Нажмите, чтобы открыть'
-    title-global: '<#92bed8>Общий рейтинг'
-    title-job: '<#92bed8>Лидеры · <job>'
+    title-global: '<#20252b>Общий рейтинг'
+    title-job: '<#20252b>Лидеры · <job>'
     entry-name: '<rank_color> <#e6fff3><player>'
     entry-global-lore:
       - '<#e6fff3>Суммарный уровень: <#92bed8><level>'
@@ -237,10 +237,18 @@ menu:
     empty-name: '<#8c8c8c>Рейтинг пока пуст'
     empty-lore:
       - '<#e6fff3>Первый результат появится после развития профессии.'
+    loading-name: '<#d8a657>Собираем рейтинг…'
+    loading-lore:
+      - '<#e6fff3>Профили читаются в фоне — сервер не зависает.'
+      - '<#8c8c8c>Меню обновится автоматически.'
+    failed-name: '<#e36d6d>Рейтинг временно недоступен'
+    failed-lore:
+      - '<#e6fff3>Не удалось прочитать данные профессий.'
+      - '<#8c8c8c>Вернитесь и попробуйте открыть рейтинг позже.'
 
   boosts:
-    title: '<#92bed8>Активные усиления'
-    title-job: '<#92bed8>Усиления · <job>'
+    title: '<#20252b>Активные усиления'
+    title-job: '<#20252b>Усиления · <job>'
     summary-name: '<#e6fff3>Итоговый эффект'
     summary-lore:
       - '<#e6fff3>Опыт: <#92bed8><xp_multiplier>'
@@ -257,7 +265,7 @@ menu:
       - '<#8c8c8c>ПКМ талоном активирует его на вашем аккаунте.'
 
   help:
-    title: '<#92bed8>Справка по работам'
+    title: '<#20252b>Справка по работам'
     jobs-name: '<#92bed8>Профессии'
     jobs-lore:
       - '<#e6fff3>Выберите до разрешённого лимита профессий.'
@@ -280,7 +288,7 @@ menu:
       - '<#e6fff3>ПКМ талоном <#8c8c8c>— активировать'
 
   admin:
-    title: '<#d8a657>Управление работами'
+    title: '<#20252b>Управление работами'
     status-name: '<#d8a657>Состояние интеграций'
     status-lore:
       - '<#e6fff3>EcoJobs: <ecojobs>'
@@ -302,11 +310,20 @@ menu:
       - '<#d8a657>Нажмите, чтобы открыть'
     help-name: '<#d8a657>Команды администратора'
     help-lore:
-      - '<#e6fff3>/arcjobs booster give …'
-      - '<#e6fff3>/arcjobs boost grant …'
-      - '<#e6fff3>/arcjobs boost revoke …'
-      - '<#8c8c8c>Полный синтаксис: /arcjobs help'
-    presets-title: '<#d8a657>Наборы усилителей'
+      - '<#92bed8>/arcjobs reload'
+      - '<#8c8c8c>Перечитать конфиги и локализацию'
+      - '<#92bed8>/arcjobs boosters list'
+      - '<#92bed8>/arcjobs booster inspect <id|hand>'
+      - '<#92bed8>/arcjobs booster give <player> <preset> [кол-во] …'
+      - '<#8c8c8c>Выдать подписанный талон усиления'
+      - '<#92bed8>/arcjobs boost list [игрок]'
+      - '<#92bed8>/arcjobs boost grant <player> <duration> <multiplier> …'
+      - '<#92bed8>/arcjobs boost revoke <player> <id|all>'
+      - '<#8c8c8c>Управлять активными усилениями'
+      - '<#92bed8>/arcjobs diagnose'
+      - ''
+      - '<#d8a657>Нажмите, чтобы вывести полный синтаксис в чат'
+    presets-title: '<#20252b>Наборы усилителей'
     preset-lore:
       - '<#e6fff3>Тип: <#92bed8><type>'
       - '<#e6fff3>Множитель: <#92bed8><multiplier>'

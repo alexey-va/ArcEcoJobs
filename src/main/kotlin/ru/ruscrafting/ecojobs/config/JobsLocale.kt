@@ -8,7 +8,9 @@ import org.bukkit.command.CommandSender
 import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
+import ru.ruscrafting.ecojobs.domain.DurationParser
 import java.io.File
+import java.time.Duration
 
 class JobsLocale(
     dataFolder: File,
@@ -59,6 +61,11 @@ class JobsLocale(
 
     fun allJobs(audience: CommandSender?): Component = render("common.all-jobs", audience)
 
+    fun duration(duration: Duration, audience: CommandSender?): String = DurationParser.format(
+        duration,
+        russian = usesRussian(audience),
+    )
+
     fun validate(presets: Collection<BoosterPreset> = emptyList()) {
         validate(russian, english)
         validateBoosterKeys(russian, english, presets)
@@ -79,8 +86,12 @@ class JobsLocale(
     }
 
     private fun select(audience: CommandSender?): YamlConfiguration {
-        if (!settings().useClientLocale || audience !is Player) return fallback()
-        return if (audience.locale().language.equals("ru", true)) russian else english
+        return if (usesRussian(audience)) russian else english
+    }
+
+    private fun usesRussian(audience: CommandSender?): Boolean {
+        if (!settings().useClientLocale || audience !is Player) return settings().defaultLocale == "ru"
+        return audience.locale().language.equals("ru", true)
     }
 
     private fun fallback(): YamlConfiguration = if (settings().defaultLocale == "en") english else russian

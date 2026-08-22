@@ -17,6 +17,7 @@ import net.luckperms.api.node.types.PermissionNode
 import org.bukkit.Material
 import org.mockbukkit.mockbukkit.MockBukkit
 import ru.ruscrafting.ecojobs.config.AddonSettings
+import ru.ruscrafting.ecojobs.config.GuiItems
 import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
@@ -63,7 +64,7 @@ class BoostServiceTest : StringSpec({
             maximumMultiplierBasisPoints = 1_000,
             maximumBoostDuration = Duration.ofDays(30),
             requireMoneyPlaceholder = true,
-            fillerMaterial = Material.BLACK_STAINED_GLASS_PANE,
+            guiItems = GuiItems.vanilla(),
         )
         val nodeFactory = BoostNodeFactory { permissionKey, expiry ->
             mockk<PermissionNode> {

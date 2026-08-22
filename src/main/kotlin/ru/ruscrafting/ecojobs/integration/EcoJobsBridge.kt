@@ -1,5 +1,6 @@
 package ru.ruscrafting.ecojobs.integration
 
+import com.willfp.eco.core.Eco
 import com.willfp.ecojobs.api.activeJobs
 import com.willfp.ecojobs.api.canJoinJob
 import com.willfp.ecojobs.api.getJobLevel
@@ -19,21 +20,31 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
+import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import java.time.Instant
 import java.util.UUID
+import java.util.logging.Level
 
 data class RankingEntry(val uuid: UUID, val name: String, val level: Int, val xp: Double)
 
-class EcoJobsBridge(private val settings: () -> AddonSettings) {
+class EcoJobsBridge(
+    private val plugin: JavaPlugin,
+    private val settings: () -> AddonSettings,
+) {
     private data class CachedRankings(
         val validUntil: Instant,
         val rankings: Map<String, List<RankingEntry>>,
     )
 
+    private data class PlayerRef(val uuid: UUID, val name: String)
+
     private val legacyAmpersand = LegacyComponentSerializer.legacyAmpersand()
     private val legacySection = LegacyComponentSerializer.legacySection()
+    @Volatile
     private var leaderboardCache: CachedRankings? = null
+    private var leaderboardBuildInFlight = false
+    private val leaderboardCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
 
     fun jobs(): List<Job> = Jobs.values().sortedBy(Job::id)
     fun job(id: String?): Job? = Jobs.getByID(id?.lowercase())
@@ -53,18 +64,16 @@ class EcoJobsBridge(private val settings: () -> AddonSettings) {
     fun join(player: Player, job: Job): Boolean {
         if (!canJoin(player, job)) return false
         player.joinJob(job)
-        invalidateLeaderboards()
         return active(player, job)
     }
 
     fun leave(player: Player, job: Job): Boolean {
         if (!active(player, job)) return false
         player.leaveJob(job)
-        invalidateLeaderboards()
         return !active(player, job)
     }
 
-    fun workers(job: Job): Int = Bukkit.getOfflinePlayers().count { it.hasPlayedBefore() && active(it, job) }
+    fun onlineWorkers(job: Job): Int = Bukkit.getOnlinePlayers().count { active(it, job) }
 
     fun name(job: Job): Component = legacy(job.name)
     fun description(job: Job): Component = legacy(job.description)
@@ -79,14 +88,54 @@ class EcoJobsBridge(private val settings: () -> AddonSettings) {
             .filter(String::isNotBlank)
             .map(::legacy)
 
-    fun rankings(job: Job?): List<RankingEntry> {
-        val cache = rankings()
+    fun rankings(job: Job?): List<RankingEntry>? {
+        val cache = validRankings() ?: return null
         return cache[rankingKey(job)].orEmpty()
     }
 
     fun rank(player: OfflinePlayer, job: Job?): Int? {
-        val index = rankings(job).indexOfFirst { it.uuid == player.uniqueId }
+        val index = rankings(job)?.indexOfFirst { it.uuid == player.uniqueId } ?: return null
         return if (index < 0) null else index + 1
+    }
+
+    fun prepareLeaderboards(callback: (Result<Unit>) -> Unit = {}) {
+        check(Bukkit.isPrimaryThread()) { "Leaderboard preparation must be requested from the server thread" }
+        if (validRankings() != null) {
+            callback(Result.success(Unit))
+            return
+        }
+        leaderboardCallbacks += callback
+        if (leaderboardBuildInFlight) return
+
+        leaderboardBuildInFlight = true
+        val jobs = jobs()
+        val players = Bukkit.getOfflinePlayers().map { player ->
+            PlayerRef(player.uniqueId, player.name ?: player.uniqueId.toString().take(8))
+        }
+        val startedAt = System.nanoTime()
+        plugin.server.scheduler.runTaskAsynchronously(plugin, Runnable {
+            val result = runCatching { buildRankings(jobs, players) }
+            if (!plugin.isEnabled) return@Runnable
+            runCatching { plugin.server.scheduler.runTask(plugin, Runnable {
+                leaderboardBuildInFlight = false
+                val completion = result.map { rankings ->
+                    leaderboardCache = CachedRankings(Instant.now().plus(settings().leaderboardCache), rankings)
+                    val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
+                    plugin.logger.info(
+                        "Leaderboard cache refreshed asynchronously for ${players.size} profiles and ${jobs.size} jobs in ${elapsedMillis}ms",
+                    )
+                    Unit
+                }
+                if (completion.isFailure) {
+                    plugin.logger.log(Level.WARNING, "Could not refresh the ArcEcoJobs leaderboard cache", completion.exceptionOrNull())
+                }
+                val callbacks = leaderboardCallbacks.toList()
+                leaderboardCallbacks.clear()
+                callbacks.forEach { it(completion) }
+            }) }.onFailure { failure ->
+                if (plugin.isEnabled) plugin.logger.log(Level.WARNING, "Could not finish the ArcEcoJobs leaderboard refresh", failure)
+            }
+        })
     }
 
     fun moneyIntegrationProblems(): List<String> = jobs().mapNotNull { job ->
@@ -99,27 +148,40 @@ class EcoJobsBridge(private val settings: () -> AddonSettings) {
         leaderboardCache = null
     }
 
-    private fun rankings(): Map<String, List<RankingEntry>> {
-        val now = Instant.now()
-        leaderboardCache?.takeIf { it.validUntil.isAfter(now) }?.let { return it.rankings }
-        val jobs = jobs()
-        val players = Bukkit.getOfflinePlayers().filter(OfflinePlayer::hasPlayedBefore)
-        val result = linkedMapOf<String, List<RankingEntry>>()
-        jobs.forEach { job ->
-            result[job.id] = players.filter { participates(it, job) }.map { player ->
-                RankingEntry(player.uniqueId, player.name ?: player.uniqueId.toString().take(8), level(player, job), xp(player, job))
-            }.sortedWith(compareByDescending<RankingEntry> { it.level }.thenByDescending { it.xp }.thenBy { it.name.lowercase() })
+    fun shutdown() {
+        leaderboardBuildInFlight = false
+        leaderboardCallbacks.clear()
+        leaderboardCache = null
+    }
+
+    private fun validRankings(): Map<String, List<RankingEntry>>? = leaderboardCache
+        ?.takeIf { it.validUntil.isAfter(Instant.now()) }
+        ?.rankings
+
+    private fun buildRankings(jobs: List<Job>, players: List<PlayerRef>): Map<String, List<RankingEntry>> {
+        val byJob = jobs.associate { it.id to mutableListOf<RankingEntry>() }.toMutableMap()
+        val global = mutableListOf<RankingEntry>()
+        players.forEach { player ->
+            val profile = Eco.get().loadPlayerProfile(player.uuid)
+            var totalLevel = 0
+            var totalXp = 0.0
+            var progressed = false
+            jobs.forEach { job ->
+                val level = profile.read(job.levelKey)
+                val xp = profile.read(job.xpKey)
+                if (level > 1 || xp > 0.0) {
+                    progressed = true
+                    byJob.getValue(job.id) += RankingEntry(player.uuid, player.name, level, xp)
+                    totalLevel += level
+                    totalXp += xp
+                }
+            }
+            if (progressed) global += RankingEntry(player.uuid, player.name, totalLevel, totalXp)
         }
-        result[GLOBAL] = players.mapNotNull { player ->
-            val participated = jobs.filter { participates(player, it) }
-            if (participated.isEmpty()) null else RankingEntry(
-                player.uniqueId,
-                player.name ?: player.uniqueId.toString().take(8),
-                participated.sumOf { level(player, it) },
-                participated.sumOf { xp(player, it) },
-            )
-        }.sortedWith(compareByDescending<RankingEntry> { it.level }.thenByDescending { it.xp }.thenBy { it.name.lowercase() })
-        return result.also { leaderboardCache = CachedRankings(now.plus(settings().leaderboardCache), it) }
+        val result = linkedMapOf<String, List<RankingEntry>>()
+        jobs.forEach { job -> result[job.id] = byJob.getValue(job.id).sortedWith(RANKING_ORDER) }
+        result[GLOBAL] = global.sortedWith(RANKING_ORDER)
+        return result
     }
 
     private fun rankingKey(job: Job?): String = job?.id ?: GLOBAL
@@ -128,5 +190,8 @@ class EcoJobsBridge(private val settings: () -> AddonSettings) {
 
     companion object {
         private const val GLOBAL = "__global__"
+        private val RANKING_ORDER = compareByDescending<RankingEntry> { it.level }
+            .thenByDescending { it.xp }
+            .thenBy { it.name.lowercase() }
     }
 }

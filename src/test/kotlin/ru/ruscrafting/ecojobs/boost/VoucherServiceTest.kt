@@ -10,6 +10,7 @@ import org.mockbukkit.mockbukkit.MockBukkit
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterItemDefinition
 import ru.ruscrafting.ecojobs.config.BoosterPreset
+import ru.ruscrafting.ecojobs.config.GuiItems
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostType
 import java.nio.file.Files
@@ -46,7 +47,7 @@ class VoucherServiceTest : StringSpec({
             maximumMultiplierBasisPoints = 1_000,
             maximumBoostDuration = Duration.ofDays(30),
             requireMoneyPlaceholder = true,
-            fillerMaterial = Material.BLACK_STAINED_GLASS_PANE,
+            guiItems = GuiItems.vanilla(),
         )
         val locale = JobsLocale(dataFolder.toFile()) { settings }.also(JobsLocale::validate)
         service = VoucherService(

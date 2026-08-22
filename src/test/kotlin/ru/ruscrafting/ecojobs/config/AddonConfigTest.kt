@@ -6,9 +6,11 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import ru.ruscrafting.ecojobs.domain.BoostType
 import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 
 class AddonConfigTest : StringSpec({
+    val project = Path.of(System.getProperty("arcecojobs.projectDir"))
     val settings = AddonSettings(
         defaultLocale = "ru",
         useClientLocale = true,
@@ -20,7 +22,7 @@ class AddonConfigTest : StringSpec({
         maximumMultiplierBasisPoints = 1_000,
         maximumBoostDuration = Duration.ofDays(30),
         requireMoneyPlaceholder = true,
-        fillerMaterial = Material.BLACK_STAINED_GLASS_PANE,
+        guiItems = GuiItems.vanilla(),
     )
 
     fun booster(extra: String = ""): String = """
@@ -68,6 +70,64 @@ class AddonConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             BoosterRegistry.load(yaml(config), settings, setOf("miner"))
         }
+    }
+
+    "GUI custom model data must also be an exact non-negative integer" {
+        val config = yaml("""
+            gui:
+              items:
+                close:
+                  material: RED_STAINED_GLASS_PANE
+                  custom-model-data: 1.5
+        """.trimIndent())
+        shouldThrow<IllegalArgumentException> { AddonSettings.load(config) }
+    }
+
+    "bundled GUI config remains resource-pack independent" {
+        val gui = AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile()).guiItems
+        listOf(
+            gui.background,
+            gui.back,
+            gui.previous,
+            gui.next,
+            gui.close,
+            gui.confirm,
+            gui.cancel,
+            gui.refresh,
+            gui.catalog,
+        ).map(GuiItemDefinition::customModelData) shouldBe List(9) { null }
+        gui.background.material shouldBe Material.GRAY_STAINED_GLASS_PANE
+        gui.back.material shouldBe Material.BLUE_STAINED_GLASS_PANE
+    }
+
+    "production GUI overlays use the reviewed RusCrafting model data on both nodes" {
+        val roots = listOf("classic", "classic_survival")
+        val overlays = roots.map { root ->
+            AddonSettings.load(project.parent.resolve("$root/plugins/ArcEcoJobs/config.yml").toFile()).guiItems
+        }
+        overlays[0] shouldBe overlays[1]
+        val gui = overlays[0]
+        mapOf(
+            "background" to gui.background.customModelData,
+            "back" to gui.back.customModelData,
+            "previous" to gui.previous.customModelData,
+            "next" to gui.next.customModelData,
+            "close" to gui.close.customModelData,
+            "confirm" to gui.confirm.customModelData,
+            "cancel" to gui.cancel.customModelData,
+            "refresh" to gui.refresh.customModelData,
+            "catalog" to gui.catalog.customModelData,
+        ) shouldBe mapOf(
+            "background" to 11000,
+            "back" to 11013,
+            "previous" to 11009,
+            "next" to 11008,
+            "close" to 91002,
+            "confirm" to 91007,
+            "cancel" to 91002,
+            "refresh" to 11010,
+            "catalog" to 11019,
+        )
     }
 
     "case variants cannot overwrite another preset" {

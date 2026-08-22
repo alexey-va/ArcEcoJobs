@@ -10,7 +10,8 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.5.jar`.
+The production artifact is `build/libs/ArcEcoJobs-0.1.6.jar`. The test suite
+starts a disposable MySQL 8.0.46 container to prove concurrent redemption.
 
 Read-only lab GUI acceptance:
 
@@ -48,10 +49,29 @@ newline-terminated Base64 encoding of at least 32 random bytes; do not write
 raw binary key bytes to it. Keep it private and back it up with the runtime
 secrets. Every ArcEcoJobs node that accepts the same vouchers must receive the
 same file through the secret workflow. Losing or replacing it invalidates all
-previously issued voucher items. Voucher format v2 binds every signed item to
-the recipient UUID, while LuckPerms stores its redemption marker across the
-network. Version 1 vouchers are rejected because they were not recipient-bound
-and therefore could not be made safely replay-resistant.
+previously issued voucher items. New vouchers use bearer format v3 and can be
+transferred freely. Correctly signed v1 and v2 items remain compatible; the v2
+recipient field is verified as part of its historical signature but no longer
+restricts who can redeem the item.
+
+Replay protection is global rather than player-bound. MySQL table
+`arcecojobs_voucher_redemptions` owns the permanent unique `voucher_id` claim;
+LuckPerms continues to own the actual boost and keeps a deterministic
+per-player application marker for crash reconciliation. A redemption moves
+from `CLAIMED` to `APPLIED` only after LuckPerms saves. If the final MySQL
+acknowledgement is lost, retry detects the LuckPerms marker and completes the
+same claim without issuing a second boost. Applied rows must never be expired
+or purged. A MySQL named lock serializes the same voucher across nodes while
+LuckPerms is being updated; an uncertain pending claim remains reserved to its
+first redeemer for safe retry. Every pending claim for a signed v1/v2 item also
+searches LuckPerms for a historical use marker, including after a failed MySQL
+acknowledgement, so a voucher redeemed before this ledger existed cannot
+become usable again after transfer.
+
+Provision the dedicated least-privilege production account interactively with
+`../scripts/provision-arcecojobs-mysql`, then commit and deploy both reviewed
+runtime configs. Without an enabled, reachable ledger, voucher redemption
+fails closed and the item is not consumed.
 
 Voucher configuration supports Bukkit persistent data, which is the stable
 namespaced NBT surface; arbitrary raw NBT

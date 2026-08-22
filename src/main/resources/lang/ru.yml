@@ -29,13 +29,11 @@ message:
   left: '<prefix><#e6fff3>Вы покинули профессию <job><#e6fff3>.'
   leave-failed: '<prefix><#e36d6d>Не удалось покинуть профессию <job><#e36d6d>. Проверьте цену выхода.'
   booster-invalid: '<prefix><#e36d6d>Этот талон повреждён или не принадлежит RusCrafting.'
-  booster-legacy: '<prefix><#e36d6d>Старый талон больше не поддерживается. Обратитесь к администратору.'
-  booster-wrong-owner: '<prefix><#e36d6d>Этот личный талон выпущен для другого игрока.'
   booster-expired: '<prefix><#e36d6d>Срок действия этого талона уже истёк.'
-  booster-busy: '<prefix><#e6fff3>Предыдущий талон ещё активируется. Подождите немного.'
+  booster-busy: '<prefix><#e6fff3>Активация этого талона уже началась. Повторите попытку позже.'
   booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> действует <duration>.'
   booster-already-used: '<prefix><#e6fff3>Этот талон уже был использован.'
-  booster-save-failed: '<prefix><#e36d6d>Не удалось сохранить усиление. Талон не потрачен.'
+  booster-save-failed: '<prefix><#e36d6d>Не удалось активировать усиление. Талон не потрачен.'
   booster-unknown: '<prefix><#e36d6d>Набор усилителей <id> не найден.'
   booster-disabled: '<prefix><#e36d6d>Набор усилителей <id> отключён.'
   booster-given: '<prefix><#79c99e>Выдано <amount> × <id> игроку <player>.'
@@ -264,7 +262,7 @@ menu:
     empty-name: '<#8c8c8c>Нет активных усилений'
     empty-lore:
       - '<#e6fff3>Используйте подписанный талон RusCrafting.'
-      - '<#8c8c8c>ПКМ талоном активирует его на вашем аккаунте.'
+      - '<#8c8c8c>Талон можно передать другому игроку.'
 
   help:
     title: '<#20252b>Справка по работам'
@@ -346,7 +344,7 @@ booster:
     name: '<#92bed8><b>Настой мастерства</b>'
   common:
     lore:
-      - '<#8c8c8c>Личный усилитель профессий'
+      - '<#8c8c8c>Передаваемый талон усиления'
       - ''
       - '<#e6fff3>Эффект: <#92bed8><type>'
       - '<#e6fff3>Множитель: <#92bed8><multiplier>'

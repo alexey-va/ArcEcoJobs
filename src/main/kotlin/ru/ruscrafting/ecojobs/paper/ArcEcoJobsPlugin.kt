@@ -3,7 +3,10 @@ package ru.ruscrafting.ecojobs.paper
 import net.luckperms.api.LuckPerms
 import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.boost.BoostService
+import ru.ruscrafting.ecojobs.boost.MySqlVoucherLedger
 import ru.ruscrafting.ecojobs.boost.SigningKeyStore
+import ru.ruscrafting.ecojobs.boost.UnavailableVoucherLedger
+import ru.ruscrafting.ecojobs.boost.VoucherLedger
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
@@ -20,6 +23,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var ecoJobs: EcoJobsBridge
     private lateinit var boosts: BoostService
     private lateinit var vouchers: VoucherService
+    private var voucherLedger: VoucherLedger = UnavailableVoucherLedger
     private var expansion: BoostPlaceholderExpansion? = null
     private var bootstrapTaskId: Int? = null
     private var initialized = false
@@ -34,7 +38,15 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             locale = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
             ecoJobs = EcoJobsBridge(this) { settings }
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
-            boosts = BoostService(this, luckPerms, settings = { settings })
+            voucherLedger = if (settings.redemptionStorage.enabled) {
+                MySqlVoucherLedger.open(settings.redemptionStorage).also {
+                    logger.info("Voucher redemption ledger is ready")
+                }
+            } else {
+                logger.warning("Voucher redemption is disabled because redemptions.mysql.enabled is false")
+                UnavailableVoucherLedger
+            }
+            boosts = BoostService(this, luckPerms, settings = { settings }, voucherLedger = voucherLedger)
             vouchers = VoucherService(
                 this,
                 locale,
@@ -65,6 +77,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         runCatching { expansion?.unregister() }
         expansion = null
         if (::ecoJobs.isInitialized) ecoJobs.shutdown()
+        runCatching { voucherLedger.close() }
+            .onFailure { logger.log(Level.SEVERE, "Could not close the voucher redemption ledger", it) }
+        voucherLedger = UnavailableVoucherLedger
         initialized = false
     }
 
@@ -117,6 +132,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             jobIds,
         )
         enforceMoneyIntegration(candidateSettings)
+        require(candidateSettings.redemptionStorage == settings.redemptionStorage) {
+            "redemptions.mysql settings require a server restart"
+        }
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
         boosterRegistry = candidateBoosters

@@ -81,12 +81,20 @@ class BoostServiceTest : StringSpec({
                 }
             }
         }
-        val service = BoostService(plugin, luckPerms, { settings }, nodeFactory)
+        val ledger = TestVoucherLedger()
+        var globallyUsed = false
+        val service = BoostService(
+            plugin,
+            luckPerms,
+            { settings },
+            nodeFactory,
+            ledger,
+            UsedVoucherLookup { CompletableFuture.completedFuture(globallyUsed) },
+        )
         val voucherId = UUID.randomUUID()
         val payload = VoucherPayload(
             presetId = "workday",
             voucherId = voucherId,
-            recipientId = player.uniqueId,
             type = BoostType.ALL,
             multiplierBasisPoints = 150,
             durationSeconds = 3_600,
@@ -96,11 +104,11 @@ class BoostServiceTest : StringSpec({
 
         val redemption = mutableListOf<GrantResult>()
         service.redeem(payload, player, redemption::add)
-        stored.size shouldBe 3
         plugin.isEnabled shouldBe true
         server.scheduler.performTicks(2)
 
         redemption shouldBe listOf(GrantResult.GRANTED)
+        stored.size shouldBe 3
         stored.keys shouldContain BoostNodeCodec.used(voucherId)
         stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.scope }.toSet() shouldBe setOf("miner", "fisherman")
 
@@ -142,11 +150,53 @@ class BoostServiceTest : StringSpec({
             stored.remove(BoostNodeCodec.encode(BoostType.XP, 150, "miner", id))
         }
 
-        val copiedRedemption = mutableListOf<GrantResult>()
         val otherPlayer = server.addPlayer("BoostCopyQA")
-        service.redeem(payload, otherPlayer, copiedRedemption::add)
+        every { users.loadUser(otherPlayer.uniqueId, null) } returns CompletableFuture.completedFuture(user)
+        every { users.loadUser(otherPlayer.uniqueId) } returns CompletableFuture.completedFuture(user)
+        val transferablePayload = payload.copy(voucherId = UUID.randomUUID())
+        val copiedRedemption = mutableListOf<GrantResult>()
+        service.redeem(transferablePayload, otherPlayer, copiedRedemption::add)
         server.scheduler.performTicks(2)
-        copiedRedemption shouldBe listOf(GrantResult.WRONG_OWNER)
+        copiedRedemption shouldBe listOf(GrantResult.GRANTED)
+        service.redeem(transferablePayload, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.ALREADY_USED
+
+        val legacyUsedPayload = payload.copy(
+            voucherId = UUID.randomUUID(),
+            signatureVersion = VoucherPayload.LEGACY_SIGNATURE_VERSION,
+        )
+        globallyUsed = true
+        ledger.failNextMark = true
+        service.redeem(legacyUsedPayload, otherPlayer, copiedRedemption::add)
+        server.scheduler.performTicks(2)
+        copiedRedemption.last() shouldBe GrantResult.FAILED
+        service.redeem(legacyUsedPayload, otherPlayer, copiedRedemption::add)
+        server.scheduler.performTicks(2)
+        copiedRedemption.last() shouldBe GrantResult.ALREADY_USED
+        globallyUsed = false
+
+        val uncertainLedgerPayload = payload.copy(voucherId = UUID.randomUUID())
+        ledger.failNextMark = true
+        service.redeem(uncertainLedgerPayload, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.FAILED
+        service.redeem(uncertainLedgerPayload, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.ALREADY_USED
+
+        val failedSavePayload = payload.copy(voucherId = UUID.randomUUID())
+        every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
+        service.redeem(failedSavePayload, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.FAILED
+        service.redeem(failedSavePayload, otherPlayer, copiedRedemption::add)
+        server.scheduler.performTicks(2)
+        copiedRedemption.last() shouldBe GrantResult.BUSY
+        every { users.saveUser(user) } returns CompletableFuture.completedFuture(null)
+        service.redeem(failedSavePayload, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.GRANTED
 
         val partialVoucher = payload.copy(voucherId = UUID.randomUUID())
         val preexistingKey = BoostNodeCodec.encode(
@@ -157,13 +207,13 @@ class BoostServiceTest : StringSpec({
         )
         stored[preexistingKey] = nodeFactory.create(preexistingKey, Instant.now().plusSeconds(3_600))
         val beforeFailedSave = stored.keys.toSet()
-        every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
 
         service.redeem(partialVoucher, player, redemption::add)
         server.scheduler.performTicks(2)
         redemption.last() shouldBe GrantResult.FAILED
         stored.keys.toSet() shouldBe beforeFailedSave
 
+        every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
         var failedRevokeCount: Int? = 999
         var failedRevokeCause: Throwable? = null
         service.revoke(player.uniqueId, "all") { count, failure ->
@@ -174,6 +224,6 @@ class BoostServiceTest : StringSpec({
         failedRevokeCount shouldBe null
         (failedRevokeCause is IllegalStateException) shouldBe true
         stored.keys.toSet() shouldBe beforeFailedSave
-        verify(exactly = 4) { users.saveUser(user) }
+        verify(exactly = 7) { users.saveUser(user) }
     }
 })

@@ -24,6 +24,7 @@ data class AddonSettings(
     val maximumBoostDuration: Duration,
     val requireMoneyPlaceholder: Boolean,
     val guiItems: GuiItems,
+    val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -61,6 +62,73 @@ data class AddonSettings(
                     ?: error("boosts.maximum-duration is invalid"),
                 requireMoneyPlaceholder = yaml.getBoolean("boosts.require-money-placeholder", true),
                 guiItems = GuiItems.load(yaml),
+                redemptionStorage = RedemptionStorageSettings.load(yaml),
+            )
+        }
+    }
+}
+
+data class RedemptionStorageSettings(
+    val enabled: Boolean,
+    val host: String,
+    val port: Int,
+    val database: String,
+    val username: String,
+    val password: String,
+    val sslMode: String,
+    val minimumIdle: Int,
+    val maximumPoolSize: Int,
+    val connectionTimeoutMs: Long,
+    val validationTimeoutMs: Long,
+    val maxLifetimeMs: Long,
+) {
+    init {
+        require(host.matches(Regex("[A-Za-z0-9._:\\[\\]-]{1,253}"))) { "redemptions.mysql.host is invalid" }
+        require(port in 1..65_535) { "redemptions.mysql.port must be between 1 and 65535" }
+        require(database.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "redemptions.mysql.database is invalid" }
+        require(username.isNotBlank()) { "redemptions.mysql.username must not be blank" }
+        require(sslMode in setOf("DISABLED", "REQUIRED", "VERIFY_CA", "VERIFY_IDENTITY")) {
+            "redemptions.mysql.ssl-mode is invalid"
+        }
+        require(minimumIdle in 0..maximumPoolSize) { "redemptions.mysql.pool.minimum-idle is invalid" }
+        require(maximumPoolSize in 1..8) { "redemptions.mysql.pool.maximum-size must be between 1 and 8" }
+        require(connectionTimeoutMs in 250..60_000) { "redemptions.mysql.pool.connection-timeout-ms is invalid" }
+        require(validationTimeoutMs in 250..connectionTimeoutMs) { "redemptions.mysql.pool.validation-timeout-ms is invalid" }
+        require(maxLifetimeMs == 0L || maxLifetimeMs >= 30_000) { "redemptions.mysql.pool.max-lifetime-ms is invalid" }
+        if (enabled) require(password.isNotBlank()) { "redemptions.mysql.password must not be blank when enabled" }
+    }
+
+    companion object {
+        fun disabled(): RedemptionStorageSettings = RedemptionStorageSettings(
+            enabled = false,
+            host = "127.0.0.1",
+            port = 3306,
+            database = "minecraft",
+            username = "minecraft",
+            password = "",
+            sslMode = "REQUIRED",
+            minimumIdle = 1,
+            maximumPoolSize = 4,
+            connectionTimeoutMs = 10_000,
+            validationTimeoutMs = 5_000,
+            maxLifetimeMs = 1_700_000,
+        )
+
+        fun load(yaml: YamlConfiguration): RedemptionStorageSettings {
+            val path = "redemptions.mysql"
+            return RedemptionStorageSettings(
+                enabled = yaml.getBoolean("$path.enabled", false),
+                host = yaml.getString("$path.host", "127.0.0.1")!!,
+                port = yaml.getInt("$path.port", 3306),
+                database = yaml.getString("$path.database", "minecraft")!!,
+                username = yaml.getString("$path.username", "minecraft")!!,
+                password = yaml.getString("$path.password", "")!!,
+                sslMode = yaml.getString("$path.ssl-mode", "REQUIRED")!!.uppercase(),
+                minimumIdle = yaml.getInt("$path.pool.minimum-idle", 1),
+                maximumPoolSize = yaml.getInt("$path.pool.maximum-size", 4),
+                connectionTimeoutMs = yaml.getLong("$path.pool.connection-timeout-ms", 10_000),
+                validationTimeoutMs = yaml.getLong("$path.pool.validation-timeout-ms", 5_000),
+                maxLifetimeMs = yaml.getLong("$path.pool.max-lifetime-ms", 1_700_000),
             )
         }
     }

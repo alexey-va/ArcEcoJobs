@@ -13,6 +13,11 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
   through the private secret workflow. The file is newline-terminated Base64
   text encoding at least 32 random bytes, never raw binary. Never log the key
   or signed payload.
+- Vouchers are bearer items: transfer is allowed before redemption and must
+  never be restricted by an issued-to UUID. Permanent replay identity belongs
+  to the MySQL `arcecojobs_voucher_redemptions` primary key; never purge
+  applied rows. This ledger records claims only and is not a second boost
+  store—LuckPerms remains the sole owner of active boost nodes.
 - All player text belongs in `lang/ru.yml` and `lang/en.yml`; keys stay equal
   and dynamic values use non-parsing Adventure placeholders.
 - Inventory titles do not include the chat prefix. Item names and lore are

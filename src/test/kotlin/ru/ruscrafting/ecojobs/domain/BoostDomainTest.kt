@@ -50,7 +50,6 @@ class BoostDomainTest : StringSpec({
         val payload = VoucherPayload(
             presetId = "workday",
             voucherId = UUID.randomUUID(),
-            recipientId = UUID.randomUUID(),
             type = BoostType.ALL,
             multiplierBasisPoints = 150,
             durationSeconds = 3600,
@@ -60,8 +59,33 @@ class BoostDomainTest : StringSpec({
         val signature = signer.sign(payload)
         signer.verify(payload, signature) shouldBe true
         signer.verify(payload.copy(durationSeconds = 7200), signature) shouldBe false
-        signer.verify(payload.copy(recipientId = UUID.randomUUID()), signature) shouldBe false
         payload.jobs.sorted().shouldContainExactly("fisherman", "miner")
         signature shouldNotBe signer.sign(payload.copy(type = BoostType.XP))
+
+        val ownerBound = payload.copy(
+            signatureVersion = VoucherPayload.OWNER_BOUND_SIGNATURE_VERSION,
+            legacyRecipientId = UUID.randomUUID(),
+        )
+        val ownerBoundSignature = signer.sign(ownerBound)
+        signer.verify(ownerBound, ownerBoundSignature) shouldBe true
+        signer.verify(ownerBound.copy(legacyRecipientId = UUID.randomUUID()), ownerBoundSignature) shouldBe false
+    }
+
+    "v1 and v3 canonical payloads preserve the original bearer field order" {
+        val id = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001")
+        val base = VoucherPayload(
+            presetId = "workday",
+            voucherId = id,
+            type = BoostType.XP,
+            multiplierBasisPoints = 150,
+            durationSeconds = 3600,
+            jobs = setOf("miner", "fisherman"),
+            issuedAtEpochSecond = 1_787_260_000,
+        )
+
+        base.copy(signatureVersion = VoucherPayload.LEGACY_SIGNATURE_VERSION).canonical() shouldBe
+            "1|workday|$id|xp|150|3600|fisherman,miner|1787260000"
+        base.canonical() shouldBe
+            "3|workday|$id|xp|150|3600|fisherman,miner|1787260000"
     }
 })

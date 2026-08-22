@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.5"
+version = "0.1.6"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 repositories {
@@ -20,6 +20,8 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
+    implementation("com.zaxxer:HikariCP:7.0.2")
+    implementation("com.mysql:mysql-connector-j:9.7.0")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.willfp:EcoJobs:2026.33")
     compileOnly("com.willfp:eco:2026.33")
@@ -39,6 +41,7 @@ dependencies {
     testImplementation("net.luckperms:api:5.5")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
     testImplementation("org.yaml:snakeyaml:2.5")
+    testImplementation("org.testcontainers:testcontainers:2.0.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

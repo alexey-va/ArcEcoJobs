@@ -70,6 +70,34 @@ class AddonConfigTest : StringSpec({
         }
     }
 
+    "enabled voucher redemption requires bounded MySQL settings and a password" {
+        val missingPassword = yaml("""
+            redemptions:
+              mysql:
+                enabled: true
+        """.trimIndent())
+        shouldThrow<IllegalArgumentException> { AddonSettings.load(missingPassword) }
+
+        val oversizedPool = yaml("""
+            redemptions:
+              mysql:
+                enabled: true
+                password: test-password
+                pool:
+                  maximum-size: 9
+        """.trimIndent())
+        shouldThrow<IllegalArgumentException> { AddonSettings.load(oversizedPool) }
+
+        val enabled = AddonSettings.load(yaml("""
+            redemptions:
+              mysql:
+                enabled: true
+                password: test-password
+        """.trimIndent())).redemptionStorage
+        enabled.enabled shouldBe true
+        enabled.maximumPoolSize shouldBe 4
+    }
+
     "malformed YAML fails closed instead of loading defaults" {
         val malformed = yaml("boosts: [")
 
@@ -153,6 +181,18 @@ class AddonConfigTest : StringSpec({
         )
         gui.refresh.material shouldBe Material.REPEATER
         gui.catalog.material shouldBe Material.CRAFTING_TABLE
+    }
+
+    "production nodes share one reviewed voucher ledger profile" {
+        val roots = listOf("classic", "classic_survival")
+        val stores = roots.map { root ->
+            AddonSettings.load(project.parent.resolve("$root/plugins/ArcEcoJobs/config.yml").toFile())
+                .redemptionStorage
+        }
+        stores[0] shouldBe stores[1]
+        stores[0].database shouldBe "common"
+        stores[0].username shouldBe "arcecojobs"
+        stores[0].maximumPoolSize shouldBe 4
     }
 
     "case variants cannot overwrite another preset" {

@@ -29,13 +29,11 @@ message:
   left: '<prefix><#e6fff3>You left <job><#e6fff3>.'
   leave-failed: '<prefix><#e36d6d>Could not leave <job><#e36d6d>. Check the leave price.'
   booster-invalid: '<prefix><#e36d6d>This voucher is damaged or was not issued by RusCrafting.'
-  booster-legacy: '<prefix><#e36d6d>This legacy voucher is no longer supported. Contact an administrator.'
-  booster-wrong-owner: '<prefix><#e36d6d>This personal voucher was issued to another player.'
   booster-expired: '<prefix><#e36d6d>This voucher has expired.'
-  booster-busy: '<prefix><#e6fff3>Your previous voucher is still being activated. Please wait.'
+  booster-busy: '<prefix><#e6fff3>Activation of this voucher has already started. Try again later.'
   booster-redeemed: '<prefix><#79c99e><multiplier> boost for <jobs> is active for <duration>.'
   booster-already-used: '<prefix><#e6fff3>This voucher has already been used.'
-  booster-save-failed: '<prefix><#e36d6d>Could not save the boost. The voucher was not consumed.'
+  booster-save-failed: '<prefix><#e36d6d>Could not activate the boost. The voucher was not consumed.'
   booster-unknown: '<prefix><#e36d6d>Booster preset <id> was not found.'
   booster-disabled: '<prefix><#e36d6d>Booster preset <id> is disabled.'
   booster-given: '<prefix><#79c99e>Gave <amount> × <id> to <player>.'
@@ -264,7 +262,7 @@ menu:
     empty-name: '<#8c8c8c>No active boosts'
     empty-lore:
       - '<#e6fff3>Use a signed RusCrafting voucher.'
-      - '<#8c8c8c>Right-click a voucher to bind it to your account.'
+      - '<#8c8c8c>You can transfer a voucher to another player.'
 
   help:
     title: '<#20252b>Jobs help'
@@ -346,7 +344,7 @@ booster:
     name: '<#92bed8><b>Mastery draught</b>'
   common:
     lore:
-      - '<#8c8c8c>Personal job booster'
+      - '<#8c8c8c>Transferable job booster voucher'
       - ''
       - '<#e6fff3>Effect: <#92bed8><type>'
       - '<#e6fff3>Multiplier: <#92bed8><multiplier>'

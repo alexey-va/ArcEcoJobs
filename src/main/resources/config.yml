@@ -17,6 +17,24 @@ boosts:
   maximum-duration: 30d
   require-money-placeholder: true
 
+# Required for redeeming signed vouchers safely across multiple servers.
+# The table stores redemption identities only; LuckPerms still owns active boosts.
+redemptions:
+  mysql:
+    enabled: false
+    host: 127.0.0.1
+    port: 3306
+    database: minecraft
+    username: minecraft
+    password: ''
+    ssl-mode: REQUIRED
+    pool:
+      minimum-idle: 1
+      maximum-size: 4
+      connection-timeout-ms: 10000
+      validation-timeout-ms: 5000
+      max-lifetime-ms: 1700000
+
 gui:
   items:
     background:

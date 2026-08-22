@@ -1,5 +1,7 @@
 package ru.ruscrafting.ecojobs.domain
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -32,28 +34,46 @@ data class BoostInstance(
 data class VoucherPayload(
     val presetId: String,
     val voucherId: UUID,
-    val recipientId: UUID,
     val type: BoostType,
     val multiplierBasisPoints: Int,
     val durationSeconds: Long,
     val jobs: Set<String>,
     val issuedAtEpochSecond: Long,
+    val signatureVersion: String = CURRENT_SIGNATURE_VERSION,
+    val legacyRecipientId: UUID? = null,
 ) {
-    fun canonical(): String = listOf(
-        SIGNATURE_VERSION,
-        presetId,
-        voucherId.toString(),
-        recipientId.toString(),
-        type.token,
-        multiplierBasisPoints.toString(),
-        durationSeconds.toString(),
-        jobs.map(String::lowercase).sorted().joinToString(","),
-        issuedAtEpochSecond.toString(),
-    ).joinToString("|")
+    fun canonical(): String {
+        val common = listOf(
+            signatureVersion,
+            presetId,
+            voucherId.toString(),
+        )
+        val owner = when (signatureVersion) {
+            OWNER_BOUND_SIGNATURE_VERSION -> listOf(requireNotNull(legacyRecipientId) { "v2 voucher has no recipient" }.toString())
+            LEGACY_SIGNATURE_VERSION, CURRENT_SIGNATURE_VERSION -> emptyList()
+            else -> error("unsupported voucher signature version")
+        }
+        return (common + owner + listOf(
+            type.token,
+            multiplierBasisPoints.toString(),
+            durationSeconds.toString(),
+            jobs.map(String::lowercase).sorted().joinToString(","),
+            issuedAtEpochSecond.toString(),
+        )).joinToString("|")
+    }
+
+    fun fingerprint(): ByteArray = MessageDigest.getInstance("SHA-256")
+        .digest(canonical().toByteArray(StandardCharsets.UTF_8))
 
     companion object {
-        const val SIGNATURE_VERSION = "2"
         const val LEGACY_SIGNATURE_VERSION = "1"
+        const val OWNER_BOUND_SIGNATURE_VERSION = "2"
+        const val CURRENT_SIGNATURE_VERSION = "3"
+        val SUPPORTED_SIGNATURE_VERSIONS = setOf(
+            LEGACY_SIGNATURE_VERSION,
+            OWNER_BOUND_SIGNATURE_VERSION,
+            CURRENT_SIGNATURE_VERSION,
+        )
     }
 }
 

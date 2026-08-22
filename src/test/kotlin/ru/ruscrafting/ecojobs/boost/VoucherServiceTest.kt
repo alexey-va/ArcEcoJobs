@@ -13,6 +13,8 @@ import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.GuiItems
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostType
+import ru.ruscrafting.ecojobs.domain.VoucherPayload
+import ru.ruscrafting.ecojobs.domain.VoucherSigner
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Duration
@@ -24,6 +26,7 @@ class VoucherServiceTest : StringSpec({
     lateinit var service: VoucherService
     lateinit var preset: BoosterPreset
     lateinit var plugin: org.mockbukkit.mockbukkit.plugin.PluginMock
+    val signingKey = ByteArray(32) { it.toByte() }
 
     beforeSpec {
         val server = MockBukkit.mock()
@@ -56,7 +59,7 @@ class VoucherServiceTest : StringSpec({
             settings = { settings },
             validJobIds = { setOf("miner") },
             jobNames = { net.kyori.adventure.text.Component.text("Шахтёр") },
-            signingKey = ByteArray(32) { it.toByte() },
+            signingKey = signingKey,
         )
         preset = BoosterPreset(
             id = "workday",
@@ -98,7 +101,12 @@ class VoucherServiceTest : StringSpec({
             PersistentDataType.STRING,
         ) shouldBe "arcjobs-test"
         valid.payload.type shouldBe BoostType.ALL
-        valid.payload.recipientId shouldBe player.uniqueId
+        valid.payload.signatureVersion shouldBe VoucherPayload.CURRENT_SIGNATURE_VERSION
+        valid.payload.legacyRecipientId shouldBe null
+        item.itemMeta.persistentDataContainer.has(
+            NamespacedKey(plugin, "voucher_recipient"),
+            PersistentDataType.STRING,
+        ) shouldBe false
         valid.payload.multiplierBasisPoints shouldBe 150
         valid.payload.durationSeconds shouldBe 3_600
         valid.payload.jobs shouldBe setOf("miner")
@@ -118,9 +126,23 @@ class VoucherServiceTest : StringSpec({
         service.inspect(item).shouldBeInstanceOf<VoucherInspection.Invalid>()
     }
 
-    "changing the signed recipient makes a voucher invalid" {
+    "owner-bound v2 vouchers remain valid but changing their signed legacy recipient is rejected" {
         val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
+        val current = service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>().payload
+        val legacyRecipient = java.util.UUID.randomUUID()
+        val v2 = current.copy(
+            signatureVersion = VoucherPayload.OWNER_BOUND_SIGNATURE_VERSION,
+            legacyRecipientId = legacyRecipient,
+        )
+        item.editMeta { meta ->
+            val pdc = meta.persistentDataContainer
+            pdc.set(NamespacedKey(plugin, "voucher_version"), PersistentDataType.STRING, v2.signatureVersion)
+            pdc.set(NamespacedKey(plugin, "voucher_recipient"), PersistentDataType.STRING, legacyRecipient.toString())
+            pdc.set(NamespacedKey(plugin, "voucher_signature"), PersistentDataType.BYTE_ARRAY, VoucherSigner(signingKey).sign(v2))
+        }
+
+        service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>()
         item.editMeta { meta ->
             meta.persistentDataContainer.set(
                 NamespacedKey(plugin, "voucher_recipient"),
@@ -128,22 +150,22 @@ class VoucherServiceTest : StringSpec({
                 java.util.UUID.randomUUID().toString(),
             )
         }
-
         service.inspect(item).shouldBeInstanceOf<VoucherInspection.Invalid>()
     }
 
-    "legacy unbound voucher format fails closed" {
+    "signed v1 bearer vouchers remain redeemable through the global ledger" {
         val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
+        val current = service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>().payload
+        val v1 = current.copy(signatureVersion = VoucherPayload.LEGACY_SIGNATURE_VERSION)
         item.editMeta { meta ->
-            meta.persistentDataContainer.set(
-                NamespacedKey(plugin, "voucher_version"),
-                PersistentDataType.STRING,
-                "1",
-            )
+            val pdc = meta.persistentDataContainer
+            pdc.set(NamespacedKey(plugin, "voucher_version"), PersistentDataType.STRING, v1.signatureVersion)
+            pdc.set(NamespacedKey(plugin, "voucher_signature"), PersistentDataType.BYTE_ARRAY, VoucherSigner(signingKey).sign(v1))
         }
 
-        service.inspect(item) shouldBe VoucherInspection.Legacy
+        service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>().payload.signatureVersion shouldBe
+            VoucherPayload.LEGACY_SIGNATURE_VERSION
     }
 
     "each issued voucher has a unique replay identity" {

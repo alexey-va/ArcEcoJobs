@@ -65,6 +65,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         runCatching { expansion?.unregister() }
         expansion = null
         if (::ecoJobs.isInitialized) ecoJobs.shutdown()
+        initialized = false
     }
 
     private fun scheduleBootstrap() {

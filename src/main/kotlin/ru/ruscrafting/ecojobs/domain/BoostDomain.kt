@@ -32,6 +32,7 @@ data class BoostInstance(
 data class VoucherPayload(
     val presetId: String,
     val voucherId: UUID,
+    val recipientId: UUID,
     val type: BoostType,
     val multiplierBasisPoints: Int,
     val durationSeconds: Long,
@@ -42,6 +43,7 @@ data class VoucherPayload(
         SIGNATURE_VERSION,
         presetId,
         voucherId.toString(),
+        recipientId.toString(),
         type.token,
         multiplierBasisPoints.toString(),
         durationSeconds.toString(),
@@ -50,7 +52,8 @@ data class VoucherPayload(
     ).joinToString("|")
 
     companion object {
-        const val SIGNATURE_VERSION = "1"
+        const val SIGNATURE_VERSION = "2"
+        const val LEGACY_SIGNATURE_VERSION = "1"
     }
 }
 

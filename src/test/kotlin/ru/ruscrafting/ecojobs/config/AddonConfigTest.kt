@@ -58,6 +58,27 @@ class AddonConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> { AddonSettings.load(config) }
     }
 
+    "settings reject unsafe cache and page bounds instead of silently clamping" {
+        val invalidConfigs = listOf(
+            "leaderboards:\n  cache-seconds: 29",
+            "leaderboards:\n  entries-per-page: 29",
+            "boosts:\n  cache-millis: 99",
+        )
+
+        invalidConfigs.forEach { contents ->
+            shouldThrow<IllegalArgumentException> { AddonSettings.load(yaml(contents)) }
+        }
+    }
+
+    "malformed YAML fails closed instead of loading defaults" {
+        val malformed = yaml("boosts: [")
+
+        shouldThrow<org.bukkit.configuration.InvalidConfigurationException> { AddonSettings.load(malformed) }
+        shouldThrow<org.bukkit.configuration.InvalidConfigurationException> {
+            BoosterRegistry.load(malformed, settings, setOf("miner"))
+        }
+    }
+
     "item model is validated while presets load" {
         val config = booster().replace("name-key:", "item-model: 'not a valid key'\n      name-key:")
         shouldThrow<IllegalArgumentException> {

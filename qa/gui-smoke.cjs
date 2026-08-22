@@ -15,14 +15,16 @@ function readConfig (environment = process.env) {
   const locale = environment.ARC_ECOJOBS_QA_LOCALE || 'ru_RU'
   const expectAdmin = (environment.ARC_ECOJOBS_QA_ROLE || 'admin').toLowerCase() === 'admin'
   const verbose = environment.ARC_ECOJOBS_QA_VERBOSE === 'true'
+  const allowMutations = environment.ARC_ECOJOBS_QA_ALLOW_MUTATIONS === 'true'
   return {
     host: environment.ARC_ECOJOBS_QA_HOST || 'mc.rus-crafting.ru',
     port,
     username: environment.ARC_ECOJOBS_QA_USERNAME || (expectAdmin ? 'CodexQA_730' : 'CodexQA_731'),
-    version: environment.ARC_ECOJOBS_QA_VERSION || '1.21.4',
+    version: environment.ARC_ECOJOBS_QA_VERSION || '1.21.11',
     locale,
     expectAdmin,
-    verbose
+    verbose,
+    allowMutations
   }
 }
 
@@ -273,22 +275,24 @@ async function runScenario (bot, config) {
         !hasNamedItem(state, /^(?:Close|Закрыть)$/i) &&
         commandLore.length >= 13)
 
-    window = await clickNext(bot, 20)
-    state = snapshot(window)
-    record(results, 'admin reload', 'configuration reload returns to the admin menu', state,
-      /management|Управление/i.test(state.title) && hasSlot(state, 20))
+    if (config.allowMutations) {
+      window = await clickNext(bot, 20)
+      state = snapshot(window)
+      record(results, 'admin reload', 'configuration reload returns to the admin menu', state,
+        /management|Управление/i.test(state.title) && hasSlot(state, 20))
 
-    const coldLeaderboardStartedAt = Date.now()
-    window = await openJobs(bot)
-    window = await clickNext(bot, 24)
-    window = await clickNext(bot, 4)
-    if (!hasSlot(snapshot(window), 49)) {
-      window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 49))
+      const coldLeaderboardStartedAt = Date.now()
+      window = await openJobs(bot)
+      window = await clickNext(bot, 24)
+      window = await clickNext(bot, 4)
+      if (!hasSlot(snapshot(window), 49)) {
+        window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 49))
+      }
+      state = snapshot(window)
+      state.rebuildMs = Date.now() - coldLeaderboardStartedAt
+      record(results, 'cold leaderboard refresh', 'invalidated ranking refreshes in the background within 10 s', state,
+        hasSlot(state, 49) && state.rebuildMs < 10000)
     }
-    state = snapshot(window)
-    state.rebuildMs = Date.now() - coldLeaderboardStartedAt
-    record(results, 'cold leaderboard refresh', 'invalidated ranking refreshes in the background within 10 s', state,
-      hasSlot(state, 49) && state.rebuildMs < 10000)
 
     window = await openJobs(bot)
     window = await clickNext(bot, 49)

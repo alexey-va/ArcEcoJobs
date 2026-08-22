@@ -48,17 +48,19 @@ class BoostDomainTest : StringSpec({
     "voucher signature detects every material payload mutation" {
         val signer = VoucherSigner(ByteArray(32) { it.toByte() })
         val payload = VoucherPayload(
-            "workday",
-            UUID.randomUUID(),
-            BoostType.ALL,
-            150,
-            3600,
-            setOf("miner", "fisherman"),
-            1_787_260_000,
+            presetId = "workday",
+            voucherId = UUID.randomUUID(),
+            recipientId = UUID.randomUUID(),
+            type = BoostType.ALL,
+            multiplierBasisPoints = 150,
+            durationSeconds = 3600,
+            jobs = setOf("miner", "fisherman"),
+            issuedAtEpochSecond = 1_787_260_000,
         )
         val signature = signer.sign(payload)
         signer.verify(payload, signature) shouldBe true
         signer.verify(payload.copy(durationSeconds = 7200), signature) shouldBe false
+        signer.verify(payload.copy(recipientId = UUID.randomUUID()), signature) shouldBe false
         payload.jobs.sorted().shouldContainExactly("fisherman", "miner")
         signature shouldNotBe signer.sign(payload.copy(type = BoostType.XP))
     }

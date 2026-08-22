@@ -101,7 +101,7 @@ class EcoJobsBridge(
     fun prepareLeaderboards(callback: (Result<Unit>) -> Unit = {}) {
         check(Bukkit.isPrimaryThread()) { "Leaderboard preparation must be requested from the server thread" }
         if (validRankings() != null) {
-            callback(Result.success(Unit))
+            notifyCallback(callback, Result.success(Unit))
             return
         }
         leaderboardCallbacks += callback
@@ -131,7 +131,7 @@ class EcoJobsBridge(
                 }
                 val callbacks = leaderboardCallbacks.toList()
                 leaderboardCallbacks.clear()
-                callbacks.forEach { it(completion) }
+                callbacks.forEach { notifyCallback(it, completion) }
             }) }.onFailure { failure ->
                 if (plugin.isEnabled) plugin.logger.log(Level.WARNING, "Could not finish the ArcEcoJobs leaderboard refresh", failure)
             }
@@ -187,6 +187,12 @@ class EcoJobsBridge(
     private fun rankingKey(job: Job?): String = job?.id ?: GLOBAL
     private fun participates(player: OfflinePlayer, job: Job): Boolean =
         active(player, job) || level(player, job) > 1 || xp(player, job) > 0.0
+
+    private fun notifyCallback(callback: (Result<Unit>) -> Unit, result: Result<Unit>) {
+        runCatching { callback(result) }.onFailure { failure ->
+            plugin.logger.log(Level.WARNING, "An ArcEcoJobs leaderboard callback failed", failure)
+        }
+    }
 
     companion object {
         private const val GLOBAL = "__global__"

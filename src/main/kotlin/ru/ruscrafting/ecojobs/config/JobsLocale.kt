@@ -17,12 +17,12 @@ class JobsLocale(
     private val settings: () -> AddonSettings,
 ) {
     private val mini = MiniMessage.miniMessage()
-    private var russian = YamlConfiguration.loadConfiguration(dataFolder.resolve("lang/ru.yml"))
-    private var english = YamlConfiguration.loadConfiguration(dataFolder.resolve("lang/en.yml"))
+    private var russian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
+    private var english = loadYamlStrict(dataFolder.resolve("lang/en.yml"))
 
     fun reload(dataFolder: File, presets: Collection<BoosterPreset> = emptyList()) {
-        val candidateRussian = YamlConfiguration.loadConfiguration(dataFolder.resolve("lang/ru.yml"))
-        val candidateEnglish = YamlConfiguration.loadConfiguration(dataFolder.resolve("lang/en.yml"))
+        val candidateRussian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
+        val candidateEnglish = loadYamlStrict(dataFolder.resolve("lang/en.yml"))
         validate(candidateRussian, candidateEnglish)
         validateBoosterKeys(candidateRussian, candidateEnglish, presets)
         russian = candidateRussian
@@ -102,7 +102,7 @@ class JobsLocale(
 
     private fun listValue(config: YamlConfiguration, path: String): List<String>? = when (val value = config.get(path)) {
         is String -> listOf(value)
-        is List<*> -> value.map { it?.toString().orEmpty() }
+        is List<*> -> value.map { requireNotNull(it as? String) { "Locale list contains a non-string value: $path" } }
         else -> null
     }
 
@@ -115,14 +115,37 @@ class JobsLocale(
         ruLeaves.forEach { path ->
             val ruValue = ru.get(path)
             val enValue = en.get(path)
-            if (ruValue is String) require(ruValue.isNotBlank()) { "Blank Russian locale entry: $path" }
-            if (enValue is String) require(enValue.isNotBlank()) { "Blank English locale entry: $path" }
-            if (ruValue is String) mini.deserialize(ruValue)
-            if (enValue is String) mini.deserialize(enValue)
-            if (ruValue is List<*>) ruValue.filterIsInstance<String>().filter(String::isNotBlank).forEach(mini::deserialize)
-            if (enValue is List<*>) enValue.filterIsInstance<String>().filter(String::isNotBlank).forEach(mini::deserialize)
+            when {
+                ruValue is String && enValue is String -> {
+                    require(ruValue.isNotBlank()) { "Blank Russian locale entry: $path" }
+                    require(enValue.isNotBlank()) { "Blank English locale entry: $path" }
+                    validateRow(path, ruValue, enValue)
+                }
+                ruValue is List<*> && enValue is List<*> -> {
+                    require(ruValue.size == enValue.size) { "Locale list size mismatch at $path" }
+                    require(ruValue.all { it is String }) { "Russian locale list contains a non-string value: $path" }
+                    require(enValue.all { it is String }) { "English locale list contains a non-string value: $path" }
+                    ruValue.zip(enValue).forEachIndexed { index, (ruRow, enRow) ->
+                        validateRow("$path[$index]", ruRow as String, enRow as String)
+                    }
+                }
+                else -> error("Locale value type mismatch at $path")
+            }
         }
     }
+
+    private fun validateRow(path: String, ru: String, en: String) {
+        if (ru.isNotBlank()) mini.deserialize(ru)
+        if (en.isNotBlank()) mini.deserialize(en)
+        val ruTags = tags(ru)
+        val enTags = tags(en)
+        require(ruTags == enTags) { "Locale placeholder mismatch at $path: ru=$ruTags, en=$enTags" }
+    }
+
+    private fun tags(value: String): Map<String, Int> = TAG.findAll(value)
+        .map { it.groupValues[1].lowercase() }
+        .groupingBy { it }
+        .eachCount()
 
     private fun validateBoosterKeys(
         ru: YamlConfiguration,
@@ -145,4 +168,8 @@ class JobsLocale(
     private fun leaves(section: ConfigurationSection): Set<String> = section.getKeys(true)
         .filter { section.get(it) !is ConfigurationSection }
         .toSet()
+
+    companion object {
+        private val TAG = Regex("<([a-zA-Z][a-zA-Z0-9_-]*)")
+    }
 }

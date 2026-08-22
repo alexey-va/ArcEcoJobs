@@ -99,6 +99,7 @@ class JobsCommand(
                     "duration" to text(locale.duration(Duration.ofSeconds(inspection.payload.durationSeconds), sender)),
                     "jobs" to jobsLabel(inspection.payload.jobs, sender),
                 ))
+                VoucherInspection.Legacy -> message(sender, "message.booster-legacy")
                 else -> message(sender, "message.booster-invalid")
             }
         }

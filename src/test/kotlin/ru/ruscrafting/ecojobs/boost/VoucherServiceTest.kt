@@ -98,6 +98,7 @@ class VoucherServiceTest : StringSpec({
             PersistentDataType.STRING,
         ) shouldBe "arcjobs-test"
         valid.payload.type shouldBe BoostType.ALL
+        valid.payload.recipientId shouldBe player.uniqueId
         valid.payload.multiplierBasisPoints shouldBe 150
         valid.payload.durationSeconds shouldBe 3_600
         valid.payload.jobs shouldBe setOf("miner")
@@ -115,6 +116,34 @@ class VoucherServiceTest : StringSpec({
         }
 
         service.inspect(item).shouldBeInstanceOf<VoucherInspection.Invalid>()
+    }
+
+    "changing the signed recipient makes a voucher invalid" {
+        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val item = service.create(preset, player)
+        item.editMeta { meta ->
+            meta.persistentDataContainer.set(
+                NamespacedKey(plugin, "voucher_recipient"),
+                PersistentDataType.STRING,
+                java.util.UUID.randomUUID().toString(),
+            )
+        }
+
+        service.inspect(item).shouldBeInstanceOf<VoucherInspection.Invalid>()
+    }
+
+    "legacy unbound voucher format fails closed" {
+        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val item = service.create(preset, player)
+        item.editMeta { meta ->
+            meta.persistentDataContainer.set(
+                NamespacedKey(plugin, "voucher_version"),
+                PersistentDataType.STRING,
+                "1",
+            )
+        }
+
+        service.inspect(item) shouldBe VoucherInspection.Legacy
     }
 
     "each issued voucher has a unique replay identity" {

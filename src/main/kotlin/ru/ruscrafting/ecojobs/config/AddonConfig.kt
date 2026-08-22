@@ -10,6 +10,8 @@ import ru.ruscrafting.ecojobs.domain.Multipliers
 import java.io.File
 import java.time.Duration
 
+internal fun loadYamlStrict(file: File): YamlConfiguration = YamlConfiguration().apply { load(file) }
+
 data class AddonSettings(
     val defaultLocale: String,
     val useClientLocale: Boolean,
@@ -25,7 +27,7 @@ data class AddonSettings(
 ) {
     companion object {
         fun load(file: File): AddonSettings {
-            val yaml = YamlConfiguration.loadConfiguration(file)
+            val yaml = loadYamlStrict(file)
             val defaultLocale = yaml.getString("locale.default", "ru")!!.lowercase()
             require(defaultLocale in setOf("ru", "en")) { "locale.default must be ru or en" }
             val min = Multipliers.toBasisPoints(yaml.getDouble("boosts.minimum-multiplier", 1.01))
@@ -34,13 +36,25 @@ data class AddonSettings(
             require(yaml.getString("boosts.stacking", "MAX").equals("MAX", true)) {
                 "Only MAX boost stacking is supported"
             }
+            val leaderboardCacheSeconds = yaml.getLong("leaderboards.cache-seconds", 300)
+            require(leaderboardCacheSeconds in 30..3_600) {
+                "leaderboards.cache-seconds must be between 30 and 3600"
+            }
+            val leaderboardEntriesPerPage = yaml.getInt("leaderboards.entries-per-page", 10)
+            require(leaderboardEntriesPerPage in 5..28) {
+                "leaderboards.entries-per-page must be between 5 and 28"
+            }
+            val boostCacheMillis = yaml.getLong("boosts.cache-millis", 1000)
+            require(boostCacheMillis in 100..10_000) {
+                "boosts.cache-millis must be between 100 and 10000"
+            }
             return AddonSettings(
                 defaultLocale = defaultLocale,
                 useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
                 interceptEcoJobsRoot = yaml.getBoolean("commands.intercept-ecojobs-root", true),
-                leaderboardCache = Duration.ofSeconds(yaml.getLong("leaderboards.cache-seconds", 300).coerceIn(30, 3600)),
-                leaderboardEntriesPerPage = yaml.getInt("leaderboards.entries-per-page", 10).coerceIn(5, 28),
-                boostCacheMillis = yaml.getLong("boosts.cache-millis", 1000).coerceIn(100, 10_000),
+                leaderboardCache = Duration.ofSeconds(leaderboardCacheSeconds),
+                leaderboardEntriesPerPage = leaderboardEntriesPerPage,
+                boostCacheMillis = boostCacheMillis,
                 minimumMultiplierBasisPoints = min,
                 maximumMultiplierBasisPoints = max,
                 maximumBoostDuration = DurationParser.parse(yaml.getString("boosts.maximum-duration", "30d")!!)
@@ -161,7 +175,7 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
         private val idPattern = Regex("[a-z0-9_-]{1,48}")
 
         fun load(file: File, settings: AddonSettings, validJobIds: Set<String>): BoosterRegistry {
-            val yaml = YamlConfiguration.loadConfiguration(file)
+            val yaml = loadYamlStrict(file)
             val section = yaml.getConfigurationSection("boosters") ?: error("boosters.yml has no boosters section")
             val parsed = linkedMapOf<String, BoosterPreset>()
             for (rawId in section.getKeys(false)) {

@@ -29,6 +29,8 @@ message:
   left: '<prefix><#e6fff3>Вы покинули профессию <job><#e6fff3>.'
   leave-failed: '<prefix><#e36d6d>Не удалось покинуть профессию <job><#e36d6d>. Проверьте цену выхода.'
   booster-invalid: '<prefix><#e36d6d>Этот талон повреждён или не принадлежит RusCrafting.'
+  booster-legacy: '<prefix><#e36d6d>Старый талон больше не поддерживается. Обратитесь к администратору.'
+  booster-wrong-owner: '<prefix><#e36d6d>Этот личный талон выпущен для другого игрока.'
   booster-expired: '<prefix><#e36d6d>Срок действия этого талона уже истёк.'
   booster-busy: '<prefix><#e6fff3>Предыдущий талон ещё активируется. Подождите немного.'
   booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> действует <duration>.'

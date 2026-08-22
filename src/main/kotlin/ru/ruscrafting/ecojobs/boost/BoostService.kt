@@ -17,7 +17,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-enum class GrantResult { GRANTED, ALREADY_USED, FAILED }
+enum class GrantResult { GRANTED, ALREADY_USED, WRONG_OWNER, FAILED }
 
 internal fun interface BoostNodeFactory {
     fun create(permission: String, expiry: Instant?): Node
@@ -54,6 +54,10 @@ class BoostService internal constructor(
         Multipliers.effective(active(player), jobId, type)
 
     fun redeem(payload: VoucherPayload, player: Player, callback: (GrantResult) -> Unit) {
+        if (payload.recipientId != player.uniqueId) {
+            onMain { callback(GrantResult.WRONG_OWNER) }
+            return
+        }
         mutate(player.uniqueId, payload, addUsedMarker = true, callback)
     }
 
@@ -68,6 +72,7 @@ class BoostService internal constructor(
         val payload = VoucherPayload(
             presetId = "admin",
             voucherId = UUID.randomUUID(),
+            recipientId = uuid,
             type = type,
             multiplierBasisPoints = multiplierBasisPoints,
             durationSeconds = duration.seconds,
@@ -96,14 +101,33 @@ class BoostService internal constructor(
                 return@whenComplete
             }
             val normalized = selector.lowercase()
-            val nodes = user.getNodes(NodeType.PERMISSION).filter { permission ->
-                val decoded = BoostNodeCodec.decode(permission.permission) ?: return@filter false
-                normalized == "all" || decoded.instanceId.toString().startsWith(normalized)
+            val byInstance = user.getNodes(NodeType.PERMISSION).mapNotNull { permission ->
+                val decoded = BoostNodeCodec.decode(permission.permission) ?: return@mapNotNull null
+                decoded.instanceId to permission
+            }.groupBy({ it.first }, { it.second })
+            val selectedIds = when {
+                normalized == "all" -> byInstance.keys
+                !INSTANCE_SELECTOR.matches(normalized) -> emptySet()
+                else -> byInstance.keys.filter { it.toString().startsWith(normalized) }.takeIf { it.size == 1 }?.toSet().orEmpty()
             }
-            val instanceCount = nodes.mapNotNull { BoostNodeCodec.decode(it.permission)?.instanceId }.distinct().size
-            nodes.forEach { user.data().remove(it) }
-            luckPerms.userManager.saveUser(user).whenComplete { _, saveFailure ->
-                if (saveFailure == null) cache.remove(uuid)
+            val nodes = selectedIds.flatMap { byInstance.getValue(it) }
+            val removed = nodes.filter { user.data().remove(it).wasSuccessful() }
+            val instanceCount = removed.mapNotNull { BoostNodeCodec.decode(it.permission)?.instanceId }.distinct().size
+            if (removed.isEmpty()) {
+                onMain { callback(0, null) }
+                return@whenComplete
+            }
+            val save = runCatching { luckPerms.userManager.saveUser(user) }.getOrElse { failure ->
+                restore(user, removed)
+                onMain { callback(null, failure) }
+                return@whenComplete
+            }
+            save.whenComplete { _, saveFailure ->
+                if (saveFailure == null) {
+                    cache.remove(uuid)
+                } else {
+                    restore(user, removed)
+                }
                 onMain { callback(instanceCount.takeIf { saveFailure == null }, saveFailure) }
             }
         }
@@ -130,30 +154,40 @@ class BoostService internal constructor(
                 return@whenComplete
             }
             val expiry = Instant.now().plusSeconds(payload.durationSeconds)
-            val nodes = runCatching {
+            val boostNodes = runCatching {
                 payload.jobs.map { scope ->
                     nodeFactory.create(
                         BoostNodeCodec.encode(payload.type, payload.multiplierBasisPoints, scope, payload.voucherId),
                         expiry,
                     )
-                }.toMutableList().apply {
-                    if (addUsedMarker) add(nodeFactory.create(usedKey, null))
                 }
             }.getOrElse {
                 onMain { callback(GrantResult.FAILED) }
                 return@whenComplete
             }
+            val added = mutableListOf<Node>()
             val save = runCatching {
-                nodes.forEach { user.data().add(it) }
+                if (addUsedMarker) {
+                    val marker = nodeFactory.create(usedKey, null)
+                    if (!user.data().add(marker).wasSuccessful()) {
+                        onMain { callback(GrantResult.ALREADY_USED) }
+                        return@whenComplete
+                    }
+                    added += marker
+                }
+                boostNodes.forEach { node ->
+                    if (user.data().add(node).wasSuccessful()) added += node
+                }
+                require(added.isNotEmpty()) { "No boost nodes were added" }
                 luckPerms.userManager.saveUser(user)
             }.getOrElse {
-                nodes.forEach { node -> runCatching { user.data().remove(node) } }
+                rollback(user, added)
                 onMain { callback(GrantResult.FAILED) }
                 return@whenComplete
             }
             save.whenComplete { _, saveFailure ->
                 if (saveFailure != null) {
-                    nodes.forEach { node -> runCatching { user.data().remove(node) } }
+                    rollback(user, added)
                 }
                 cache.remove(uuid)
                 onMain { callback(if (saveFailure == null) GrantResult.GRANTED else GrantResult.FAILED) }
@@ -177,8 +211,26 @@ class BoostService internal constructor(
         }.sortedBy(BoostInstance::expiresAt)
     }
 
+    private fun rollback(user: User, nodes: Collection<Node>) {
+        nodes.forEach { node ->
+            runCatching { require(user.data().remove(node).wasSuccessful()) { "node was not present" } }
+                .onFailure { plugin.logger.warning("Could not roll back an unsaved ArcEcoJobs node: ${it.message}") }
+        }
+    }
+
+    private fun restore(user: User, nodes: Collection<Node>) {
+        nodes.forEach { node ->
+            runCatching { require(user.data().add(node).wasSuccessful()) { "node was not restored" } }
+                .onFailure { plugin.logger.severe("Could not restore an ArcEcoJobs node after a failed save: ${it.message}") }
+        }
+    }
+
     private fun onMain(block: () -> Unit) {
         if (!plugin.isEnabled) return
         plugin.server.scheduler.runTask(plugin, Runnable(block))
+    }
+
+    companion object {
+        private val INSTANCE_SELECTOR = Regex("(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})")
     }
 }

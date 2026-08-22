@@ -29,6 +29,8 @@ message:
   left: '<prefix><#e6fff3>You left <job><#e6fff3>.'
   leave-failed: '<prefix><#e36d6d>Could not leave <job><#e36d6d>. Check the leave price.'
   booster-invalid: '<prefix><#e36d6d>This voucher is damaged or was not issued by RusCrafting.'
+  booster-legacy: '<prefix><#e36d6d>This legacy voucher is no longer supported. Contact an administrator.'
+  booster-wrong-owner: '<prefix><#e36d6d>This personal voucher was issued to another player.'
   booster-expired: '<prefix><#e36d6d>This voucher has expired.'
   booster-busy: '<prefix><#e6fff3>Your previous voucher is still being activated. Please wait.'
   booster-redeemed: '<prefix><#79c99e><multiplier> boost for <jobs> is active for <duration>.'

@@ -34,18 +34,20 @@ class BoostServiceTest : StringSpec({
         val server = MockBukkit.getMock()!!
         val plugin = MockBukkit.createMockPlugin("ArcEcoJobsBoostTest")
         val player = server.addPlayer("BoostQA")
-        val stored = linkedSetOf<Node>()
+        val stored = linkedMapOf<String, Node>()
         val data = mockk<NodeMap>()
         every { data.add(any()) } answers {
-            if (stored.add(firstArg())) DataMutateResult.SUCCESS else DataMutateResult.FAIL_ALREADY_HAS
+            val node = firstArg<Node>()
+            if (stored.putIfAbsent(node.key, node) == null) DataMutateResult.SUCCESS else DataMutateResult.FAIL_ALREADY_HAS
         }
         every { data.remove(any()) } answers {
-            if (stored.remove(firstArg())) DataMutateResult.SUCCESS else DataMutateResult.FAIL_LACKS
+            val node = firstArg<Node>()
+            if (stored.remove(node.key) != null) DataMutateResult.SUCCESS else DataMutateResult.FAIL_LACKS
         }
         val user = mockk<User>()
         every { user.data() } returns data
         every { user.getNodes(NodeType.PERMISSION) } answers {
-            stored.filterIsInstance<PermissionNode>().toSet()
+            stored.values.filterIsInstance<PermissionNode>().toSet()
         }
         val users = mockk<UserManager>()
         every { users.loadUser(player.uniqueId, null) } returns CompletableFuture.completedFuture(user)
@@ -66,14 +68,17 @@ class BoostServiceTest : StringSpec({
             requireMoneyPlaceholder = true,
             guiItems = GuiItems.vanilla(),
         )
+        val createdNodes = mutableMapOf<String, PermissionNode>()
         val nodeFactory = BoostNodeFactory { permissionKey, expiry ->
-            mockk<PermissionNode> {
-                every { key } returns permissionKey
-                every { permission } returns permissionKey
-                every { value } returns true
-                every { hasExpiry() } returns (expiry != null)
-                every { hasExpired() } returns false
-                every { getExpiry() } returns expiry
+            createdNodes.getOrPut(permissionKey) {
+                mockk<PermissionNode> {
+                    every { key } returns permissionKey
+                    every { permission } returns permissionKey
+                    every { value } returns true
+                    every { hasExpiry() } returns (expiry != null)
+                    every { hasExpired() } returns false
+                    every { getExpiry() } returns expiry
+                }
             }
         }
         val service = BoostService(plugin, luckPerms, { settings }, nodeFactory)
@@ -81,6 +86,7 @@ class BoostServiceTest : StringSpec({
         val payload = VoucherPayload(
             presetId = "workday",
             voucherId = voucherId,
+            recipientId = player.uniqueId,
             type = BoostType.ALL,
             multiplierBasisPoints = 150,
             durationSeconds = 3_600,
@@ -95,8 +101,8 @@ class BoostServiceTest : StringSpec({
         server.scheduler.performTicks(2)
 
         redemption shouldBe listOf(GrantResult.GRANTED)
-        stored.map { it.key } shouldContain BoostNodeCodec.used(voucherId)
-        stored.mapNotNull { BoostNodeCodec.decode(it.key) }.map { it.scope }.toSet() shouldBe setOf("miner", "fisherman")
+        stored.keys shouldContain BoostNodeCodec.used(voucherId)
+        stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.scope }.toSet() shouldBe setOf("miner", "fisherman")
 
         service.redeem(payload, player, redemption::add)
         server.scheduler.performTicks(2)
@@ -112,12 +118,62 @@ class BoostServiceTest : StringSpec({
 
         revoked shouldBe 1
         revokeFailure shouldBe null
-        stored.map { it.key } shouldBe listOf(BoostNodeCodec.used(voucherId))
+        stored.keys.toList() shouldBe listOf(BoostNodeCodec.used(voucherId))
 
         service.redeem(payload.copy(voucherId = UUID.randomUUID(), jobs = setOf("invalid.scope")), player, redemption::add)
         server.scheduler.performTicks(2)
         redemption.last() shouldBe GrantResult.FAILED
-        stored.map { it.key } shouldBe listOf(BoostNodeCodec.used(voucherId))
-        verify(exactly = 2) { users.saveUser(user) }
+        stored.keys.toList() shouldBe listOf(BoostNodeCodec.used(voucherId))
+
+        val ambiguousIds = listOf(
+            UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001"),
+            UUID.fromString("aaaaaaaa-0000-4000-8000-000000000002"),
+        )
+        ambiguousIds.forEach { id ->
+            val key = BoostNodeCodec.encode(BoostType.XP, 150, "miner", id)
+            stored[key] = nodeFactory.create(key, Instant.now().plusSeconds(3_600))
+        }
+        var ambiguousCount: Int? = null
+        service.revoke(player.uniqueId, "aaaaaaaa") { count, _ -> ambiguousCount = count }
+        server.scheduler.performTicks(2)
+        ambiguousCount shouldBe 0
+        stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.instanceId }.toSet() shouldBe ambiguousIds.toSet()
+        ambiguousIds.forEach { id ->
+            stored.remove(BoostNodeCodec.encode(BoostType.XP, 150, "miner", id))
+        }
+
+        val copiedRedemption = mutableListOf<GrantResult>()
+        val otherPlayer = server.addPlayer("BoostCopyQA")
+        service.redeem(payload, otherPlayer, copiedRedemption::add)
+        server.scheduler.performTicks(2)
+        copiedRedemption shouldBe listOf(GrantResult.WRONG_OWNER)
+
+        val partialVoucher = payload.copy(voucherId = UUID.randomUUID())
+        val preexistingKey = BoostNodeCodec.encode(
+            partialVoucher.type,
+            partialVoucher.multiplierBasisPoints,
+            "miner",
+            partialVoucher.voucherId,
+        )
+        stored[preexistingKey] = nodeFactory.create(preexistingKey, Instant.now().plusSeconds(3_600))
+        val beforeFailedSave = stored.keys.toSet()
+        every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
+
+        service.redeem(partialVoucher, player, redemption::add)
+        server.scheduler.performTicks(2)
+        redemption.last() shouldBe GrantResult.FAILED
+        stored.keys.toSet() shouldBe beforeFailedSave
+
+        var failedRevokeCount: Int? = 999
+        var failedRevokeCause: Throwable? = null
+        service.revoke(player.uniqueId, "all") { count, failure ->
+            failedRevokeCount = count
+            failedRevokeCause = failure
+        }
+        server.scheduler.performTicks(2)
+        failedRevokeCount shouldBe null
+        (failedRevokeCause is IllegalStateException) shouldBe true
+        stored.keys.toSet() shouldBe beforeFailedSave
+        verify(exactly = 4) { users.saveUser(user) }
     }
 })

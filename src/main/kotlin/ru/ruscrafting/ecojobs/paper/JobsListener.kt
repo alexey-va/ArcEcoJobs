@@ -57,11 +57,23 @@ class JobsListener(
             player.sendMessage(locale.render("message.no-permission", player))
             return
         }
-        if (inspection is VoucherInspection.Invalid) {
-            player.sendMessage(locale.render("message.booster-invalid", player))
+        when (inspection) {
+            VoucherInspection.NotVoucher -> return
+            VoucherInspection.Legacy -> {
+                player.sendMessage(locale.render("message.booster-legacy", player))
+                return
+            }
+            is VoucherInspection.Invalid -> {
+                player.sendMessage(locale.render("message.booster-invalid", player))
+                return
+            }
+            is VoucherInspection.Valid -> Unit
+        }
+        val payload = inspection.payload
+        if (payload.recipientId != player.uniqueId) {
+            player.sendMessage(locale.render("message.booster-wrong-owner", player))
             return
         }
-        val payload = (inspection as VoucherInspection.Valid).payload
         if (!pending.add(player.uniqueId)) {
             player.sendMessage(locale.render("message.booster-busy", player))
             return
@@ -77,6 +89,7 @@ class JobsListener(
                     vouchers.remove(player, payload.voucherId)
                     player.sendMessage(locale.render("message.booster-already-used", player))
                 }
+                GrantResult.WRONG_OWNER -> player.sendMessage(locale.render("message.booster-wrong-owner", player))
                 GrantResult.FAILED -> player.sendMessage(locale.render("message.booster-save-failed", player))
             }
         }

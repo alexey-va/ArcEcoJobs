@@ -27,6 +27,7 @@ data class VoucherOverrides(
 
 sealed interface VoucherInspection {
     data object NotVoucher : VoucherInspection
+    data object Legacy : VoucherInspection
     data class Invalid(val reason: String) : VoucherInspection
     data class Valid(val payload: VoucherPayload) : VoucherInspection
 }
@@ -43,6 +44,7 @@ class VoucherService(
     private val markerKey = key("voucher_version")
     private val presetKey = key("voucher_preset")
     private val voucherIdKey = key("voucher_id")
+    private val recipientIdKey = key("voucher_recipient")
     private val typeKey = key("voucher_type")
     private val multiplierKey = key("voucher_multiplier_bp")
     private val durationKey = key("voucher_duration_seconds")
@@ -54,6 +56,7 @@ class VoucherService(
         val payload = VoucherPayload(
             presetId = preset.id,
             voucherId = UUID.randomUUID(),
+            recipientId = audience.uniqueId,
             type = overrides.type ?: preset.type,
             multiplierBasisPoints = overrides.multiplierBasisPoints ?: preset.multiplierBasisPoints,
             durationSeconds = (overrides.duration ?: preset.duration).seconds,
@@ -83,6 +86,7 @@ class VoucherService(
                 pdc.set(markerKey, PersistentDataType.STRING, VoucherPayload.SIGNATURE_VERSION)
                 pdc.set(presetKey, PersistentDataType.STRING, payload.presetId)
                 pdc.set(voucherIdKey, PersistentDataType.STRING, payload.voucherId.toString())
+                pdc.set(recipientIdKey, PersistentDataType.STRING, payload.recipientId.toString())
                 pdc.set(typeKey, PersistentDataType.STRING, payload.type.token)
                 pdc.set(multiplierKey, PersistentDataType.INTEGER, payload.multiplierBasisPoints)
                 pdc.set(durationKey, PersistentDataType.LONG, payload.durationSeconds)
@@ -97,11 +101,14 @@ class VoucherService(
         val meta = item?.itemMeta ?: return VoucherInspection.NotVoucher
         val pdc = meta.persistentDataContainer
         if (!pdc.has(markerKey, PersistentDataType.STRING)) return VoucherInspection.NotVoucher
+        val version = pdc.get(markerKey, PersistentDataType.STRING)
+        if (version == VoucherPayload.LEGACY_SIGNATURE_VERSION) return VoucherInspection.Legacy
+        if (version != VoucherPayload.SIGNATURE_VERSION) return VoucherInspection.Invalid("unsupported version")
         return runCatching {
-            require(pdc.get(markerKey, PersistentDataType.STRING) == VoucherPayload.SIGNATURE_VERSION) { "unsupported version" }
             val payload = VoucherPayload(
                 presetId = requireNotNull(pdc.get(presetKey, PersistentDataType.STRING)),
                 voucherId = UUID.fromString(requireNotNull(pdc.get(voucherIdKey, PersistentDataType.STRING))),
+                recipientId = UUID.fromString(requireNotNull(pdc.get(recipientIdKey, PersistentDataType.STRING))),
                 type = requireNotNull(BoostType.parse(pdc.get(typeKey, PersistentDataType.STRING))),
                 multiplierBasisPoints = requireNotNull(pdc.get(multiplierKey, PersistentDataType.INTEGER)),
                 durationSeconds = requireNotNull(pdc.get(durationKey, PersistentDataType.LONG)),

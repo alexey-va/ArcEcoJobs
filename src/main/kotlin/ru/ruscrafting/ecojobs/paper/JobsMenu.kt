@@ -111,7 +111,7 @@ class JobsMenu(
                         pageCount(ecoJobs.rankings(view.jobId?.let(ecoJobs::job))?.size ?: 0, settings().leaderboardEntriesPerPage),
                     )
                     is JobsView.Boosts -> clickPaged(player, view, slot, pageCount(applicableBoosts(player, view.jobId).size, contentSlots.size))
-                    is JobsView.Help -> if (slot == 36) open(player, view.back) else if (slot == 44) player.closeInventory()
+                    is JobsView.Help -> if (slot == 36) open(player, view.back)
                     is JobsView.Admin -> clickAdmin(player, view, slot)
                     is JobsView.Presets -> clickPresets(player, view, slot)
                 }
@@ -145,7 +145,6 @@ class JobsMenu(
         if (player.hasPermission("arcecojobs.admin")) {
             inventory.setItem(49, item(Material.COMMAND_BLOCK, player, "menu.main.admin-name", "menu.main.admin-lore"))
         }
-        inventory.setItem(53, closeItem(player))
         player.openInventory(inventory)
     }
 
@@ -157,7 +156,6 @@ class JobsMenu(
             30 -> open(player, JobsView.Boosts(null, 1, JobsView.Main))
             32 -> open(player, JobsView.Help(JobsView.Main))
             49 -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(JobsView.Main))
-            53 -> player.closeInventory()
         }
     }
 
@@ -247,7 +245,6 @@ class JobsMenu(
                 else -> player.sendMessage(locale.render("message.join-failed", player, mapOf("job" to ecoJobs.name(job))))
             }
             45 -> open(player, view.back)
-            53 -> player.closeInventory()
         }
     }
 
@@ -411,7 +408,6 @@ class JobsMenu(
         inventory.setItem(14, item(Material.EXPERIENCE_BOTTLE, player, "menu.help.boosts-name", "menu.help.boosts-lore"))
         inventory.setItem(16, item(Material.WRITABLE_BOOK, player, "menu.help.commands-name", "menu.help.commands-lore"))
         inventory.setItem(36, backItem(player))
-        inventory.setItem(44, closeItem(player))
         player.openInventory(inventory)
     }
 
@@ -432,7 +428,6 @@ class JobsMenu(
         inventory.setItem(22, item(Material.CHEST, player, "menu.admin.presets-name", "menu.admin.presets-lore", mapOf("count" to text(boosters().values().size))))
         inventory.setItem(24, item(Material.COMMAND_BLOCK, player, "menu.admin.help-name", "menu.admin.help-lore"))
         inventory.setItem(36, backItem(player))
-        inventory.setItem(44, closeItem(player))
         player.openInventory(inventory)
     }
 
@@ -450,7 +445,6 @@ class JobsMenu(
             22 -> if (player.hasPermission("arcecojobs.admin.booster")) open(player, JobsView.Presets(1, view))
             24 -> locale.lines("command.admin-help", player).forEach(player::sendMessage)
             36 -> open(player, view.back)
-            44 -> player.closeInventory()
         }
     }
 
@@ -533,7 +527,6 @@ class JobsMenu(
                 is JobsView.Presets -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 else -> Unit
             }
-            53 -> player.closeInventory()
         }
     }
 
@@ -545,7 +538,6 @@ class JobsMenu(
         if (page < pages) inventory.setItem(51, item(settings().guiItems.next, player, "common.next-name", "common.next-lore", mapOf(
             "page" to text(page), "pages" to text(pages),
         )))
-        inventory.setItem(53, closeItem(player))
     }
 
     private fun inventory(
@@ -659,7 +651,6 @@ class JobsMenu(
         if ("all" in jobs) locale.allJobs(player) else ecoJobs.names(jobs)
 
     private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "common.back-name", "common.back-lore")
-    private fun closeItem(player: Player): ItemStack = item(settings().guiItems.close, player, "common.close-name")
     private fun text(value: Any?): Component = locale.text(value)
     private fun titleText(value: Component): Component = Component.text(plain.serialize(value))
     private fun formatMultiplier(multiplier: Double): String = Multipliers.format(Multipliers.toBasisPoints(multiplier))

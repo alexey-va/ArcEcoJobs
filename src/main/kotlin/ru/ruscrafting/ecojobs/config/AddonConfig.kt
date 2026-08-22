@@ -77,8 +77,8 @@ data class GuiItems(
             close = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
             confirm = GuiItemDefinition(Material.GREEN_STAINED_GLASS_PANE, null),
             cancel = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
-            refresh = GuiItemDefinition(Material.BLACK_STAINED_GLASS_PANE, null),
-            catalog = GuiItemDefinition(Material.COMPASS, null),
+            refresh = GuiItemDefinition(Material.REPEATER, null),
+            catalog = GuiItemDefinition(Material.CRAFTING_TABLE, null),
         )
 
         fun load(yaml: YamlConfiguration): GuiItems {

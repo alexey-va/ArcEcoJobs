@@ -58,7 +58,9 @@ function snapshot (window) {
 }
 
 function isFiller (item) {
-  return item.type === 'gray_stained_glass_pane' && /Gray Stained Glass Pane/i.test(item.name)
+  if (!/_stained_glass_pane$/.test(item.type)) return false
+  const normalizedName = String(item.name ?? '').trim().toLowerCase().replaceAll(' ', '_')
+  return normalizedName === '' || normalizedName === item.type
 }
 
 function compactSnapshot (observed) {
@@ -77,6 +79,10 @@ function hasSlot (state, slot) {
 
 function hasNamedItem (state, pattern) {
   return state.slots.some((item) => pattern.test(item.name))
+}
+
+function slotType (state, slot) {
+  return state.slots.find((item) => item.slot === slot && !isFiller(item))?.type
 }
 
 function countCatalogCards (state) {
@@ -162,7 +168,9 @@ async function runScenario (bot, config) {
     `${expectedMainTitle} title, player sections, and correct admin visibility`,
     state,
     state.title === expectedMainTitle &&
-      [20, 22, 24, 30, 32, 53].every((slot) => hasSlot(state, slot)) &&
+      [20, 22, 24, 30, 32].every((slot) => hasSlot(state, slot)) &&
+      slotType(state, 20) === 'crafting_table' &&
+      !hasNamedItem(state, /^(?:Close|Закрыть)$/i) &&
       hasNamedItem(state, new RegExp(`^${expectedCatalogName}$`)) &&
       hasSlot(state, 49) === config.expectAdmin
   )
@@ -173,15 +181,16 @@ async function runScenario (bot, config) {
     /My jobs|Мои профессии/i.test(state.title) && hasSlot(state, 45))
 
   window = await openJobs(bot)
-  const compassBefore = inventoryCount(bot, 'compass')
+  const catalogIconBefore = inventoryCount(bot, 'crafting_table')
   const catalogOpen = await clickNextMeasured(bot, 20)
   window = catalogOpen.window
   state = snapshot(window)
   state.openMs = catalogOpen.openMs
-  state.compassInventoryDelta = inventoryCount(bot, 'compass') - compassBefore
+  state.catalogIconInventoryDelta = inventoryCount(bot, 'crafting_table') - catalogIconBefore
   record(results, 'catalog', 'catalog opens under 1.5 s, keeps the selector protected, and has ten job cards', state,
     /catalog|Каталог/i.test(state.title) && countCatalogCards(state) === 10 &&
-      state.openMs < 1500 && state.compassInventoryDelta === 0)
+      state.openMs < 1500 && state.catalogIconInventoryDelta === 0 &&
+      !hasNamedItem(state, /^(?:Close|Закрыть)$/i))
 
   window = await clickNext(bot, 10)
   state = snapshot(window)
@@ -237,7 +246,8 @@ async function runScenario (bot, config) {
   window = await clickNext(bot, 32)
   state = snapshot(window)
   record(results, 'help', 'four focused help topics', state,
-    [10, 12, 14, 16, 36].every((slot) => hasSlot(state, slot)))
+    [10, 12, 14, 16, 36].every((slot) => hasSlot(state, slot)) &&
+      !hasNamedItem(state, /^(?:Close|Закрыть)$/i))
 
   if (config.expectAdmin) {
     window = await openJobs(bot)
@@ -245,7 +255,10 @@ async function runScenario (bot, config) {
     state = snapshot(window)
     const commandLore = state.slots.find((item) => item.slot === 24)?.lore ?? []
     record(results, 'admin menu', 'integration status, reload, presets, and command reference', state,
-      [4, 20, 22, 24, 36].every((slot) => hasSlot(state, slot)) && commandLore.length >= 13)
+      [4, 20, 22, 24, 36].every((slot) => hasSlot(state, slot)) &&
+        slotType(state, 20) === 'repeater' &&
+        !hasNamedItem(state, /^(?:Close|Закрыть)$/i) &&
+        commandLore.length >= 13)
 
     window = await clickNext(bot, 20)
     state = snapshot(window)
@@ -341,5 +354,6 @@ module.exports = {
   hasNamedItem,
   hasSlot,
   readConfig,
+  slotType,
   snapshot
 }

@@ -98,6 +98,8 @@ class AddonConfigTest : StringSpec({
         ).map(GuiItemDefinition::customModelData) shouldBe List(9) { null }
         gui.background.material shouldBe Material.GRAY_STAINED_GLASS_PANE
         gui.back.material shouldBe Material.BLUE_STAINED_GLASS_PANE
+        gui.refresh.material shouldBe Material.REPEATER
+        gui.catalog.material shouldBe Material.CRAFTING_TABLE
     }
 
     "production GUI overlays use the reviewed RusCrafting model data on both nodes" {
@@ -125,9 +127,11 @@ class AddonConfigTest : StringSpec({
             "close" to 91002,
             "confirm" to 91007,
             "cancel" to 91002,
-            "refresh" to 11010,
-            "catalog" to 11019,
+            "refresh" to null,
+            "catalog" to null,
         )
+        gui.refresh.material shouldBe Material.REPEATER
+        gui.catalog.material shouldBe Material.CRAFTING_TABLE
     }
 
     "case variants cannot overwrite another preset" {

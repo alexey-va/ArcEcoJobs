@@ -1,6 +1,8 @@
 package ru.ruscrafting.ecojobs.paper
 
+import com.willfp.eco.core.integrations.economy.EconomyManager
 import net.luckperms.api.LuckPerms
+import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.MySqlVoucherLedger
@@ -18,6 +20,7 @@ import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
 import ru.ruscrafting.ecojobs.exploration.UnavailableDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
+import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
 import java.util.logging.Level
 
 class ArcEcoJobsPlugin : JavaPlugin() {
@@ -121,6 +124,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private fun finishInitialization() {
         check(!initialized) { "ArcEcoJobs is already initialized" }
+        bindEconomyIntegration()
         val jobIds = validatedJobIds()
         boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
         locale.validate(boosterRegistry.values())
@@ -153,6 +157,15 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         initialized = true
         ecoJobs.prepareLeaderboards()
         logger.info("ArcEcoJobs enabled with ${ecoJobs.jobs().size} jobs and ${boosterRegistry.values().size} booster presets")
+    }
+
+    private fun bindEconomyIntegration() {
+        val economy = requireNotNull(server.servicesManager.load(Economy::class.java)) {
+            "A Vault economy provider must be registered before ArcEcoJobs initializes"
+        }
+        EconomyManager.register(VaultEconomyIntegration(economy))
+        check(EconomyManager.hasRegistrations()) { "eco did not accept the Vault economy integration" }
+        logger.info("EcoJobs money effects bound to Vault provider ${economy.name}")
     }
 
     private fun reloadPlugin(): Result<Unit> = runCatching {

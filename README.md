@@ -10,7 +10,7 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.9.jar`. The test suite
+The production artifact is `build/libs/ArcEcoJobs-0.1.10.jar`. The test suite
 starts a disposable MySQL 8.0.46 container to prove concurrent redemption.
 
 ## Explorer job

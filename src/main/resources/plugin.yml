@@ -4,7 +4,8 @@ main: ru.ruscrafting.ecojobs.paper.ArcEcoJobsPlugin
 api-version: '1.21.11'
 authors: [RusCrafting]
 description: Rich EcoJobs interface and LuckPerms-backed boosts
-depend: [EcoJobs, LuckPerms, PlaceholderAPI]
+depend: [EcoJobs, LuckPerms, PlaceholderAPI, Vault]
+softdepend: [RedisEconomy]
 commands:
   arcjobs:
     description: RusCrafting jobs interface

@@ -24,6 +24,7 @@ data class AddonSettings(
     val maximumBoostDuration: Duration,
     val maximumStackedBoostDuration: Duration,
     val requireMoneyPlaceholder: Boolean,
+    val exploration: ExplorationSettings = ExplorationSettings.disabled(),
     val guiItems: GuiItems,
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
 ) {
@@ -58,6 +59,11 @@ data class AddonSettings(
             require(maximumStackedBoostDuration >= maximumBoostDuration) {
                 "boosts.maximum-stacked-duration must not be shorter than boosts.maximum-duration"
             }
+            val redemptionStorage = RedemptionStorageSettings.load(yaml)
+            val exploration = ExplorationSettings.load(yaml)
+            require(!exploration.enabled || redemptionStorage.enabled) {
+                "exploration requires redemptions.mysql.enabled because discoveries use the shared ArcEcoJobs database"
+            }
             return AddonSettings(
                 defaultLocale = defaultLocale,
                 useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
@@ -70,10 +76,30 @@ data class AddonSettings(
                 maximumBoostDuration = maximumBoostDuration,
                 maximumStackedBoostDuration = maximumStackedBoostDuration,
                 requireMoneyPlaceholder = yaml.getBoolean("boosts.require-money-placeholder", true),
+                exploration = exploration,
                 guiItems = GuiItems.load(yaml),
-                redemptionStorage = RedemptionStorageSettings.load(yaml),
+                redemptionStorage = redemptionStorage,
             )
         }
+    }
+}
+
+data class ExplorationSettings(
+    val enabled: Boolean,
+    val maximumInFlight: Int,
+) {
+    companion object {
+        fun disabled(): ExplorationSettings = ExplorationSettings(
+            enabled = false,
+            maximumInFlight = 256,
+        )
+
+        fun load(yaml: YamlConfiguration): ExplorationSettings = ExplorationSettings(
+            enabled = yaml.getBoolean("exploration.enabled", false),
+            maximumInFlight = yaml.getInt("exploration.maximum-in-flight", 256).also {
+                require(it in 16..4_096) { "exploration.maximum-in-flight must be between 16 and 4096" }
+            },
+        )
     }
 }
 

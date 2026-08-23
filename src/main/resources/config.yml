@@ -18,8 +18,14 @@ boosts:
   maximum-stacked-duration: 365d
   require-money-placeholder: true
 
-# Required for redeeming signed vouchers safely across multiple servers.
-# The table stores redemption identities only; LuckPerms still owns active boosts.
+# Rewards the first five different active explorers who enter each chunk.
+# Discovery claims use the shared MySQL settings below and fail closed.
+exploration:
+  enabled: false
+  maximum-in-flight: 256
+
+# Shared ArcEcoJobs storage for voucher claims and chunk discoveries.
+# LuckPerms still remains the only owner of active boosts.
 redemptions:
   mysql:
     enabled: false

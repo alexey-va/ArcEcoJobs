@@ -189,21 +189,22 @@ async function runScenario (bot, config) {
   state = snapshot(window)
   state.openMs = catalogOpen.openMs
   state.catalogIconInventoryDelta = inventoryCount(bot, 'crafting_table') - catalogIconBefore
-  record(results, 'catalog', 'catalog opens under 1.5 s, keeps the selector protected, and has ten job cards', state,
-    /catalog|Каталог/i.test(state.title) && countCatalogCards(state) === 10 &&
+  record(results, 'catalog', 'catalog opens under 1.5 s, keeps the selector protected, and has eleven job cards', state,
+    /catalog|Каталог/i.test(state.title) && countCatalogCards(state) === 11 &&
+      hasNamedItem(state, /^(?:Explorer|Исследователь)$/i) &&
       state.openMs < 1500 && state.catalogIconInventoryDelta === 0 &&
       !hasNamedItem(state, /^(?:Close|Закрыть)$/i))
 
   window = await clickNext(bot, 19)
   window = await clickNext(bot, 29)
   state = snapshot(window)
-  const hunterLevelLore = state.slots.find((item) => /(?:Level|Уровень) 1$/.test(item.name))?.lore ?? []
-  record(results, 'hunter level lore', 'each reward is a separate lore row and money uses a postfix coin glyph', state,
-      hunterLevelLore.length >= 6 &&
-      hunterLevelLore.every((line) => !/[\u0000-\u001f\u007f]/u.test(line)) &&
+  const minerLevelLore = state.slots.find((item) => /(?:Level|Уровень) 1$/.test(item.name))?.lore ?? []
+  record(results, 'miner level lore', 'each reward is a separate lore row and money uses a postfix coin glyph', state,
+      minerLevelLore.length >= 5 &&
+      minerLevelLore.every((line) => !/[\u0000-\u001f\u007f]/u.test(line)) &&
       // Mineflayer currently decodes the glyph's two UTF-16 surrogate units as six U+FFFD characters.
-      hunterLevelLore.some((line) => /\d(?:[\d ,.]*\d)?\s(?:💰|\uFFFD{6})(?:\s|$)/u.test(line)) &&
-      hunterLevelLore.every((line) => !line.includes('$')))
+      minerLevelLore.some((line) => /\d(?:[\d ,.]*\d)?\s(?:💰|\uFFFD{6})(?:\s|$)/u.test(line)) &&
+      minerLevelLore.every((line) => !line.includes('$')))
 
   window = await clickNext(bot, 45)
   window = await clickNext(bot, 45)
@@ -240,8 +241,8 @@ async function runScenario (bot, config) {
   window = await openJobs(bot)
   window = await clickNext(bot, 24)
   state = snapshot(window)
-  record(results, 'leaderboard selector', 'global ranking plus ten per-job ranking routes', state,
-    hasSlot(state, 4) && countCatalogCards(state) === 10)
+  record(results, 'leaderboard selector', 'global ranking plus eleven per-job ranking routes', state,
+    hasSlot(state, 4) && countCatalogCards(state) === 11)
 
   window = await clickNext(bot, 4)
   if (!hasSlot(snapshot(window), 49)) {

@@ -12,6 +12,10 @@ import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
+import ru.ruscrafting.ecojobs.exploration.DiscoveryLedger
+import ru.ruscrafting.ecojobs.exploration.LibreforgeExplorationTrigger
+import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
+import ru.ruscrafting.ecojobs.exploration.UnavailableDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.util.logging.Level
@@ -24,6 +28,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var boosts: BoostService
     private lateinit var vouchers: VoucherService
     private var voucherLedger: VoucherLedger = UnavailableVoucherLedger
+    private var discoveryLedger: DiscoveryLedger = UnavailableDiscoveryLedger
+    private var explorationListener: ExplorationListener? = null
     private var expansion: BoostPlaceholderExpansion? = null
     private var bootstrapTaskId: Int? = null
     private var initialized = false
@@ -45,6 +51,13 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             } else {
                 logger.warning("Voucher redemption is disabled because redemptions.mysql.enabled is false")
                 UnavailableVoucherLedger
+            }
+            discoveryLedger = if (settings.exploration.enabled) {
+                MySqlDiscoveryLedger.open(settings.redemptionStorage).also {
+                    logger.info("Chunk discovery ledger is ready")
+                }
+            } else {
+                UnavailableDiscoveryLedger
             }
             boosts = BoostService(this, luckPerms, settings = { settings }, voucherLedger = voucherLedger)
             vouchers = VoucherService(
@@ -76,7 +89,12 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         bootstrapTaskId = null
         runCatching { expansion?.unregister() }
         expansion = null
+        explorationListener?.shutdown()
+        explorationListener = null
         if (::ecoJobs.isInitialized) ecoJobs.shutdown()
+        runCatching { discoveryLedger.close() }
+            .onFailure { logger.log(Level.SEVERE, "Could not close the chunk discovery ledger", it) }
+        discoveryLedger = UnavailableDiscoveryLedger
         runCatching { voucherLedger.close() }
             .onFailure { logger.log(Level.SEVERE, "Could not close the voucher redemption ledger", it) }
         voucherLedger = UnavailableVoucherLedger
@@ -107,6 +125,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
         locale.validate(boosterRegistry.values())
         enforceMoneyIntegration()
+        enforceExplorationIntegration()
         val menu = JobsMenu(
             this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, ::reloadPlugin,
         )
@@ -118,6 +137,19 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             tabCompleter = command
         }
         server.pluginManager.registerEvents(JobsListener({ settings }, locale, menu, boosts, vouchers), this)
+        if (settings.exploration.enabled) {
+            val explorer = requireNotNull(ecoJobs.job(ExplorationListener.JOB_ID)) {
+                "EcoJobs explorer job is required when exploration is enabled"
+            }
+            explorationListener = ExplorationListener(
+                this,
+                ecoJobs,
+                explorer,
+                discoveryLedger,
+                LibreforgeExplorationTrigger(),
+                settings.exploration.maximumInFlight,
+            ).also { server.pluginManager.registerEvents(it, this) }
+        }
         initialized = true
         ecoJobs.prepareLeaderboards()
         logger.info("ArcEcoJobs enabled with ${ecoJobs.jobs().size} jobs and ${boosterRegistry.values().size} booster presets")
@@ -134,6 +166,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         enforceMoneyIntegration(candidateSettings)
         require(candidateSettings.redemptionStorage == settings.redemptionStorage) {
             "redemptions.mysql settings require a server restart"
+        }
+        require(candidateSettings.exploration == settings.exploration) {
+            "exploration settings require a server restart"
         }
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
@@ -154,6 +189,25 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         if (problems.isEmpty()) return
         val message = "EcoJobs money boost placeholder is missing from jobs: ${problems.joinToString(", ")}"
         if (candidate.requireMoneyPlaceholder) error(message) else logger.warning(message)
+    }
+
+    private fun enforceExplorationIntegration(candidate: AddonSettings = settings) {
+        if (!candidate.exploration.enabled) return
+        require(server.pluginManager.getPlugin("libreforge")?.isEnabled == true) {
+            "libreforge must be enabled before ArcEcoJobs exploration initializes"
+        }
+        val explorer = requireNotNull(ecoJobs.job(ExplorationListener.JOB_ID)) {
+            "EcoJobs explorer job is missing"
+        }
+        val expectedTrigger = LibreforgeExplorationTrigger.CONFIG_TRIGGER_ID
+        val xpIntegrated = explorer.config.getSubsections("xp-gain-methods")
+            .any { it.getString("trigger") == expectedTrigger }
+        val moneyIntegrated = explorer.config.getSubsections("effects")
+            .filter { it.getString("id") == "give_money" }
+            .any { expectedTrigger in it.getStrings("triggers") }
+        require(xpIntegrated && moneyIntegrated) {
+            "EcoJobs explorer job must use $expectedTrigger for XP and money"
+        }
     }
 
     private fun saveResourceIfMissing(path: String) {

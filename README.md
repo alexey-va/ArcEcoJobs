@@ -10,8 +10,31 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.7.jar`. The test suite
+The production artifact is `build/libs/ArcEcoJobs-0.1.8.jar`. The test suite
 starts a disposable MySQL 8.0.46 container to prove concurrent redemption.
+
+## Explorer job
+
+ArcEcoJobs supplies the anti-abuse discovery boundary for EcoJobs' `explorer`
+job. EcoJobs 2026.33 exposes ordinary chunk-change and custom triggers, but it
+does not remember which players discovered a chunk. ArcEcoJobs records up to
+five different active explorers per world UUID and chunk in MySQL, assigns
+their rank transactionally across server nodes, and dispatches the
+`custom_arcecojobs_discover_chunk` trigger. The trigger value preserves the old
+Jobs XP curve (`1.0`, `1.0`, `0.8`, `0.5`, or `0.1`); its alternate value
+preserves the money curve (`1.0`, `0.8`, `0.6`, `0.4`, or `0.1`).
+
+Teleportation, creative/spectator movement, and ordinary flight do not count;
+Elytra gliding remains eligible like it was in Jobs. A player cannot earn twice
+from the same chunk, and a claimed discovery is never retried automatically
+after an uncertain reward outcome. This deliberately prefers a possible missed
+reward over a duplicate monetary payout. The feature requires
+`exploration.enabled: true` and the shared MySQL profile under
+`redemptions.mysql`.
+
+The job definition is tracked for spawn, survival, and the isolated lab.
+Production enables exploration on both gameplay nodes and shares one MySQL
+ledger, so a chunk keeps the same five discovery ranks across the network.
 
 Read-only lab GUI acceptance:
 
@@ -36,6 +59,17 @@ The separate voucher smoke is mutation-gated and lab-only. It gives two
 30-minute XP vouchers to the disposable QA player, activates both while looking
 into the air, verifies a one-hour total, rejects a money voucher without
 spending it, then revokes the boost and clears the QA inventory.
+
+The explorer reward smoke is likewise hard-gated to the public isolated lab
+and its disposable OP QA identities:
+
+```bash
+npm run qa:arcecojobs:explorer
+```
+
+It joins `explorer`, moves the QA actor across multiple chunk boundaries, and
+requires a positive isolated-currency delta. Because it changes QA player and
+economy state, run it only under the current mutation authorization boundary.
 
 ## Money integration
 

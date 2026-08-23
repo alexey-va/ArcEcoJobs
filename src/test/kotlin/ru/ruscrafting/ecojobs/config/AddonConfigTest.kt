@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import org.bukkit.configuration.file.YamlConfiguration
 import ru.ruscrafting.ecojobs.domain.BoostType
 import java.nio.file.Files
 import java.nio.file.Path
@@ -107,6 +108,27 @@ class AddonConfigTest : StringSpec({
         """.trimIndent())).redemptionStorage
         enabled.enabled shouldBe true
         enabled.maximumPoolSize shouldBe 4
+    }
+
+    "exploration requires shared MySQL and a bounded queue" {
+        shouldThrow<IllegalArgumentException> {
+            AddonSettings.load(yaml("exploration:\n  enabled: true"))
+        }
+        shouldThrow<IllegalArgumentException> {
+            AddonSettings.load(yaml("exploration:\n  maximum-in-flight: 15"))
+        }
+
+        val enabled = AddonSettings.load(yaml("""
+            exploration:
+              enabled: true
+              maximum-in-flight: 512
+            redemptions:
+              mysql:
+                enabled: true
+                password: test-password
+        """.trimIndent())).exploration
+        enabled.enabled shouldBe true
+        enabled.maximumInFlight shouldBe 512
     }
 
     "malformed YAML fails closed instead of loading defaults" {
@@ -230,6 +252,39 @@ class AddonConfigTest : StringSpec({
         stores[0].database shouldBe "common"
         stores[0].username shouldBe "arcecojobs"
         stores[0].maximumPoolSize shouldBe 4
+    }
+
+    "production and lab enable the same bounded exploration implementation" {
+        listOf(
+            project.parent.resolve("classic/plugins/ArcEcoJobs/config.yml"),
+            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
+            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
+        ).map { AddonSettings.load(it.toFile()).exploration } shouldBe
+            List(3) { ExplorationSettings(enabled = true, maximumInFlight = 256) }
+    }
+
+    "production and lab explorer jobs preserve one reviewed discovery contract" {
+        val paths = listOf(
+            project.parent.resolve("classic/plugins/EcoJobs/jobs/explorer.yml"),
+            project.parent.resolve("classic_survival/plugins/EcoJobs/jobs/explorer.yml"),
+            project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs/explorer.yml"),
+        )
+        paths.map(Files::readString).toSet().size shouldBe 1
+        val explorer = YamlConfiguration.loadConfiguration(
+            paths.single { it.startsWith(project.parent.resolve("scripts/lab")) }.toFile(),
+        )
+        explorer.getString("name") shouldBe "&#57B8C2Исследователь"
+        explorer.getInt("max-level") shouldBe 50
+        explorer.getString("icon") shouldBe "golden_boots"
+        explorer.getMapList("xp-gain-methods").single()["trigger"] shouldBe
+            "custom_arcecojobs_discover_chunk"
+        val money = explorer.getMapList("effects").single()
+        money["id"] shouldBe "give_money"
+        money["triggers"] shouldBe listOf("custom_arcecojobs_discover_chunk")
+        @Suppress("UNCHECKED_CAST")
+        val amount = (money["args"] as Map<String, String>).getValue("amount")
+        amount shouldBe
+            "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_value%) * %arcecojobs_boost_explorer_money_multiplier%"
     }
 
     "case variants cannot overwrite another preset" {

@@ -298,13 +298,24 @@ async function runScenario (bot, config) {
     window = await clickNext(bot, 49)
     window = await clickNext(bot, 22)
     state = snapshot(window)
-    const voucherItems = state.slots.filter((item) => item.type === 'experience_bottle' || item.type === 'honey_bottle')
+    const voucherTypes = new Set([
+      'amethyst_shard',
+      'clock',
+      'echo_shard',
+      'lapis_lazuli',
+      'enchanted_book',
+      'prismarine_crystals',
+      'gold_nugget',
+      'emerald',
+      'nautilus_shell'
+    ])
+    const voucherItems = state.slots.filter((item) => voucherTypes.has(item.type))
     const voucherLore = voucherItems.flatMap((item) => item.lore ?? [])
     const localizedDuration = russian
       ? voucherLore.some((line) => /\d+[чм]/u.test(line)) && voucherLore.every((line) => !/\d+[hm](?:\s|$)/i.test(line))
       : voucherLore.some((line) => /\d+[hm](?:\s|$)/i.test(line))
-    record(results, 'booster presets', 'two signed previews with locale-specific duration units', state,
-      voucherItems.length === 2 && localizedDuration)
+    record(results, 'booster presets', 'nine distinct signed previews with locale-specific duration units', state,
+      voucherItems.length === 9 && new Set(voucherItems.map((item) => item.type)).size === 9 && localizedDuration)
   }
 
   return results

@@ -49,6 +49,7 @@ class VoucherServiceTest : StringSpec({
             minimumMultiplierBasisPoints = 101,
             maximumMultiplierBasisPoints = 1_000,
             maximumBoostDuration = Duration.ofDays(30),
+            maximumStackedBoostDuration = Duration.ofDays(365),
             requireMoneyPlaceholder = true,
             guiItems = GuiItems.vanilla(),
         )

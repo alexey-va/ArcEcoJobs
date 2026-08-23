@@ -31,8 +31,11 @@ message:
   booster-invalid: '<prefix><#e36d6d>This voucher is damaged or was not issued by RusCrafting.'
   booster-expired: '<prefix><#e36d6d>This voucher has expired.'
   booster-busy: '<prefix><#e6fff3>Activation of this voucher has already started. Try again later.'
-  booster-redeemed: '<prefix><#79c99e><multiplier> boost for <jobs> is active for <duration>.'
+  booster-redeemed: '<prefix><#79c99e><multiplier> boost for <jobs> activated. Remaining: <#92bed8><duration><#79c99e>.'
   booster-already-used: '<prefix><#e6fff3>This voucher has already been used.'
+  booster-type-conflict: '<prefix><#d8a657>Another boost type is active for <duration>. Wait for it to end — this voucher was kept.'
+  booster-effect-conflict: '<prefix><#d8a657>A different boost of this type is active for <duration>. Wait for it to end — this voucher was kept.'
+  booster-stack-limit: '<prefix><#d8a657>The accumulated boost-time limit has been reached. This voucher was kept.'
   booster-save-failed: '<prefix><#e36d6d>Could not activate the boost. The voucher was not consumed.'
   booster-unknown: '<prefix><#e36d6d>Booster preset <id> was not found.'
   booster-disabled: '<prefix><#e36d6d>Booster preset <id> is disabled.'
@@ -45,6 +48,8 @@ message:
   invalid-type: '<prefix><#e36d6d>Type must be ALL, XP, or MONEY.'
   invalid-jobs: '<prefix><#e36d6d>Unknown jobs: <jobs>.'
   boost-granted: '<prefix><#79c99e>Granted <player> a <multiplier> boost for <duration>.'
+  boost-conflict: '<prefix><#d8a657><player> already has an incompatible boost active for <duration>.'
+  boost-stack-limit: '<prefix><#d8a657><player> has reached the accumulated boost-time limit.'
   boost-revoked: '<prefix><#e6fff3>Removed boosts: <count>.'
   boost-empty: '<prefix><#e6fff3><player> has no active boosts.'
   boost-list-header: '<prefix><#e6fff3>Active boosts for <player>:'
@@ -338,10 +343,24 @@ menu:
     preset-action-disabled: '<#8c8c8c>Issuing is disabled in configuration'
 
 booster:
+  brief-shift:
+    name: '<#79c99e><b>Short-shift shard</b>'
   workday:
-    name: '<#92bed8><b>Workday voucher</b>'
+    name: '<#79c99e><b>Work-shift clock</b>'
+  long-shift:
+    name: '<#79c99e><b>Long-shift echo</b>'
   focused-xp:
-    name: '<#92bed8><b>Mastery draught</b>'
+    name: '<#92bed8><b>Mastery lapis</b>'
+  mastery-shift:
+    name: '<#92bed8><b>Mastery book</b>'
+  mastery-marathon:
+    name: '<#92bed8><b>Mentor seal</b>'
+  quick-profit:
+    name: '<#d8a657><b>Golden receipt</b>'
+  profit-shift:
+    name: '<#d8a657><b>Emerald contract</b>'
+  profit-marathon:
+    name: '<#d8a657><b>Treasurer seal</b>'
   common:
     lore:
       - '<#8c8c8c>Transferable job booster voucher'
@@ -350,5 +369,8 @@ booster:
       - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
       - '<#e6fff3>Duration: <#92bed8><duration>'
       - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - ''
+      - '<#8c8c8c>Matching effects add their duration'
+      - '<#8c8c8c>Another type can start after this one ends'
       - ''
       - '<#92bed8>Right-click to activate'

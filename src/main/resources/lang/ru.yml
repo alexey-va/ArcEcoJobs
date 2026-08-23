@@ -31,8 +31,11 @@ message:
   booster-invalid: '<prefix><#e36d6d>Этот талон повреждён или не принадлежит RusCrafting.'
   booster-expired: '<prefix><#e36d6d>Срок действия этого талона уже истёк.'
   booster-busy: '<prefix><#e6fff3>Активация этого талона уже началась. Повторите попытку позже.'
-  booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> действует <duration>.'
+  booster-redeemed: '<prefix><#79c99e>Усиление <multiplier> для <jobs> активировано. Осталось: <#92bed8><duration><#79c99e>.'
   booster-already-used: '<prefix><#e6fff3>Этот талон уже был использован.'
+  booster-type-conflict: '<prefix><#d8a657>Уже действует другой тип усиления ещё <duration>. Дождитесь окончания — талон сохранён.'
+  booster-effect-conflict: '<prefix><#d8a657>Уже действует другое усиление этого типа ещё <duration>. Дождитесь окончания — талон сохранён.'
+  booster-stack-limit: '<prefix><#d8a657>Достигнут предел накопленного времени усиления. Талон сохранён.'
   booster-save-failed: '<prefix><#e36d6d>Не удалось активировать усиление. Талон не потрачен.'
   booster-unknown: '<prefix><#e36d6d>Набор усилителей <id> не найден.'
   booster-disabled: '<prefix><#e36d6d>Набор усилителей <id> отключён.'
@@ -45,6 +48,8 @@ message:
   invalid-type: '<prefix><#e36d6d>Тип должен быть ALL, XP или MONEY.'
   invalid-jobs: '<prefix><#e36d6d>Неизвестные профессии: <jobs>.'
   boost-granted: '<prefix><#79c99e>Игроку <player> выдано усиление <multiplier> на <duration>.'
+  boost-conflict: '<prefix><#d8a657>У игрока <player> уже действует несовместимое усиление ещё <duration>.'
+  boost-stack-limit: '<prefix><#d8a657>Игрок <player> достиг предела накопленного времени усиления.'
   boost-revoked: '<prefix><#e6fff3>Удалено усилений: <count>.'
   boost-empty: '<prefix><#e6fff3>У игрока <player> нет активных усилений.'
   boost-list-header: '<prefix><#e6fff3>Активные усиления игрока <player>:'
@@ -338,10 +343,24 @@ menu:
     preset-action-disabled: '<#8c8c8c>Выдача отключена в конфигурации'
 
 booster:
+  brief-shift:
+    name: '<#79c99e><b>Осколок короткой смены</b>'
   workday:
-    name: '<#92bed8><b>Талон рабочего дня</b>'
+    name: '<#79c99e><b>Часы рабочей смены</b>'
+  long-shift:
+    name: '<#79c99e><b>Эхо долгой смены</b>'
   focused-xp:
-    name: '<#92bed8><b>Настой мастерства</b>'
+    name: '<#92bed8><b>Лазурь мастерства</b>'
+  mastery-shift:
+    name: '<#92bed8><b>Книга мастерства</b>'
+  mastery-marathon:
+    name: '<#92bed8><b>Печать наставника</b>'
+  quick-profit:
+    name: '<#d8a657><b>Золотая квитанция</b>'
+  profit-shift:
+    name: '<#d8a657><b>Изумрудный контракт</b>'
+  profit-marathon:
+    name: '<#d8a657><b>Печать казначея</b>'
   common:
     lore:
       - '<#8c8c8c>Передаваемый талон усиления'
@@ -350,5 +369,8 @@ booster:
       - '<#e6fff3>Множитель: <#92bed8><multiplier>'
       - '<#e6fff3>Срок: <#92bed8><duration>'
       - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - ''
+      - '<#8c8c8c>Одинаковые эффекты складывают время'
+      - '<#8c8c8c>Другой тип — только после окончания текущего'
       - ''
       - '<#92bed8>Нажмите ПКМ, чтобы активировать'

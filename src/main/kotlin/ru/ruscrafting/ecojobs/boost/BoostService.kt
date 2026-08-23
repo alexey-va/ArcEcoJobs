@@ -8,8 +8,10 @@ import net.luckperms.api.node.matcher.NodeMatcher
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.config.AddonSettings
+import ru.ruscrafting.ecojobs.domain.BoostApplicationDecision
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
+import ru.ruscrafting.ecojobs.domain.BoostStacking
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
@@ -21,7 +23,20 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
-enum class GrantResult { GRANTED, ALREADY_USED, BUSY, FAILED }
+enum class GrantResult {
+    GRANTED,
+    ALREADY_USED,
+    BUSY,
+    TYPE_CONFLICT,
+    EFFECT_CONFLICT,
+    STACK_LIMIT,
+    FAILED,
+}
+
+data class GrantOutcome(
+    val result: GrantResult,
+    val remaining: Duration? = null,
+)
 
 internal fun interface BoostNodeFactory {
     fun create(permission: String, expiry: Instant?): Node
@@ -70,18 +85,22 @@ class BoostService internal constructor(
         Multipliers.effective(active(player), jobId, type)
 
     fun redeem(payload: VoucherPayload, player: Player, callback: (GrantResult) -> Unit) {
+        redeemDetailed(payload, player) { callback(it.result) }
+    }
+
+    fun redeemDetailed(payload: VoucherPayload, player: Player, callback: (GrantOutcome) -> Unit) {
         voucherLedger.claim(payload, player.uniqueId).whenComplete { result, claimFailure ->
             if (claimFailure != null || result == null) {
                 logFailure("Could not claim voucher ${payload.voucherId}", claimFailure)
-                onMain { callback(GrantResult.FAILED) }
+                onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 return@whenComplete
             }
             when (result) {
-                VoucherClaimResult.AlreadyApplied -> onMain { callback(GrantResult.ALREADY_USED) }
-                VoucherClaimResult.Busy -> onMain { callback(GrantResult.BUSY) }
+                VoucherClaimResult.AlreadyApplied -> onMain { callback(GrantOutcome(GrantResult.ALREADY_USED)) }
+                VoucherClaimResult.Busy -> onMain { callback(GrantOutcome(GrantResult.BUSY)) }
                 VoucherClaimResult.Conflict -> {
                     plugin.logger.severe("Voucher ${payload.voucherId} conflicts with an existing signed redemption identity")
-                    onMain { callback(GrantResult.FAILED) }
+                    onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 }
                 is VoucherClaimResult.Acquired -> reconcileAndApply(payload, result.claim, callback)
             }
@@ -96,6 +115,17 @@ class BoostService internal constructor(
         jobs: Set<String>,
         callback: (GrantResult) -> Unit,
     ) {
+        grantDetailed(uuid, type, multiplierBasisPoints, duration, jobs) { callback(it.result) }
+    }
+
+    fun grantDetailed(
+        uuid: UUID,
+        type: BoostType,
+        multiplierBasisPoints: Int,
+        duration: Duration,
+        jobs: Set<String>,
+        callback: (GrantOutcome) -> Unit,
+    ) {
         val payload = VoucherPayload(
             presetId = "admin",
             voucherId = UUID.randomUUID(),
@@ -105,13 +135,13 @@ class BoostService internal constructor(
             jobs = jobs,
             issuedAtEpochSecond = Instant.now().epochSecond,
         )
-        mutate(uuid, payload, addUsedMarker = false, callback)
+        mutate(uuid, payload, callback)
     }
 
     private fun reconcileAndApply(
         payload: VoucherPayload,
         claim: VoucherClaim,
-        callback: (GrantResult) -> Unit,
+        callback: (GrantOutcome) -> Unit,
     ) {
         if (payload.signatureVersion == VoucherPayload.CURRENT_SIGNATURE_VERSION) {
             applyClaim(payload, claim, callback)
@@ -130,7 +160,7 @@ class BoostService internal constructor(
                 return@whenComplete
             }
             if (previouslyUsed) {
-                finishClaim(claim, GrantResult.ALREADY_USED, callback)
+                finishClaim(claim, GrantOutcome(GrantResult.ALREADY_USED), callback)
                 return@whenComplete
             }
             applyClaim(payload, claim, callback)
@@ -140,7 +170,7 @@ class BoostService internal constructor(
     private fun applyClaim(
         payload: VoucherPayload,
         claim: VoucherClaim,
-        callback: (GrantResult) -> Unit,
+        callback: (GrantOutcome) -> Unit,
     ) {
         luckPerms.userManager.loadUser(claim.redeemerId)
             .orTimeout(LP_OPERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -152,26 +182,53 @@ class BoostService internal constructor(
                 }
                 val usedKey = BoostNodeCodec.used(payload.voucherId)
                 if (user.getNodes(NodeType.PERMISSION).any { it.value && it.permission == usedKey }) {
-                    finishClaim(claim, GrantResult.ALREADY_USED, callback)
+                    finishClaim(claim, GrantOutcome(GrantResult.ALREADY_USED), callback)
                     return@whenComplete
                 }
-                val expiry = Instant.now().plusSeconds(payload.durationSeconds)
-                val boostNodes = runCatching {
-                    payload.jobs.map { scope ->
+                val now = Instant.now()
+                val decision = BoostStacking.decide(
+                    active = decode(user),
+                    payload = payload,
+                    now = now,
+                    maximumStackedDuration = settings().maximumStackedBoostDuration,
+                )
+                if (decision !is BoostApplicationDecision.Stack) {
+                    rejectBeforeMutation(claim, decision.outcome(), callback)
+                    return@whenComplete
+                }
+                val replacedNodes = user.getNodes(NodeType.PERMISSION).filter { permission ->
+                    BoostNodeCodec.decode(permission.permission)?.instanceId in decision.replacedInstanceIds
+                }
+                val created = runCatching {
+                    val expiry = now.plus(decision.totalRemaining)
+                    val marker = nodeFactory.create(usedKey, null)
+                    val boostNodes = payload.jobs.map { scope ->
                         nodeFactory.create(
                             BoostNodeCodec.encode(payload.type, payload.multiplierBasisPoints, scope, payload.voucherId),
                             expiry,
                         )
                     }
+                    marker to boostNodes
                 }.getOrElse {
+                    logFailure("Could not create LuckPerms nodes for voucher ${payload.voucherId}", it)
                     failBeforeMutation(claim, callback)
                     return@whenComplete
                 }
+                val removed = mutableListOf<Node>()
+                replacedNodes.forEach { node ->
+                    if (!user.data().remove(node).wasSuccessful()) {
+                        restore(user, removed)
+                        failBeforeMutation(claim, callback)
+                        return@whenComplete
+                    }
+                    removed += node
+                }
+                val (marker, boostNodes) = created
                 val added = mutableListOf<Node>()
-                val marker = nodeFactory.create(usedKey, null)
                 if (!user.data().add(marker).wasSuccessful()) {
+                    restore(user, removed)
                     if (user.getNodes(NodeType.PERMISSION).any { it.value && it.permission == usedKey }) {
-                        finishClaim(claim, GrantResult.ALREADY_USED, callback)
+                        finishClaim(claim, GrantOutcome(GrantResult.ALREADY_USED), callback)
                     } else {
                         failBeforeMutation(claim, callback)
                     }
@@ -180,7 +237,7 @@ class BoostService internal constructor(
                 added += marker
                 boostNodes.forEach { node ->
                     if (!user.data().add(node).wasSuccessful()) {
-                        if (rollback(user, added)) {
+                        if (rollbackMutation(user, added, removed)) {
                             failBeforeMutation(claim, callback)
                         } else {
                             failAfterPossibleMutation(claim, callback)
@@ -190,54 +247,68 @@ class BoostService internal constructor(
                     added += node
                 }
                 val save = runCatching { luckPerms.userManager.saveUser(user) }.getOrElse {
-                    rollback(user, added)
+                    rollbackMutation(user, added, removed)
                     logFailure("Could not start LuckPerms save for voucher ${payload.voucherId}", it)
                     failAfterPossibleMutation(claim, callback)
                     return@whenComplete
                 }
                 save.orTimeout(LP_OPERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS).whenComplete { _, saveFailure ->
                     if (saveFailure != null) {
-                        rollback(user, added)
+                        rollbackMutation(user, added, removed)
                         cache.remove(claim.redeemerId)
                         logFailure("LuckPerms save failed for voucher ${payload.voucherId}", saveFailure)
                         failAfterPossibleMutation(claim, callback)
                         return@whenComplete
                     }
                     cache.remove(claim.redeemerId)
-                    finishClaim(claim, GrantResult.GRANTED, callback)
+                    finishClaim(
+                        claim,
+                        GrantOutcome(GrantResult.GRANTED, decision.totalRemaining),
+                        callback,
+                    )
                 }
             }
     }
 
-    private fun failBeforeMutation(claim: VoucherClaim, callback: (GrantResult) -> Unit) {
+    private fun failBeforeMutation(claim: VoucherClaim, callback: (GrantOutcome) -> Unit) {
+        rejectBeforeMutation(claim, GrantOutcome(GrantResult.FAILED), callback)
+    }
+
+    private fun rejectBeforeMutation(
+        claim: VoucherClaim,
+        outcome: GrantOutcome,
+        callback: (GrantOutcome) -> Unit,
+    ) {
         val released = if (claim.newlyCreated) voucherLedger.release(claim) else voucherLedger.abandon(claim)
         released.whenComplete { closed, failure ->
             if (failure != null || closed != true) {
                 logFailure("Could not close failed voucher claim ${claim.voucherId}", failure)
             }
-            onMain { callback(GrantResult.FAILED) }
+            onMain { callback(if (failure == null && closed == true) outcome else GrantOutcome(GrantResult.FAILED)) }
         }
     }
 
-    private fun failAfterPossibleMutation(claim: VoucherClaim, callback: (GrantResult) -> Unit) {
+    private fun failAfterPossibleMutation(claim: VoucherClaim, callback: (GrantOutcome) -> Unit) {
         voucherLedger.abandon(claim).whenComplete { closed, failure ->
             if (failure != null || closed != true) {
                 logFailure("Could not release uncertain voucher claim ${claim.voucherId}", failure)
             }
-            onMain { callback(GrantResult.FAILED) }
+            onMain { callback(GrantOutcome(GrantResult.FAILED)) }
         }
     }
 
     private fun finishClaim(
         claim: VoucherClaim,
-        result: GrantResult,
-        callback: (GrantResult) -> Unit,
+        outcome: GrantOutcome,
+        callback: (GrantOutcome) -> Unit,
     ) {
         voucherLedger.markApplied(claim).whenComplete { applied, failure ->
             if (failure != null || applied != true) {
                 logFailure("Could not finalize voucher claim ${claim.voucherId}", failure)
             }
-            onMain { callback(if (failure == null && applied == true) result else GrantResult.FAILED) }
+            onMain {
+                callback(if (failure == null && applied == true) outcome else GrantOutcome(GrantResult.FAILED))
+            }
         }
     }
 
@@ -299,21 +370,29 @@ class BoostService internal constructor(
     private fun mutate(
         uuid: UUID,
         payload: VoucherPayload,
-        addUsedMarker: Boolean,
-        callback: (GrantResult) -> Unit,
+        callback: (GrantOutcome) -> Unit,
     ) {
         luckPerms.userManager.loadUser(uuid).whenComplete { user, loadFailure ->
             if (loadFailure != null || user == null) {
-                onMain { callback(GrantResult.FAILED) }
+                onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 return@whenComplete
             }
-            val usedKey = BoostNodeCodec.used(payload.voucherId)
-            if (addUsedMarker && user.getNodes(NodeType.PERMISSION).any { it.value && it.permission == usedKey }) {
-                onMain { callback(GrantResult.ALREADY_USED) }
+            val now = Instant.now()
+            val decision = BoostStacking.decide(
+                active = decode(user),
+                payload = payload,
+                now = now,
+                maximumStackedDuration = settings().maximumStackedBoostDuration,
+            )
+            if (decision !is BoostApplicationDecision.Stack) {
+                onMain { callback(decision.outcome()) }
                 return@whenComplete
             }
-            val expiry = Instant.now().plusSeconds(payload.durationSeconds)
+            val replacedNodes = user.getNodes(NodeType.PERMISSION).filter { permission ->
+                BoostNodeCodec.decode(permission.permission)?.instanceId in decision.replacedInstanceIds
+            }
             val boostNodes = runCatching {
+                val expiry = now.plus(decision.totalRemaining)
                 payload.jobs.map { scope ->
                     nodeFactory.create(
                         BoostNodeCodec.encode(payload.type, payload.multiplierBasisPoints, scope, payload.voucherId),
@@ -321,37 +400,50 @@ class BoostService internal constructor(
                     )
                 }
             }.getOrElse {
-                onMain { callback(GrantResult.FAILED) }
+                onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 return@whenComplete
+            }
+            val removed = mutableListOf<Node>()
+            replacedNodes.forEach { node ->
+                if (!user.data().remove(node).wasSuccessful()) {
+                    restore(user, removed)
+                    onMain { callback(GrantOutcome(GrantResult.FAILED)) }
+                    return@whenComplete
+                }
+                removed += node
             }
             val added = mutableListOf<Node>()
             val save = runCatching {
-                if (addUsedMarker) {
-                    val marker = nodeFactory.create(usedKey, null)
-                    if (!user.data().add(marker).wasSuccessful()) {
-                        onMain { callback(GrantResult.ALREADY_USED) }
-                        return@whenComplete
-                    }
-                    added += marker
-                }
                 boostNodes.forEach { node ->
                     require(user.data().add(node).wasSuccessful()) { "Boost node was not added" }
                     added += node
                 }
                 luckPerms.userManager.saveUser(user)
             }.getOrElse {
-                rollback(user, added)
-                onMain { callback(GrantResult.FAILED) }
+                rollbackMutation(user, added, removed)
+                onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 return@whenComplete
             }
             save.whenComplete { _, saveFailure ->
                 if (saveFailure != null) {
-                    rollback(user, added)
+                    rollbackMutation(user, added, removed)
                 }
                 cache.remove(uuid)
-                onMain { callback(if (saveFailure == null) GrantResult.GRANTED else GrantResult.FAILED) }
+                onMain {
+                    callback(
+                        if (saveFailure == null) GrantOutcome(GrantResult.GRANTED, decision.totalRemaining)
+                        else GrantOutcome(GrantResult.FAILED),
+                    )
+                }
             }
         }
+    }
+
+    private fun BoostApplicationDecision.outcome(): GrantOutcome = when (this) {
+        is BoostApplicationDecision.Stack -> GrantOutcome(GrantResult.GRANTED, totalRemaining)
+        is BoostApplicationDecision.TypeConflict -> GrantOutcome(GrantResult.TYPE_CONFLICT, remaining)
+        is BoostApplicationDecision.EffectConflict -> GrantOutcome(GrantResult.EFFECT_CONFLICT, remaining)
+        BoostApplicationDecision.LimitExceeded -> GrantOutcome(GrantResult.STACK_LIMIT)
     }
 
     private fun decode(user: User): List<BoostInstance> {
@@ -382,11 +474,19 @@ class BoostService internal constructor(
         return complete
     }
 
-    private fun restore(user: User, nodes: Collection<Node>) {
+    private fun rollbackMutation(user: User, added: Collection<Node>, removed: Collection<Node>): Boolean =
+        rollback(user, added).and(restore(user, removed))
+
+    private fun restore(user: User, nodes: Collection<Node>): Boolean {
+        var complete = true
         nodes.forEach { node ->
             runCatching { require(user.data().add(node).wasSuccessful()) { "node was not restored" } }
-                .onFailure { plugin.logger.severe("Could not restore an ArcEcoJobs node after a failed save: ${it.message}") }
+                .onFailure {
+                    complete = false
+                    plugin.logger.severe("Could not restore an ArcEcoJobs node after a failed save: ${it.message}")
+                }
         }
+        return complete
     }
 
     private fun onMain(block: () -> Unit) {

@@ -10,7 +10,7 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.6.jar`. The test suite
+The production artifact is `build/libs/ArcEcoJobs-0.1.7.jar`. The test suite
 starts a disposable MySQL 8.0.46 container to prove concurrent redemption.
 
 Read-only lab GUI acceptance:
@@ -20,15 +20,22 @@ cd ../scripts/player-bot
 npm run qa:arcecojobs
 ARC_ECOJOBS_QA_LOCALE=en_US npm run qa:arcecojobs
 ARC_ECOJOBS_QA_ROLE=player npm run qa:arcecojobs
+ARC_ECOJOBS_QA_ALLOW_MUTATIONS=true npm run qa:arcecojobs:vouchers
 ```
 
 The scenario uses only `/jobs` and fixed read-only menu routes. It never joins
 or leaves a job, grants a voucher, clicks a voucher preset, or changes
 LuckPerms. The default admin run validates the reload control without clicking
-it. A lab-only mutation run can explicitly include reload and a cold cache
+it. The preset view verifies all nine distinct vanilla voucher previews. A
+lab-only mutation run can explicitly include reload and a cold cache
 rebuild with `ARC_ECOJOBS_QA_ALLOW_MUTATIONS=true`. The admin run covers every
 screen and both pages of the 50-level scale; player mode additionally proves
 that the management entry stays hidden.
+
+The separate voucher smoke is mutation-gated and lab-only. It gives two
+30-minute XP vouchers to the disposable QA player, activates both while looking
+into the air, verifies a one-hour total, rejects a money voucher without
+spending it, then revokes the boost and clears the QA inventory.
 
 ## Money integration
 
@@ -77,6 +84,13 @@ Voucher configuration supports Bukkit persistent data, which is the stable
 namespaced NBT surface; arbitrary raw NBT
 is deliberately unsupported because it is version-sensitive and could replace
 the plugin's signed fields.
+
+A signed voucher activates on right-click in air or on a block. ArcEcoJobs also
+cancels vanilla item consumption and projectile launch as a compatibility
+fallback for previously issued bottle-shaped vouchers. Matching boosts (same
+type, multiplier, and job scope) add their remaining durations and are saved as
+one LuckPerms instance. A different type or effect is rejected without spending
+the voucher. `boosts.maximum-stacked-duration` bounds the accumulated duration.
 
 ## Leaderboard consistency
 

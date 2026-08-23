@@ -1,15 +1,51 @@
 boosters:
+  brief-shift:
+    enabled: true
+    type: ALL
+    multiplier: 1.5
+    duration: 15m
+    jobs: [all]
+    item:
+      material: AMETHYST_SHARD
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.brief-shift.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
   workday:
     enabled: true
-    # Optional: ALL by default. XP and MONEY are also supported.
+    type: ALL
     multiplier: 1.5
     duration: 1h
     jobs: [all]
     item:
-      material: EXPERIENCE_BOTTLE
+      material: CLOCK
       custom-model-data: 0
       item-model: ''
       name-key: booster.workday.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  long-shift:
+    enabled: true
+    type: ALL
+    multiplier: 1.5
+    duration: 3h
+    jobs: [all]
+    item:
+      material: ECHO_SHARD
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.long-shift.name
       lore-key: booster.common.lore
       glint: true
       unbreakable: false
@@ -24,10 +60,100 @@ boosters:
     duration: 30m
     jobs: [all]
     item:
-      material: HONEY_BOTTLE
+      material: LAPIS_LAZULI
       custom-model-data: 0
       item-model: ''
       name-key: booster.focused-xp.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  mastery-shift:
+    enabled: true
+    type: XP
+    multiplier: 2.0
+    duration: 2h
+    jobs: [all]
+    item:
+      material: ENCHANTED_BOOK
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.mastery-shift.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  mastery-marathon:
+    enabled: true
+    type: XP
+    multiplier: 2.0
+    duration: 4h
+    jobs: [all]
+    item:
+      material: PRISMARINE_CRYSTALS
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.mastery-marathon.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  quick-profit:
+    enabled: true
+    type: MONEY
+    multiplier: 1.5
+    duration: 30m
+    jobs: [all]
+    item:
+      material: GOLD_NUGGET
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.quick-profit.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  profit-shift:
+    enabled: true
+    type: MONEY
+    multiplier: 1.5
+    duration: 2h
+    jobs: [all]
+    item:
+      material: EMERALD
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.profit-shift.name
+      lore-key: booster.common.lore
+      glint: true
+      unbreakable: false
+      flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
+      persistent-data:
+        ruscrafting:source: arcjobs
+
+  profit-marathon:
+    enabled: true
+    type: MONEY
+    multiplier: 1.5
+    duration: 4h
+    jobs: [all]
+    item:
+      material: NAUTILUS_SHELL
+      custom-model-data: 0
+      item-model: ''
+      name-key: booster.profit-marathon.name
       lore-key: booster.common.lore
       glint: true
       unbreakable: false

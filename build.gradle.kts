@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.6"
+version = "0.1.7"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 repositories {

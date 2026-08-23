@@ -164,12 +164,30 @@ class JobsCommand(
         val type = args.getOrNull(3)?.let(BoostType::parse) ?: BoostType.ALL
         if (args.getOrNull(3) != null && BoostType.parse(args[3]) == null) return message(sender, "message.invalid-type")
         val jobs = parseJobs(sender, args.getOrNull(4) ?: "all") ?: return true
-        boosts.grant(target.uniqueId, type, multiplier, duration, jobs) { result ->
-            if (result == GrantResult.GRANTED) message(sender, "message.boost-granted", mapOf(
-                "player" to text(target.name ?: args[0]),
-                "multiplier" to text(Multipliers.format(multiplier)),
-                "duration" to text(locale.duration(duration, sender)),
-            )) else message(sender, "message.booster-save-failed")
+        boosts.grantDetailed(target.uniqueId, type, multiplier, duration, jobs) { outcome ->
+            val playerName = text(target.name ?: args[0])
+            when (outcome.result) {
+                GrantResult.GRANTED -> message(sender, "message.boost-granted", mapOf(
+                    "player" to playerName,
+                    "multiplier" to text(Multipliers.format(multiplier)),
+                    "duration" to text(locale.duration(outcome.remaining ?: duration, sender)),
+                ))
+                GrantResult.TYPE_CONFLICT, GrantResult.EFFECT_CONFLICT -> message(
+                    sender,
+                    "message.boost-conflict",
+                    mapOf(
+                        "player" to playerName,
+                        "duration" to text(locale.duration(outcome.remaining ?: Duration.ZERO, sender)),
+                    ),
+                )
+                GrantResult.STACK_LIMIT -> message(
+                    sender,
+                    "message.boost-stack-limit",
+                    mapOf("player" to playerName),
+                )
+                GrantResult.ALREADY_USED, GrantResult.BUSY, GrantResult.FAILED ->
+                    message(sender, "message.booster-save-failed")
+            }
         }
         return true
     }

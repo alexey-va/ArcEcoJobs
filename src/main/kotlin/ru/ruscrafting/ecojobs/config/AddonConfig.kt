@@ -22,6 +22,7 @@ data class AddonSettings(
     val minimumMultiplierBasisPoints: Int,
     val maximumMultiplierBasisPoints: Int,
     val maximumBoostDuration: Duration,
+    val maximumStackedBoostDuration: Duration,
     val requireMoneyPlaceholder: Boolean,
     val guiItems: GuiItems,
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
@@ -49,6 +50,14 @@ data class AddonSettings(
             require(boostCacheMillis in 100..10_000) {
                 "boosts.cache-millis must be between 100 and 10000"
             }
+            val maximumBoostDuration = DurationParser.parse(yaml.getString("boosts.maximum-duration", "30d")!!)
+                ?: error("boosts.maximum-duration is invalid")
+            val maximumStackedBoostDuration = DurationParser.parse(
+                yaml.getString("boosts.maximum-stacked-duration", "365d")!!,
+            ) ?: error("boosts.maximum-stacked-duration is invalid")
+            require(maximumStackedBoostDuration >= maximumBoostDuration) {
+                "boosts.maximum-stacked-duration must not be shorter than boosts.maximum-duration"
+            }
             return AddonSettings(
                 defaultLocale = defaultLocale,
                 useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
@@ -58,8 +67,8 @@ data class AddonSettings(
                 boostCacheMillis = boostCacheMillis,
                 minimumMultiplierBasisPoints = min,
                 maximumMultiplierBasisPoints = max,
-                maximumBoostDuration = DurationParser.parse(yaml.getString("boosts.maximum-duration", "30d")!!)
-                    ?: error("boosts.maximum-duration is invalid"),
+                maximumBoostDuration = maximumBoostDuration,
+                maximumStackedBoostDuration = maximumStackedBoostDuration,
                 requireMoneyPlaceholder = yaml.getBoolean("boosts.require-money-placeholder", true),
                 guiItems = GuiItems.load(yaml),
                 redemptionStorage = RedemptionStorageSettings.load(yaml),

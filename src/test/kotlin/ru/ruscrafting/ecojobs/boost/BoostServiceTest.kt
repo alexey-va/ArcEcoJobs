@@ -65,6 +65,7 @@ class BoostServiceTest : StringSpec({
             minimumMultiplierBasisPoints = 101,
             maximumMultiplierBasisPoints = 1_000,
             maximumBoostDuration = Duration.ofDays(30),
+            maximumStackedBoostDuration = Duration.ofDays(365),
             requireMoneyPlaceholder = true,
             guiItems = GuiItems.vanilla(),
         )
@@ -158,6 +159,36 @@ class BoostServiceTest : StringSpec({
         service.redeem(transferablePayload, otherPlayer, copiedRedemption::add)
         server.scheduler.performTicks(2)
         copiedRedemption shouldBe listOf(GrantResult.GRANTED)
+
+        val stackedPayload = payload.copy(voucherId = UUID.randomUUID())
+        val stackedRedemption = mutableListOf<GrantOutcome>()
+        service.redeemDetailed(stackedPayload, otherPlayer, stackedRedemption::add)
+        server.scheduler.performTicks(2)
+        stackedRedemption.single() shouldBe GrantOutcome(GrantResult.GRANTED, Duration.ofHours(2))
+        stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.instanceId }.toSet() shouldBe setOf(stackedPayload.voucherId)
+        stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.scope }.toSet() shouldBe setOf("miner", "fisherman")
+
+        val beforeConflicts = stored.keys.toSet()
+        val typeConflict = mutableListOf<GrantOutcome>()
+        service.redeemDetailed(
+            payload.copy(voucherId = UUID.randomUUID(), type = BoostType.MONEY),
+            otherPlayer,
+            typeConflict::add,
+        )
+        server.scheduler.performTicks(2)
+        typeConflict.single().result shouldBe GrantResult.TYPE_CONFLICT
+        stored.keys.toSet() shouldBe beforeConflicts
+
+        val effectConflict = mutableListOf<GrantOutcome>()
+        service.redeemDetailed(
+            payload.copy(voucherId = UUID.randomUUID(), multiplierBasisPoints = 200),
+            otherPlayer,
+            effectConflict::add,
+        )
+        server.scheduler.performTicks(2)
+        effectConflict.single().result shouldBe GrantResult.EFFECT_CONFLICT
+        stored.keys.toSet() shouldBe beforeConflicts
+
         service.redeem(transferablePayload, player, redemption::add)
         server.scheduler.performTicks(2)
         redemption.last() shouldBe GrantResult.ALREADY_USED
@@ -186,10 +217,12 @@ class BoostServiceTest : StringSpec({
         redemption.last() shouldBe GrantResult.ALREADY_USED
 
         val failedSavePayload = payload.copy(voucherId = UUID.randomUUID())
+        val beforeFailedSaveAttempt = stored.keys.toSet()
         every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
         service.redeem(failedSavePayload, player, redemption::add)
         server.scheduler.performTicks(2)
         redemption.last() shouldBe GrantResult.FAILED
+        stored.keys.toSet() shouldBe beforeFailedSaveAttempt
         service.redeem(failedSavePayload, otherPlayer, copiedRedemption::add)
         server.scheduler.performTicks(2)
         copiedRedemption.last() shouldBe GrantResult.BUSY
@@ -210,7 +243,7 @@ class BoostServiceTest : StringSpec({
 
         service.redeem(partialVoucher, player, redemption::add)
         server.scheduler.performTicks(2)
-        redemption.last() shouldBe GrantResult.FAILED
+        redemption.last() shouldBe GrantResult.EFFECT_CONFLICT
         stored.keys.toSet() shouldBe beforeFailedSave
 
         every { users.saveUser(user) } returns CompletableFuture.failedFuture(IllegalStateException("storage unavailable"))
@@ -224,6 +257,6 @@ class BoostServiceTest : StringSpec({
         failedRevokeCount shouldBe null
         (failedRevokeCause is IllegalStateException) shouldBe true
         stored.keys.toSet() shouldBe beforeFailedSave
-        verify(exactly = 7) { users.saveUser(user) }
+        verify(exactly = 8) { users.saveUser(user) }
     }
 })

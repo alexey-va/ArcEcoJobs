@@ -15,6 +15,7 @@ boosts:
   minimum-multiplier: 1.01
   maximum-multiplier: 10.0
   maximum-duration: 30d
+  maximum-stacked-duration: 365d
   require-money-placeholder: true
 
 # Required for redeeming signed vouchers safely across multiple servers.

@@ -21,6 +21,7 @@ class AddonConfigTest : StringSpec({
         minimumMultiplierBasisPoints = 101,
         maximumMultiplierBasisPoints = 1_000,
         maximumBoostDuration = Duration.ofDays(30),
+        maximumStackedBoostDuration = Duration.ofDays(365),
         requireMoneyPlaceholder = true,
         guiItems = GuiItems.vanilla(),
     )
@@ -68,6 +69,16 @@ class AddonConfigTest : StringSpec({
         invalidConfigs.forEach { contents ->
             shouldThrow<IllegalArgumentException> { AddonSettings.load(yaml(contents)) }
         }
+    }
+
+    "stacked duration cannot be shorter than one voucher duration" {
+        val config = yaml("""
+            boosts:
+              maximum-duration: 30d
+              maximum-stacked-duration: 29d
+        """.trimIndent())
+
+        shouldThrow<IllegalArgumentException> { AddonSettings.load(config) }
     }
 
     "enabled voucher redemption requires bounded MySQL settings and a password" {
@@ -149,6 +160,32 @@ class AddonConfigTest : StringSpec({
         gui.back.material shouldBe Material.BLUE_STAINED_GLASS_PANE
         gui.refresh.material shouldBe Material.REPEATER
         gui.catalog.material shouldBe Material.CRAFTING_TABLE
+    }
+
+    "bundled voucher presets use nine distinct non-consumable vanilla items" {
+        val registry = BoosterRegistry.load(
+            project.resolve("src/main/resources/boosters.yml").toFile(),
+            settings,
+            setOf("miner"),
+        )
+        val materials = registry.values().map { it.item.material }
+
+        materials.size shouldBe 9
+        materials.toSet().size shouldBe 9
+        materials.none {
+            it in setOf(Material.EXPERIENCE_BOTTLE, Material.HONEY_BOTTLE, Material.POTION, Material.SPLASH_POTION)
+        } shouldBe true
+    }
+
+    "production and lab voucher catalogs match the bundled defaults" {
+        val expected = Files.readString(project.resolve("src/main/resources/boosters.yml"))
+        listOf(
+            project.parent.resolve("classic/plugins/ArcEcoJobs/boosters.yml"),
+            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/boosters.yml"),
+            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/boosters.yml"),
+        ).forEach { path ->
+            Files.readString(path) shouldBe expected
+        }
     }
 
     "production GUI overlays use the reviewed RusCrafting model data on both nodes" {

@@ -275,7 +275,7 @@ class AddonConfigTest : StringSpec({
         )
         explorer.getString("name") shouldBe "&#57B8C2Исследователь"
         explorer.getInt("max-level") shouldBe 50
-        explorer.getString("icon") shouldBe "golden_boots"
+        explorer.getString("icon") shouldBe "player_head texture:eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDcwNmIwNWQyZWVlNjU0NDAxNWM4YTY0M2NhNWQzNTcyZjNkOTAwM2M5ZDA4NDJhYjUxNzMyNTgyYmQ4ZDhlOSJ9fX0="
         explorer.getMapList("xp-gain-methods").single()["trigger"] shouldBe
             "custom_arcecojobs_discover_chunk"
         val money = explorer.getMapList("effects").single()

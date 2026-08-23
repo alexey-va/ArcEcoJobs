@@ -20,7 +20,14 @@ class LibreforgeExplorationTrigger : ExplorationTrigger {
         val data = TriggerData(
             dispatcher = dispatcher,
             player = player,
+            victim = null,
+            block = null,
+            event = null,
             location = player.location,
+            projectile = null,
+            velocity = null,
+            item = null,
+            text = null,
             value = experienceFactor,
             altValue = moneyFactor,
         )

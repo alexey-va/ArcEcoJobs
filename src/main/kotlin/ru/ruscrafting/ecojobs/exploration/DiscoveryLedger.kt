@@ -220,7 +220,7 @@ class MySqlDiscoveryLedger private constructor(
         private const val CHUNKS_TABLE = "arcecojobs_explored_chunks"
         private const val DISCOVERIES_TABLE = "arcecojobs_chunk_discoveries"
         private const val MIGRATION_LOCK = "arc:arcecojobs:migrations"
-        private const val MIGRATION_VERSION = 2
+        private const val MIGRATION_VERSION = 3
         private val CREATE_CHUNKS = """
             CREATE TABLE IF NOT EXISTS `$CHUNKS_TABLE` (
                 `world_id` BINARY(16) NOT NULL,
@@ -248,10 +248,7 @@ class MySqlDiscoveryLedger private constructor(
                 CONSTRAINT `arcecojobs_discovery_rank_chk`
                     CHECK (`discovery_rank` BETWEEN 1 AND $MAX_DISCOVERERS),
                 CONSTRAINT `arcecojobs_discovery_status_chk`
-                    CHECK (`status` IN ('CLAIMED', 'APPLIED', 'ABANDONED')),
-                CONSTRAINT `arcecojobs_discovery_chunk_fk`
-                    FOREIGN KEY (`world_id`, `chunk_x`, `chunk_z`)
-                    REFERENCES `$CHUNKS_TABLE` (`world_id`, `chunk_x`, `chunk_z`)
+                    CHECK (`status` IN ('CLAIMED', 'APPLIED', 'ABANDONED'))
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """.trimIndent()
         private val MIGRATION_CHECKSUM = MessageDigest.getInstance("SHA-256")
@@ -354,7 +351,7 @@ class MySqlDiscoveryLedger private constructor(
                         """.trimIndent(),
                     ).use { statement ->
                         statement.setInt(1, MIGRATION_VERSION)
-                        statement.setString(2, "create chunk discovery ledger")
+                        statement.setString(2, "create least-privilege chunk discovery ledger")
                         statement.setString(3, MIGRATION_CHECKSUM)
                         statement.setTimestamp(4, Timestamp.from(Instant.now()))
                         statement.executeUpdate()

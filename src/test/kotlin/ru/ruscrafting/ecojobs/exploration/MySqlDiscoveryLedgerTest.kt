@@ -7,6 +7,7 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.DockerImageName
+import org.testcontainers.utility.MountableFile
 import ru.ruscrafting.ecojobs.config.RedemptionStorageSettings
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -15,9 +16,11 @@ import java.util.concurrent.CountDownLatch
 class MySqlDiscoveryLedgerTest : StringSpec({
     val mysql: GenericContainer<*> = GenericContainer(DockerImageName.parse("mysql:8.0.46"))
         .withEnv("MYSQL_DATABASE", "arcecojobs_exploration_test")
-        .withEnv("MYSQL_USER", "arcecojobs_test")
-        .withEnv("MYSQL_PASSWORD", "test-password")
         .withEnv("MYSQL_ROOT_PASSWORD", "root-password")
+        .withCopyFileToContainer(
+            MountableFile.forClasspathResource("mysql/arcecojobs-least-privilege.sql"),
+            "/docker-entrypoint-initdb.d/10-arcecojobs-least-privilege.sql",
+        )
         .withExposedPorts(3306)
         .waitingFor(Wait.forLogMessage(".*ready for connections.*\\n", 2))
 
@@ -42,6 +45,16 @@ class MySqlDiscoveryLedgerTest : StringSpec({
     }
 
     afterSpec { mysql.stop() }
+
+    "least-privilege production grants can create the discovery schema" {
+        MySqlDiscoveryLedger.open(settings).use { ledger ->
+            val claim = ledger.claim(
+                DiscoveryKey(UUID.randomUUID(), 0, 0),
+                UUID.randomUUID(),
+            ).join().shouldBeInstanceOf<DiscoveryClaimResult.Acquired>().claim
+            ledger.finish(claim, DiscoveryDeliveryStatus.APPLIED).join() shouldBe true
+        }
+    }
 
     "two nodes assign the first five different explorers unique ordered ranks" {
         val firstNode = MySqlDiscoveryLedger.open(settings)

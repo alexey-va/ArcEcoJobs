@@ -35,6 +35,8 @@ reward over a duplicate monetary payout. The feature requires
 The job definition is tracked for spawn, survival, and the isolated lab.
 Production enables exploration on both gameplay nodes and shares one MySQL
 ledger, so a chunk keeps the same five discovery ranks across the network.
+The discovery migration stays within the provisioned least-privilege grant set
+and does not require MySQL `REFERENCES`.
 
 Read-only lab GUI acceptance:
 

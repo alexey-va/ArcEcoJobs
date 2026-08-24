@@ -8,7 +8,9 @@ import io.mockk.verify
 import net.milkbowl.vault.economy.Economy
 import net.milkbowl.vault.economy.EconomyResponse
 import org.bukkit.OfflinePlayer
+import ru.ruscrafting.ecojobs.earnings.MoneyAttribution
 import java.math.BigDecimal
+import java.util.UUID
 
 class VaultEconomyIntegrationTest : StringSpec({
     val player = mockk<OfflinePlayer>()
@@ -37,6 +39,29 @@ class VaultEconomyIntegrationTest : StringSpec({
         every { economy.depositPlayer(player, 4.25) } returns failure(4.25, 12.75)
 
         integration.giveMoney(player, BigDecimal("4.25")) shouldBe false
+    }
+
+    "records only successful deposits carrying an exact job marker" {
+        val playerId = UUID.randomUUID()
+        val attribution = MoneyAttribution()
+        val recorded = mutableListOf<Pair<String, BigDecimal>>()
+        val tracked = VaultEconomyIntegration(economy, attribution) { _, jobId, amount ->
+            recorded += jobId to amount
+        }
+        every { player.uniqueId } returns playerId
+        every { economy.depositPlayer(player, 4.25) } returns success(4.0, 17.0)
+        every { economy.depositPlayer(player, 2.0) } returns failure(2.0, 17.0)
+
+        tracked.giveMoney(player, BigDecimal("4.25")) shouldBe true
+        recorded shouldBe emptyList()
+
+        attribution.mark(playerId, "builder")
+        tracked.giveMoney(player, BigDecimal("4.25")) shouldBe true
+        recorded shouldBe listOf("builder" to BigDecimal("4.0"))
+
+        attribution.mark(playerId, "builder")
+        tracked.giveMoney(player, BigDecimal("2")) shouldBe false
+        recorded shouldBe listOf("builder" to BigDecimal("4.0"))
     }
 
     "withdraws the requested amount through Vault" {

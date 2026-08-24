@@ -138,10 +138,15 @@ class EcoJobsBridge(
         })
     }
 
-    fun moneyIntegrationProblems(): List<String> = jobs().mapNotNull { job ->
-        val expected = "%arcecojobs_boost_${job.id}_money_multiplier%"
+    fun moneyIntegrationProblems(requireEarningsMarker: Boolean = settings().earnings.enabled): List<String> = jobs().mapNotNull { job ->
+        val multiplier = "%arcecojobs_boost_${job.id}_money_multiplier%"
+        val marker = "%arcecojobs_earnings_${job.id}_money_marker%"
         val effects = job.config.getSubsections("effects").filter { it.getString("id") == "give_money" }
-        if (effects.isEmpty() || effects.all { expected in it.getString("args.amount") }) null else job.id
+        val integrated = effects.isNotEmpty() && effects.all { effect ->
+            val amount = effect.getString("args.amount")
+            multiplier in amount && (!requireEarningsMarker || marker in amount)
+        }
+        if (integrated) null else job.id
     }
 
     fun invalidateLeaderboards() {

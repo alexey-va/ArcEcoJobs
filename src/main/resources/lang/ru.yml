@@ -212,6 +212,43 @@ menu:
     status-future: '<#8c8c8c>Ещё не достигнут'
     no-rewards: '<#8c8c8c>  Без отдельной награды'
 
+  earnings:
+    title: '<#20252b>Заработок · <job>'
+    hours-title: '<#20252b><job> · <date>'
+    summary-name: '<#d8a657>Заработок'
+    summary-lore:
+      - '<#8c8c8c>Сегодня'
+      - '<#e6fff3>Деньги: <#92bed8><today_money> <#8c8c8c>· <#e6fff3>Опыт: <#92bed8><today_xp>'
+      - '<#8c8c8c>Текущий час'
+      - '<#e6fff3>Деньги: <#92bed8><hour_money> <#8c8c8c>· <#e6fff3>Опыт: <#92bed8><hour_xp>'
+      - '<#8c8c8c>Последние 7 дней'
+      - '<#e6fff3>Деньги: <#92bed8><week_money> <#8c8c8c>· <#e6fff3>Опыт: <#92bed8><week_xp>'
+      - ''
+      - '<#92bed8>Нажмите, чтобы открыть историю'
+    today-name: '<#d8a657>Сегодня · <date>'
+    day-name: '<#e6fff3><date>'
+    day-lore:
+      - '<#e6fff3>Деньги: <#92bed8><money>'
+      - '<#e6fff3>Опыт: <#92bed8><xp>'
+      - ''
+      - '<#92bed8>Нажмите для разбивки по часам'
+    day-summary-name: '<#d8a657><date>'
+    day-summary-lore:
+      - '<#e6fff3>Деньги за день: <#92bed8><money>'
+      - '<#e6fff3>Опыт за день: <#92bed8><xp>'
+    hour-name: '<#e6fff3><from>–<to>'
+    hour-lore:
+      - '<#e6fff3>Деньги: <#92bed8><money>'
+      - '<#e6fff3>Опыт: <#92bed8><xp>'
+    loading-name: '<#d8a657>Считаем заработок…'
+    loading-lore:
+      - '<#e6fff3>Почасовые суммы читаются в фоне.'
+      - '<#8c8c8c>Меню обновится автоматически.'
+    unavailable-name: '<#e36d6d>История временно недоступна'
+    unavailable-lore:
+      - '<#e6fff3>Профессии и выплаты продолжают работать.'
+      - '<#8c8c8c>Попробуйте открыть карточку позже.'
+
   leaderboard:
     selector-title: '<#20252b>Лидеры'
     global-name: '<#92bed8>Общий рейтинг'

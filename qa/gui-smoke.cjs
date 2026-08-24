@@ -210,8 +210,30 @@ async function runScenario (bot, config) {
   window = await clickNext(bot, 45)
   window = await clickNext(bot, 10)
   state = snapshot(window)
-  record(results, 'job card', 'overview, levels, leaderboard, boosts, and join/leave action', state,
-    [13, 29, 31, 33, 40, 45].every((slot) => hasSlot(state, slot)))
+  record(results, 'job card', 'overview, earnings, levels, leaderboard, boosts, and join/leave action', state,
+    [13, 22, 29, 31, 33, 40, 45].every((slot) => hasSlot(state, slot)))
+
+  window = await clickNext(bot, 22)
+  if (!hasSlot(snapshot(window), 4)) {
+    window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 4))
+  }
+  state = snapshot(window)
+  record(results, 'daily earnings', '30 bounded daily totals with money and XP plus hourly navigation', state,
+    /Earnings|Заработок/i.test(state.title) && hasSlot(state, 4) && countCatalogCards(state) === 28 && hasSlot(state, 51))
+
+  window = await clickNext(bot, 10)
+  if (!hasSlot(snapshot(window), 4)) {
+    window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 4))
+  }
+  state = snapshot(window)
+  record(results, 'hourly earnings', 'selected day exposes exactly 24 hourly money and XP buckets', state,
+    hasSlot(state, 4) && countCatalogCards(state) === 24 && hasSlot(state, 45))
+
+  window = await clickNext(bot, 45)
+  if (!hasSlot(snapshot(window), 4)) {
+    window = await waitForCurrentWindow(bot, (candidate) => hasSlot(candidate, 4))
+  }
+  window = await clickNext(bot, 45)
 
   window = await clickNext(bot, 29)
   state = snapshot(window)

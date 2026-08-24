@@ -10,8 +10,9 @@ Build:
 ../arc-core/gradlew -p . clean check shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.10.jar`. The test suite
-starts a disposable MySQL 8.0.46 container to prove concurrent redemption.
+The production artifact is `build/libs/ArcEcoJobs-0.1.11.jar`. The test suite
+starts a disposable MySQL 8.0.46 container to prove concurrent redemption and
+idempotent hourly earnings aggregation.
 
 ## Explorer job
 
@@ -79,11 +80,30 @@ Every EcoJobs `give_money.args.amount` expression for job `<id>` must multiply
 its original expression by:
 
 ```text
-%arcecojobs_boost_<id>_money_multiplier%
+%arcecojobs_boost_<id>_money_multiplier% * %arcecojobs_earnings_<id>_money_marker%
 ```
 
-The PlaceholderAPI expansion returns a plain number such as `1.5`. XP boosts
-are applied independently through `PlayerJobExpGainEvent`.
+The boost placeholder returns a plain number such as `1.5`. The earnings marker
+always returns `1`, carries the exact job into the immediately following Vault
+deposit, and records the provider-confirmed amount only after that deposit is
+accepted. XP boosts and earned XP are observed independently through
+`PlayerJobExpGainEvent`.
+
+## Earnings history
+
+Each job card shows the player's money and XP earned today, during the current
+hour, and across the last seven calendar days. The history screen contains one
+entry per day; selecting a day opens its 24-hour breakdown. This is personal
+analytics, not an authoritative economy ledger, and it begins collecting only
+after the feature is deployed.
+
+Events are combined into one in-memory bucket per player, job, and UTC hour,
+then written to the shared MySQL database every 10 seconds on a dedicated
+single-thread pool. Batch IDs make retries idempotent across uncertain commit
+outcomes. GUI reads are asynchronous and cached briefly. Production retains 30
+days, prunes older buckets every six hours, and caps the pending buffer at 4096
+unique buckets. If analytics storage is unavailable, jobs and Vault payouts
+continue while the GUI reports that history is temporarily unavailable.
 
 ## Voucher safety
 

@@ -212,6 +212,43 @@ menu:
     status-future: '<#8c8c8c>Not reached yet'
     no-rewards: '<#8c8c8c>  No separate reward'
 
+  earnings:
+    title: '<#20252b>Earnings · <job>'
+    hours-title: '<#20252b><job> · <date>'
+    summary-name: '<#d8a657>Earnings'
+    summary-lore:
+      - '<#8c8c8c>Today'
+      - '<#e6fff3>Money: <#92bed8><today_money> <#8c8c8c>· <#e6fff3>XP: <#92bed8><today_xp>'
+      - '<#8c8c8c>This hour'
+      - '<#e6fff3>Money: <#92bed8><hour_money> <#8c8c8c>· <#e6fff3>XP: <#92bed8><hour_xp>'
+      - '<#8c8c8c>Last 7 days'
+      - '<#e6fff3>Money: <#92bed8><week_money> <#8c8c8c>· <#e6fff3>XP: <#92bed8><week_xp>'
+      - ''
+      - '<#92bed8>Click to open history'
+    today-name: '<#d8a657>Today · <date>'
+    day-name: '<#e6fff3><date>'
+    day-lore:
+      - '<#e6fff3>Money: <#92bed8><money>'
+      - '<#e6fff3>XP: <#92bed8><xp>'
+      - ''
+      - '<#92bed8>Click for the hourly breakdown'
+    day-summary-name: '<#d8a657><date>'
+    day-summary-lore:
+      - '<#e6fff3>Money that day: <#92bed8><money>'
+      - '<#e6fff3>XP that day: <#92bed8><xp>'
+    hour-name: '<#e6fff3><from>–<to>'
+    hour-lore:
+      - '<#e6fff3>Money: <#92bed8><money>'
+      - '<#e6fff3>XP: <#92bed8><xp>'
+    loading-name: '<#d8a657>Calculating earnings…'
+    loading-lore:
+      - '<#e6fff3>Hourly totals are read in the background.'
+      - '<#8c8c8c>This menu will refresh automatically.'
+    unavailable-name: '<#e36d6d>History temporarily unavailable'
+    unavailable-lore:
+      - '<#e6fff3>Jobs and payouts continue to work.'
+      - '<#8c8c8c>Try opening the job card again later.'
+
   leaderboard:
     selector-title: '<#20252b>Leaders'
     global-name: '<#92bed8>Overall ranking'

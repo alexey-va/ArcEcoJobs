@@ -131,6 +131,37 @@ class AddonConfigTest : StringSpec({
         enabled.maximumInFlight shouldBe 512
     }
 
+    "earnings require shared MySQL and enforce bounded retention and buffering" {
+        shouldThrow<IllegalArgumentException> {
+            AddonSettings.load(yaml("earnings:\n  enabled: true"))
+        }
+        listOf(
+            "earnings:\n  retention-days: 6",
+            "earnings:\n  flush-seconds: 4",
+            "earnings:\n  cleanup-hours: 25",
+            "earnings:\n  maximum-pending-buckets: 255",
+            "earnings:\n  time-zone: Not/AZone",
+        ).forEach { contents ->
+            shouldThrow<IllegalArgumentException> { AddonSettings.load(yaml(contents)) }
+        }
+
+        val enabled = AddonSettings.load(yaml("""
+            earnings:
+              enabled: true
+              retention-days: 30
+              maximum-pending-buckets: 4096
+              time-zone: Europe/Moscow
+            redemptions:
+              mysql:
+                enabled: true
+                password: test-password
+        """.trimIndent())).earnings
+        enabled.enabled shouldBe true
+        enabled.retentionDays shouldBe 30
+        enabled.maximumPendingBuckets shouldBe 4_096
+        enabled.zoneId.id shouldBe "Europe/Moscow"
+    }
+
     "malformed YAML fails closed instead of loading defaults" {
         val malformed = yaml("boosts: [")
 
@@ -263,6 +294,43 @@ class AddonConfigTest : StringSpec({
             List(3) { ExplorationSettings(enabled = true, maximumInFlight = 256) }
     }
 
+    "production and lab enable the same bounded hourly earnings profile" {
+        val profiles = listOf(
+            project.parent.resolve("classic/plugins/ArcEcoJobs/config.yml"),
+            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
+            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
+        ).map { AddonSettings.load(it.toFile()).earnings }
+
+        profiles.toSet().size shouldBe 1
+        profiles.first().enabled shouldBe true
+        profiles.first().retentionDays shouldBe 30
+        profiles.first().flushInterval shouldBe Duration.ofSeconds(10)
+        profiles.first().maximumPendingBuckets shouldBe 4_096
+    }
+
+    "every reviewed EcoJobs payout carries its exact earnings marker" {
+        listOf(
+            project.parent.resolve("classic/plugins/EcoJobs/jobs"),
+            project.parent.resolve("classic_survival/plugins/EcoJobs/jobs"),
+            project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs"),
+        ).forEach { root ->
+            Files.list(root).use { paths ->
+                paths.filter { it.fileName.toString().endsWith(".yml") }.forEach { path ->
+                    val jobId = path.fileName.toString().removeSuffix(".yml")
+                    val job = YamlConfiguration.loadConfiguration(path.toFile())
+                    val payouts = job.getMapList("effects").filter { it["id"] == "give_money" }
+                    payouts.isEmpty() shouldBe false
+                    payouts.forEach { effect ->
+                        @Suppress("UNCHECKED_CAST")
+                        val amount = (effect["args"] as Map<String, String>).getValue("amount")
+                        ("%arcecojobs_boost_${jobId}_money_multiplier%" in amount) shouldBe true
+                        ("%arcecojobs_earnings_${jobId}_money_marker%" in amount) shouldBe true
+                    }
+                }
+            }
+        }
+    }
+
     "production and lab explorer jobs preserve one reviewed discovery contract" {
         val paths = listOf(
             project.parent.resolve("classic/plugins/EcoJobs/jobs/explorer.yml"),
@@ -284,7 +352,7 @@ class AddonConfigTest : StringSpec({
         @Suppress("UNCHECKED_CAST")
         val amount = (money["args"] as Map<String, String>).getValue("amount")
         amount shouldBe
-            "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_value%) * %arcecojobs_boost_explorer_money_multiplier%"
+            "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_value%) * %arcecojobs_boost_explorer_money_multiplier% * %arcecojobs_earnings_explorer_money_marker%"
     }
 
     "case variants cannot overwrite another preset" {

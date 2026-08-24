@@ -14,6 +14,9 @@ import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
+import ru.ruscrafting.ecojobs.earnings.EarningsService
+import ru.ruscrafting.ecojobs.earnings.MoneyAttribution
+import ru.ruscrafting.ecojobs.earnings.MySqlHourlyEarningsStore
 import ru.ruscrafting.ecojobs.exploration.DiscoveryLedger
 import ru.ruscrafting.ecojobs.exploration.LibreforgeExplorationTrigger
 import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
@@ -32,6 +35,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var vouchers: VoucherService
     private var voucherLedger: VoucherLedger = UnavailableVoucherLedger
     private var discoveryLedger: DiscoveryLedger = UnavailableDiscoveryLedger
+    private var earnings: EarningsService? = null
+    private var moneyAttribution: MoneyAttribution? = null
     private var explorationListener: ExplorationListener? = null
     private var expansion: BoostPlaceholderExpansion? = null
     private var bootstrapTaskId: Int? = null
@@ -62,6 +67,27 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             } else {
                 UnavailableDiscoveryLedger
             }
+            if (settings.earnings.enabled) {
+                moneyAttribution = MoneyAttribution()
+                runCatching {
+                    val service = EarningsService(
+                        this,
+                        settings.earnings,
+                        MySqlHourlyEarningsStore.open(settings.redemptionStorage),
+                    )
+                    runCatching { service.start() }.onFailure { runCatching { service.close() } }.getOrThrow()
+                    service.also {
+                        earnings = service
+                        logger.info("Hourly job earnings analytics is ready")
+                    }
+                }.onFailure { failure ->
+                    logger.log(
+                        Level.SEVERE,
+                        "Hourly job earnings analytics is unavailable; jobs and payouts will continue",
+                        failure,
+                    )
+                }
+            }
             boosts = BoostService(this, luckPerms, settings = { settings }, voucherLedger = voucherLedger)
             vouchers = VoucherService(
                 this,
@@ -71,7 +97,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 ecoJobs::names,
                 SigningKeyStore.loadOrCreate(dataFolder.toPath()),
             )
-            expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts).also {
+            expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts, moneyAttribution).also {
                 require(it.register()) { "Could not register the PlaceholderAPI expansion" }
             }
             requireNotNull(getCommand("arcjobs")).apply {
@@ -94,6 +120,11 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         expansion = null
         explorationListener?.shutdown()
         explorationListener = null
+        runCatching { earnings?.close() }
+            .onFailure { logger.log(Level.SEVERE, "Could not close hourly job earnings analytics", it) }
+        earnings = null
+        moneyAttribution?.clear()
+        moneyAttribution = null
         if (::ecoJobs.isInitialized) ecoJobs.shutdown()
         runCatching { discoveryLedger.close() }
             .onFailure { logger.log(Level.SEVERE, "Could not close the chunk discovery ledger", it) }
@@ -131,7 +162,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         enforceMoneyIntegration()
         enforceExplorationIntegration()
         val menu = JobsMenu(
-            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, ::reloadPlugin,
+            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin,
         )
         val command = JobsCommand(
             { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, menu, ::reloadPlugin,
@@ -141,6 +172,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             tabCompleter = command
         }
         server.pluginManager.registerEvents(JobsListener({ settings }, locale, menu, boosts, vouchers), this)
+        earnings?.let { server.pluginManager.registerEvents(EarningsListener(it), this) }
         if (settings.exploration.enabled) {
             val explorer = requireNotNull(ecoJobs.job(ExplorationListener.JOB_ID)) {
                 "EcoJobs explorer job is required when exploration is enabled"
@@ -163,7 +195,11 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         val economy = requireNotNull(server.servicesManager.load(Economy::class.java)) {
             "A Vault economy provider must be registered before ArcEcoJobs initializes"
         }
-        EconomyManager.register(VaultEconomyIntegration(economy))
+        EconomyManager.register(
+            VaultEconomyIntegration(economy, moneyAttribution) { player, jobId, amount ->
+                earnings?.recordMoney(player.uniqueId, jobId, amount)
+            },
+        )
         check(EconomyManager.hasRegistrations()) { "eco did not accept the Vault economy integration" }
         logger.info("EcoJobs money effects bound to Vault provider ${economy.name}")
     }
@@ -183,6 +219,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         require(candidateSettings.exploration == settings.exploration) {
             "exploration settings require a server restart"
         }
+        require(candidateSettings.earnings == settings.earnings) {
+            "earnings settings require a server restart"
+        }
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
         boosterRegistry = candidateBoosters
@@ -198,9 +237,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     }
 
     private fun enforceMoneyIntegration(candidate: AddonSettings = settings) {
-        val problems = ecoJobs.moneyIntegrationProblems()
+        val problems = ecoJobs.moneyIntegrationProblems(candidate.earnings.enabled)
         if (problems.isEmpty()) return
-        val message = "EcoJobs money boost placeholder is missing from jobs: ${problems.joinToString(", ")}"
+        val message = "EcoJobs money integration placeholders are missing from jobs: ${problems.joinToString(", ")}"
         if (candidate.requireMoneyPlaceholder) error(message) else logger.warning(message)
     }
 

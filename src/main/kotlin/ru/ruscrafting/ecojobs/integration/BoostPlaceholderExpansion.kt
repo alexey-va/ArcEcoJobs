@@ -5,11 +5,13 @@ import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.domain.BoostType
+import ru.ruscrafting.ecojobs.earnings.MoneyAttribution
 import java.math.BigDecimal
 
 class BoostPlaceholderExpansion(
     private val version: String,
     private val boosts: BoostService,
+    private val moneyAttribution: MoneyAttribution? = null,
 ) : PlaceholderExpansion() {
     override fun getIdentifier(): String = "arcecojobs"
     override fun getAuthor(): String = "RusCrafting"
@@ -18,14 +20,23 @@ class BoostPlaceholderExpansion(
     override fun canRegister(): Boolean = true
 
     override fun onRequest(player: OfflinePlayer?, params: String): String? {
-        val online = player as? Player ?: return "1"
-        val match = PARAMETER.matchEntire(params.lowercase()) ?: return null
-        val jobId = match.groupValues[1]
-        val multiplier = boosts.multiplier(online, jobId, BoostType.MONEY)
-        return BigDecimal.valueOf(multiplier).stripTrailingZeros().toPlainString()
+        val normalized = params.lowercase()
+        MONEY_MULTIPLIER.matchEntire(normalized)?.let { match ->
+            moneyAttribution?.clear()
+            val online = player as? Player ?: return "1"
+            val multiplier = boosts.multiplier(online, match.groupValues[1], BoostType.MONEY)
+            return BigDecimal.valueOf(multiplier).stripTrailingZeros().toPlainString()
+        }
+        MONEY_MARKER.matchEntire(normalized)?.let { match ->
+            moneyAttribution?.clear()
+            player?.let { moneyAttribution?.mark(it.uniqueId, match.groupValues[1]) }
+            return "1"
+        }
+        return null
     }
 
     companion object {
-        private val PARAMETER = Regex("boost_([a-z0-9_-]+)_money_multiplier")
+        private val MONEY_MULTIPLIER = Regex("boost_([a-z0-9_-]+)_money_multiplier")
+        private val MONEY_MARKER = Regex("earnings_([a-z0-9_-]+)_money_marker")
     }
 }

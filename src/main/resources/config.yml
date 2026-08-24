@@ -18,13 +18,24 @@ boosts:
   maximum-stacked-duration: 365d
   require-money-placeholder: true
 
+# Personal per-job earnings history. Events are aggregated in memory by hour,
+# flushed to MySQL in batches, and deleted after the bounded retention window.
+earnings:
+  enabled: false
+  retention-days: 30
+  flush-seconds: 10
+  cache-seconds: 15
+  cleanup-hours: 6
+  maximum-pending-buckets: 4096
+  time-zone: Europe/Moscow
+
 # Rewards the first five different active explorers who enter each chunk.
 # Discovery claims use the shared MySQL settings below and fail closed.
 exploration:
   enabled: false
   maximum-in-flight: 256
 
-# Shared ArcEcoJobs storage for voucher claims and chunk discoveries.
+# Shared ArcEcoJobs storage for voucher claims, discoveries, and earnings.
 # LuckPerms still remains the only owner of active boosts.
 redemptions:
   mysql:

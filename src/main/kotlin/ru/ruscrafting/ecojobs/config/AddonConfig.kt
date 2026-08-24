@@ -9,6 +9,7 @@ import ru.ruscrafting.ecojobs.domain.DurationParser
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import java.io.File
 import java.time.Duration
+import java.time.ZoneId
 
 internal fun loadYamlStrict(file: File): YamlConfiguration = YamlConfiguration().apply { load(file) }
 
@@ -24,6 +25,7 @@ data class AddonSettings(
     val maximumBoostDuration: Duration,
     val maximumStackedBoostDuration: Duration,
     val requireMoneyPlaceholder: Boolean,
+    val earnings: EarningsSettings = EarningsSettings.disabled(),
     val exploration: ExplorationSettings = ExplorationSettings.disabled(),
     val guiItems: GuiItems,
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
@@ -60,7 +62,11 @@ data class AddonSettings(
                 "boosts.maximum-stacked-duration must not be shorter than boosts.maximum-duration"
             }
             val redemptionStorage = RedemptionStorageSettings.load(yaml)
+            val earnings = EarningsSettings.load(yaml)
             val exploration = ExplorationSettings.load(yaml)
+            require(!earnings.enabled || redemptionStorage.enabled) {
+                "earnings requires redemptions.mysql.enabled because hourly aggregates use the shared ArcEcoJobs database"
+            }
             require(!exploration.enabled || redemptionStorage.enabled) {
                 "exploration requires redemptions.mysql.enabled because discoveries use the shared ArcEcoJobs database"
             }
@@ -76,9 +82,59 @@ data class AddonSettings(
                 maximumBoostDuration = maximumBoostDuration,
                 maximumStackedBoostDuration = maximumStackedBoostDuration,
                 requireMoneyPlaceholder = yaml.getBoolean("boosts.require-money-placeholder", true),
+                earnings = earnings,
                 exploration = exploration,
                 guiItems = GuiItems.load(yaml),
                 redemptionStorage = redemptionStorage,
+            )
+        }
+    }
+}
+
+data class EarningsSettings(
+    val enabled: Boolean,
+    val retentionDays: Int,
+    val flushInterval: Duration,
+    val cacheDuration: Duration,
+    val cleanupInterval: Duration,
+    val maximumPendingBuckets: Int,
+    val zoneId: ZoneId,
+) {
+    companion object {
+        fun disabled(): EarningsSettings = EarningsSettings(
+            enabled = false,
+            retentionDays = 30,
+            flushInterval = Duration.ofSeconds(10),
+            cacheDuration = Duration.ofSeconds(15),
+            cleanupInterval = Duration.ofHours(6),
+            maximumPendingBuckets = 4_096,
+            zoneId = ZoneId.of("Europe/Moscow"),
+        )
+
+        fun load(yaml: YamlConfiguration): EarningsSettings {
+            val path = "earnings"
+            val retentionDays = yaml.getInt("$path.retention-days", 30)
+            require(retentionDays in 7..90) { "earnings.retention-days must be between 7 and 90" }
+            val flushSeconds = yaml.getLong("$path.flush-seconds", 10)
+            require(flushSeconds in 5..60) { "earnings.flush-seconds must be between 5 and 60" }
+            val cacheSeconds = yaml.getLong("$path.cache-seconds", 15)
+            require(cacheSeconds in 0..60) { "earnings.cache-seconds must be between 0 and 60" }
+            val cleanupHours = yaml.getLong("$path.cleanup-hours", 6)
+            require(cleanupHours in 1..24) { "earnings.cleanup-hours must be between 1 and 24" }
+            val maximumPendingBuckets = yaml.getInt("$path.maximum-pending-buckets", 4_096)
+            require(maximumPendingBuckets in 256..16_384) {
+                "earnings.maximum-pending-buckets must be between 256 and 16384"
+            }
+            val zoneId = runCatching { ZoneId.of(yaml.getString("$path.time-zone", "Europe/Moscow")!!) }
+                .getOrElse { throw IllegalArgumentException("earnings.time-zone is invalid", it) }
+            return EarningsSettings(
+                enabled = yaml.getBoolean("$path.enabled", false),
+                retentionDays = retentionDays,
+                flushInterval = Duration.ofSeconds(flushSeconds),
+                cacheDuration = Duration.ofSeconds(cacheSeconds),
+                cleanupInterval = Duration.ofHours(cleanupHours),
+                maximumPendingBuckets = maximumPendingBuckets,
+                zoneId = zoneId,
             )
         }
     }

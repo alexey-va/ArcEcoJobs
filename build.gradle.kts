@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.10"
+version = "0.1.11"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 repositories {
@@ -42,6 +42,7 @@ dependencies {
     testImplementation("com.willfp:libreforge-loader:2026.33") { isTransitive = false }
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     testImplementation("net.luckperms:api:5.5")
+    testImplementation("me.clip:placeholderapi:2.12.3")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
     testImplementation("org.yaml:snakeyaml:2.5")
     testImplementation("org.testcontainers:testcontainers:2.0.5")

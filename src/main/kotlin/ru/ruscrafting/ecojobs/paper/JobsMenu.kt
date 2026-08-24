@@ -25,10 +25,15 @@ import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.Multipliers
+import ru.ruscrafting.ecojobs.earnings.EarningsReport
+import ru.ruscrafting.ecojobs.earnings.EarningsService
+import ru.ruscrafting.ecojobs.earnings.EarningsTotals
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.text.DecimalFormat
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZonedDateTime
 import kotlin.math.ceil
 
 sealed interface JobsView {
@@ -37,6 +42,8 @@ sealed interface JobsView {
     data class JobCard(val jobId: String, val back: JobsView) : JobsView
     data class LeaveConfirm(val jobId: String, val back: JobsView) : JobsView
     data class Levels(val jobId: String, val page: Int, val back: JobsView) : JobsView
+    data class Earnings(val jobId: String, val page: Int, val back: JobsView) : JobsView
+    data class EarningsHours(val jobId: String, val date: LocalDate, val back: JobsView) : JobsView
     data class LeaderboardSelector(val page: Int, val back: JobsView) : JobsView
     data class Leaderboard(val jobId: String?, val page: Int, val back: JobsView) : JobsView
     data class Boosts(val jobId: String?, val page: Int, val back: JobsView) : JobsView
@@ -53,6 +60,7 @@ class JobsMenu(
     private val boosts: BoostService,
     private val boosters: () -> BoosterRegistry,
     private val vouchers: VoucherService,
+    private val earnings: () -> EarningsService?,
     private val reload: () -> Result<Unit>,
 ) {
     private class Holder(val view: JobsView) : InventoryHolder {
@@ -77,6 +85,8 @@ class JobsMenu(
             is JobsView.JobCard -> openJobCard(player, view)
             is JobsView.LeaveConfirm -> openLeave(player, view)
             is JobsView.Levels -> openLevels(player, view)
+            is JobsView.Earnings -> openEarnings(player, view)
+            is JobsView.EarningsHours -> openEarningsHours(player, view)
             is JobsView.LeaderboardSelector -> openLeaderboardSelector(player, view)
             is JobsView.Leaderboard -> openLeaderboard(player, view)
             is JobsView.Boosts -> openBoosts(player, view)
@@ -102,6 +112,8 @@ class JobsMenu(
                     is JobsView.JobCard -> clickJobCard(player, view, slot)
                     is JobsView.LeaveConfirm -> clickLeave(player, view, slot)
                     is JobsView.Levels -> clickPaged(player, view, slot, pageCount(ecoJobs.job(view.jobId)?.maxLevel ?: 0, contentSlots.size))
+                    is JobsView.Earnings -> clickEarnings(player, view, slot)
+                    is JobsView.EarningsHours -> if (slot == 45) open(player, view.back)
                     is JobsView.LeaderboardSelector -> clickLeaderboardSelector(player, view, slot)
                     is JobsView.Leaderboard -> clickPaged(
                         player,
@@ -211,6 +223,7 @@ class JobsMenu(
             "state" to state,
         ), "menu.job.overview-name", mapOf("job" to ecoJobs.name(job))))
         inventory.setItem(29, item(Material.REPEATER, player, "menu.job.scale-name", "menu.job.scale-lore", mapOf("max" to text(job.maxLevel))))
+        inventory.setItem(22, earningsSummaryItem(player, null))
         inventory.setItem(31, item(Material.GOLDEN_HELMET, player, "menu.job.leaderboard-name", "menu.job.leaderboard-lore", mapOf(
             "rank" to text(ecoJobs.rank(player, job)?.toString() ?: "—"),
         )))
@@ -227,11 +240,15 @@ class JobsMenu(
         }
         navigation(inventory, player, view.back, 1, 1)
         player.openInventory(inventory)
+        loadEarnings(player, view) { report ->
+            player.openInventory.topInventory.setItem(22, earningsSummaryItem(player, report))
+        }
     }
 
     private fun clickJobCard(player: Player, view: JobsView.JobCard, slot: Int) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
         when (slot) {
+            22 -> if (settings().earnings.enabled) open(player, JobsView.Earnings(job.id, 1, view))
             29 -> open(player, JobsView.Levels(job.id, levelPage(ecoJobs.level(player, job)), view))
             31 -> open(player, JobsView.Leaderboard(job.id, 1, view))
             33 -> open(player, JobsView.Boosts(job.id, 1, view))
@@ -291,6 +308,189 @@ class JobsMenu(
         navigation(inventory, player, currentView.back, currentView.page, pages)
         player.openInventory(inventory)
     }
+
+    private fun openEarnings(player: Player, view: JobsView.Earnings) {
+        val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
+        val inventory = inventory(
+            player,
+            view,
+            54,
+            "menu.earnings.title",
+            mapOf("job" to titleText(ecoJobs.name(job))),
+        )
+        inventory.setItem(22, earningsLoadingItem(player))
+        navigation(inventory, player, view.back, view.page, pageCount(settings().earnings.retentionDays, contentSlots.size))
+        player.openInventory(inventory)
+        loadEarnings(player, view) { report -> renderEarnings(player, view, report) }
+    }
+
+    private fun renderEarnings(player: Player, view: JobsView.Earnings, report: EarningsReport) {
+        val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
+        val pages = pageCount(settings().earnings.retentionDays, contentSlots.size)
+        val current = view.copy(page = view.page.coerceIn(1, pages))
+        val inventory = inventory(
+            player,
+            current,
+            54,
+            "menu.earnings.title",
+            mapOf("job" to titleText(ecoJobs.name(job))),
+        )
+        inventory.setItem(4, earningsSummaryItem(player, report))
+        val today = LocalDate.now(settings().earnings.zoneId)
+        val dates = (0 until settings().earnings.retentionDays).map { today.minusDays(it.toLong()) }
+        dates.page(current.page, contentSlots.size).forEachIndexed { index, date ->
+            val totals = report.forDate(date)
+            inventory.setItem(
+                contentSlots[index],
+                item(
+                    if (totals.empty) Material.PAPER else Material.FILLED_MAP,
+                    player,
+                    if (date == today) "menu.earnings.today-name" else "menu.earnings.day-name",
+                    "menu.earnings.day-lore",
+                    earningsValues(totals) + ("date" to text(formatDate(date))),
+                ),
+            )
+        }
+        navigation(inventory, player, current.back, current.page, pages)
+        player.openInventory(inventory)
+    }
+
+    private fun clickEarnings(player: Player, view: JobsView.Earnings, slot: Int) {
+        if (slot == 4) {
+            open(
+                player,
+                JobsView.EarningsHours(view.jobId, LocalDate.now(settings().earnings.zoneId), view),
+            )
+            return
+        }
+        val index = contentSlots.indexOf(slot)
+        if (index >= 0) {
+            val offset = (view.page - 1) * contentSlots.size + index
+            if (offset < settings().earnings.retentionDays) {
+                val date = LocalDate.now(settings().earnings.zoneId).minusDays(offset.toLong())
+                open(player, JobsView.EarningsHours(view.jobId, date, view))
+                return
+            }
+        }
+        clickPaged(
+            player,
+            view,
+            slot,
+            pageCount(settings().earnings.retentionDays, contentSlots.size),
+        )
+    }
+
+    private fun openEarningsHours(player: Player, view: JobsView.EarningsHours) {
+        val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
+        val inventory = inventory(
+            player,
+            view,
+            54,
+            "menu.earnings.hours-title",
+            mapOf("job" to titleText(ecoJobs.name(job)), "date" to text(formatDate(view.date))),
+        )
+        inventory.setItem(22, earningsLoadingItem(player))
+        navigation(inventory, player, view.back, 1, 1)
+        player.openInventory(inventory)
+        loadEarnings(player, view) { report ->
+            val rendered = inventory(
+                player,
+                view,
+                54,
+                "menu.earnings.hours-title",
+                mapOf("job" to titleText(ecoJobs.name(job)), "date" to text(formatDate(view.date))),
+            )
+            rendered.setItem(4, item(
+                Material.CLOCK,
+                player,
+                "menu.earnings.day-summary-name",
+                "menu.earnings.day-summary-lore",
+                earningsValues(report.forDate(view.date)) + ("date" to text(formatDate(view.date))),
+            ))
+            (0..23).forEach { hour ->
+                val totals = report.forHour(view.date, hour)
+                rendered.setItem(
+                    contentSlots[hour],
+                    item(
+                        if (totals.empty) Material.GRAY_DYE else Material.LIME_DYE,
+                        player,
+                        "menu.earnings.hour-name",
+                        "menu.earnings.hour-lore",
+                        earningsValues(totals) + mapOf(
+                            "from" to text(hourLabel(hour)),
+                            "to" to text(hourLabel((hour + 1) % 24)),
+                        ),
+                    ),
+                )
+            }
+            navigation(rendered, player, view.back, 1, 1)
+            player.openInventory(rendered)
+        }
+    }
+
+    private fun loadEarnings(player: Player, view: JobsView, render: (EarningsReport) -> Unit) {
+        val service = earnings()
+        if (!settings().earnings.enabled || service == null) {
+            player.openInventory.topInventory.setItem(22, earningsUnavailableItem(player))
+            return
+        }
+        val jobId = when (view) {
+            is JobsView.JobCard -> view.jobId
+            is JobsView.Earnings -> view.jobId
+            is JobsView.EarningsHours -> view.jobId
+            else -> return
+        }
+        service.report(player.uniqueId, jobId).whenComplete { report, failure ->
+            if (!plugin.isEnabled) return@whenComplete
+            plugin.server.scheduler.runTask(plugin, Runnable {
+                val current = player.openInventory.topInventory.holder as? Holder
+                if (!player.isOnline || current?.view != view) return@Runnable
+                if (failure == null) render(report) else {
+                    player.openInventory.topInventory.setItem(22, earningsUnavailableItem(player))
+                }
+            })
+        }
+    }
+
+    private fun earningsSummaryItem(player: Player, report: EarningsReport?): ItemStack {
+        if (!settings().earnings.enabled || earnings() == null) return earningsUnavailableItem(player)
+        if (report == null) return earningsLoadingItem(player)
+        val now = ZonedDateTime.now(settings().earnings.zoneId)
+        val today = report.forDate(now.toLocalDate())
+        val hour = report.forHour(now.toLocalDate(), now.hour)
+        val week = (0L..6L).fold(EarningsTotals()) { total, daysAgo ->
+            total + report.forDate(now.toLocalDate().minusDays(daysAgo))
+        }
+        return item(
+            Material.GOLD_INGOT,
+            player,
+            "menu.earnings.summary-name",
+            "menu.earnings.summary-lore",
+            mapOf(
+                "today_money" to text(formatAmount(today.money)),
+                "today_xp" to text(formatAmount(today.xp)),
+                "hour_money" to text(formatAmount(hour.money)),
+                "hour_xp" to text(formatAmount(hour.xp)),
+                "week_money" to text(formatAmount(week.money)),
+                "week_xp" to text(formatAmount(week.xp)),
+            ),
+        )
+    }
+
+    private fun earningsLoadingItem(player: Player): ItemStack =
+        item(Material.CLOCK, player, "menu.earnings.loading-name", "menu.earnings.loading-lore")
+
+    private fun earningsUnavailableItem(player: Player): ItemStack =
+        item(Material.REDSTONE_TORCH, player, "menu.earnings.unavailable-name", "menu.earnings.unavailable-lore")
+
+    private fun earningsValues(totals: EarningsTotals): Map<String, Component> = mapOf(
+        "money" to text(formatAmount(totals.money)),
+        "xp" to text(formatAmount(totals.xp)),
+    )
+
+    private fun formatAmount(value: java.math.BigDecimal): String = number.format(value.stripTrailingZeros())
+    private fun formatDate(date: LocalDate): String = "%02d.%02d.%04d".format(date.dayOfMonth, date.monthValue, date.year)
+    private fun hourLabel(hour: Int): String = "%02d:00".format(hour)
 
     private fun openLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector) {
         val jobs = ecoJobs.jobs()
@@ -500,6 +700,8 @@ class JobsMenu(
             45 -> open(player, when (view) {
                 is JobsView.Catalog -> view.back
                 is JobsView.Levels -> view.back
+                is JobsView.Earnings -> view.back
+                is JobsView.EarningsHours -> view.back
                 is JobsView.LeaderboardSelector -> view.back
                 is JobsView.Leaderboard -> view.back
                 is JobsView.Boosts -> view.back
@@ -509,6 +711,7 @@ class JobsMenu(
             47 -> when (view) {
                 is JobsView.Catalog -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Levels -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
+                is JobsView.Earnings -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.LeaderboardSelector -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Leaderboard -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
                 is JobsView.Boosts -> if (view.page > 1) open(player, view.copy(page = view.page - 1))
@@ -518,6 +721,7 @@ class JobsMenu(
             51 -> when (view) {
                 is JobsView.Catalog -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Levels -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
+                is JobsView.Earnings -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.LeaderboardSelector -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Leaderboard -> if (view.page < pages) open(player, view.copy(page = view.page + 1))
                 is JobsView.Boosts -> if (view.page < pages) open(player, view.copy(page = view.page + 1))

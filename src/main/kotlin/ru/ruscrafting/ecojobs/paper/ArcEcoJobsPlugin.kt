@@ -4,6 +4,11 @@ import com.willfp.eco.core.integrations.economy.EconomyManager
 import net.luckperms.api.LuckPerms
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.ScheduledTask
+import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.observability.RuntimeHealthState
+import ru.arc.paper.runtime.PaperPluginRuntime
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.MySqlVoucherLedger
 import ru.ruscrafting.ecojobs.boost.SigningKeyStore
@@ -39,18 +44,24 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private var moneyAttribution: MoneyAttribution? = null
     private var explorationListener: ExplorationListener? = null
     private var expansion: BoostPlaceholderExpansion? = null
-    private var bootstrapTaskId: Int? = null
+    private var pluginRuntime: PaperPluginRuntime? = null
+    private var bootstrapTask: ScheduledTask? = null
     private var initialized = false
 
     override fun onEnable() {
-        saveDefaultConfig()
-        saveResourceIfMissing("boosters.yml")
-        saveResourceIfMissing("lang/ru.yml")
-        saveResourceIfMissing("lang/en.yml")
+        val lifecycle = PaperPluginRuntime(this, "arc-ecojobs", BukkitTaskScheduler(this)).also {
+            pluginRuntime = it
+            it.start("version" to pluginMeta.version)
+        }
         try {
+            saveDefaultConfig()
+            saveResourceIfMissing("boosters.yml")
+            saveResourceIfMissing("lang/ru.yml")
+            saveResourceIfMissing("lang/en.yml")
             settings = AddonSettings.load(dataFolder.resolve("config.yml"))
             locale = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
             ecoJobs = EcoJobsBridge(this) { settings }
+            lifecycle.own(AutoCloseable { ecoJobs.shutdown() })
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
             voucherLedger = if (settings.redemptionStorage.enabled) {
                 MySqlVoucherLedger.open(settings.redemptionStorage).also {
@@ -60,6 +71,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 logger.warning("Voucher redemption is disabled because redemptions.mysql.enabled is false")
                 UnavailableVoucherLedger
             }
+            lifecycle.own(voucherLedger)
             discoveryLedger = if (settings.exploration.enabled) {
                 MySqlDiscoveryLedger.open(settings.redemptionStorage).also {
                     logger.info("Chunk discovery ledger is ready")
@@ -67,6 +79,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             } else {
                 UnavailableDiscoveryLedger
             }
+            lifecycle.own(discoveryLedger)
             if (settings.earnings.enabled) {
                 moneyAttribution = MoneyAttribution()
                 runCatching {
@@ -78,6 +91,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                     runCatching { service.start() }.onFailure { runCatching { service.close() } }.getOrThrow()
                     service.also {
                         earnings = service
+                        lifecycle.own(service)
                         logger.info("Hourly job earnings analytics is ready")
                     }
                 }.onFailure { failure ->
@@ -99,6 +113,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             )
             expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts, moneyAttribution).also {
                 require(it.register()) { "Could not register the PlaceholderAPI expansion" }
+                lifecycle.own(AutoCloseable { it.unregister() })
             }
             requireNotNull(getCommand("arcjobs")).apply {
                 setExecutor { sender, _, _, _ ->
@@ -106,51 +121,52 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                     true
                 }
             }
-            scheduleBootstrap()
+            lifecycle.registerHealth("storage", ::storageHealth)
+            scheduleBootstrap(lifecycle)
         } catch (failure: Throwable) {
             logger.log(Level.SEVERE, "ArcEcoJobs failed closed during startup", failure)
+            runCatching {
+                lifecycle.health.markDown()
+                lifecycle.emitHealth()
+            }
             server.pluginManager.disablePlugin(this)
         }
     }
 
     override fun onDisable() {
-        bootstrapTaskId?.let(server.scheduler::cancelTask)
-        bootstrapTaskId = null
-        runCatching { expansion?.unregister() }
+        bootstrapTask?.cancel()
+        bootstrapTask = null
+        runCatching { pluginRuntime?.close() }
+            .onFailure { logger.log(Level.SEVERE, "Could not close ArcEcoJobs runtime", it) }
+        pluginRuntime = null
         expansion = null
-        explorationListener?.shutdown()
         explorationListener = null
-        runCatching { earnings?.close() }
-            .onFailure { logger.log(Level.SEVERE, "Could not close hourly job earnings analytics", it) }
         earnings = null
         moneyAttribution?.clear()
         moneyAttribution = null
-        if (::ecoJobs.isInitialized) ecoJobs.shutdown()
-        runCatching { discoveryLedger.close() }
-            .onFailure { logger.log(Level.SEVERE, "Could not close the chunk discovery ledger", it) }
         discoveryLedger = UnavailableDiscoveryLedger
-        runCatching { voucherLedger.close() }
-            .onFailure { logger.log(Level.SEVERE, "Could not close the voucher redemption ledger", it) }
         voucherLedger = UnavailableVoucherLedger
         initialized = false
     }
 
-    private fun scheduleBootstrap() {
+    private fun scheduleBootstrap(lifecycle: PaperPluginRuntime) {
         var attempts = 0
-        bootstrapTaskId = server.scheduler.scheduleSyncRepeatingTask(this, {
+        bootstrapTask = lifecycle.tasks.runTimer(delayTicks = 1L, periodTicks = 20L) {
             attempts++
             if (ecoJobs.jobs().isNotEmpty()) {
-                bootstrapTaskId?.let(server.scheduler::cancelTask)
-                bootstrapTaskId = null
+                bootstrapTask?.cancel()
+                bootstrapTask = null
                 runCatching(::finishInitialization).onFailure { failure ->
                     logger.log(Level.SEVERE, "ArcEcoJobs failed closed during delayed startup", failure)
+                    markRuntimeDown()
                     server.pluginManager.disablePlugin(this)
                 }
             } else if (attempts >= 120) {
                 logger.severe("EcoJobs did not register any jobs within 120 seconds")
+                markRuntimeDown()
                 server.pluginManager.disablePlugin(this)
             }
-        }, 1L, 20L)
+        }
     }
 
     private fun finishInitialization() {
@@ -184,11 +200,48 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 discoveryLedger,
                 LibreforgeExplorationTrigger(),
                 settings.exploration.maximumInFlight,
-            ).also { server.pluginManager.registerEvents(it, this) }
+            ).also {
+                server.pluginManager.registerEvents(it, this)
+                requireNotNull(pluginRuntime).own(AutoCloseable { it.shutdown() })
+            }
         }
         initialized = true
         ecoJobs.prepareLeaderboards()
+        requireNotNull(pluginRuntime).ready(
+            "jobs" to ecoJobs.jobs().size,
+            "boosters" to boosterRegistry.values().size,
+        )
+        requireNotNull(pluginRuntime).reportHealthEvery(HEALTH_REPORT_TICKS)
         logger.info("ArcEcoJobs enabled with ${ecoJobs.jobs().size} jobs and ${boosterRegistry.values().size} booster presets")
+    }
+
+    private fun markRuntimeDown() {
+        runCatching {
+            pluginRuntime?.health?.markDown()
+            pluginRuntime?.emitHealth()
+        }
+    }
+
+    private fun storageHealth(): RuntimeHealthContribution {
+        val dependencies = linkedMapOf(
+            "voucher_mysql" to (!settings.redemptionStorage.enabled || voucherLedger.available),
+            "discovery_mysql" to (!settings.exploration.enabled || discoveryLedger.available),
+            "earnings_mysql" to (!settings.earnings.enabled || earnings != null),
+        )
+        val schemas = buildMap {
+            if (settings.redemptionStorage.enabled) put("voucher", MySqlVoucherLedger.SCHEMA_VERSION)
+            if (settings.exploration.enabled) put("discovery", MySqlDiscoveryLedger.SCHEMA_VERSION)
+            if (settings.earnings.enabled) put("earnings", MySqlHourlyEarningsStore.SCHEMA_VERSION)
+        }
+        val backlog = (voucherLedger.recoveryBacklog.toLong() + (earnings?.pendingBucketCount() ?: 0))
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+        return RuntimeHealthContribution(
+            state = if (dependencies.values.all { it }) RuntimeHealthState.UP else RuntimeHealthState.DEGRADED,
+            recoveryBacklog = backlog,
+            schemas = schemas,
+            dependencies = dependencies,
+        )
     }
 
     private fun bindEconomyIntegration() {
@@ -264,5 +317,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private fun saveResourceIfMissing(path: String) {
         if (!dataFolder.resolve(path).isFile) saveResource(path, false)
+    }
+
+    private companion object {
+        const val HEALTH_REPORT_TICKS = 1_200L
     }
 }

@@ -8,6 +8,12 @@ group = "ru.ruscrafting"
 version = "0.1.11"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
+val integrationTestSourceSet = sourceSets.create("integrationTest") {
+    kotlin.srcDir("src/integrationTest/kotlin")
+    compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+}
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -21,6 +27,8 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
+    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
     implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("com.mysql:mysql-connector-j:9.7.0")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
@@ -43,10 +51,13 @@ dependencies {
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     testImplementation("net.luckperms:api:5.5")
     testImplementation("me.clip:placeholderapi:2.12.3")
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
+    testImplementation("ru.arc:arc-core-paper-testing:1.0-SNAPSHOT")
     testImplementation("org.yaml:snakeyaml:2.5")
-    testImplementation("org.testcontainers:testcontainers:2.0.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    "integrationTestImplementation"(sourceSets.test.get().output)
+    "integrationTestImplementation"("ru.arc:arc-core-integration-testing:1.0-SNAPSHOT")
+    configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
+    configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }
 
 tasks {
@@ -57,11 +68,19 @@ tasks {
         useJUnitPlatform()
         systemProperty("arcecojobs.projectDir", projectDir.absolutePath)
     }
+    register<Test>("integrationTest") {
+        description = "Runs disposable MySQL storage integration tests."
+        group = "verification"
+        testClassesDirs = integrationTestSourceSet.output.classesDirs
+        classpath = integrationTestSourceSet.runtimeClasspath
+        useJUnitPlatform()
+        shouldRunAfter(test)
+    }
     jar { archiveClassifier.set("plain") }
     shadowJar {
         archiveClassifier.set("")
         mergeServiceFiles()
         exclude("org/slf4j/**")
     }
-    check { dependsOn(shadowJar) }
+    check { dependsOn(shadowJar, "integrationTest") }
 }

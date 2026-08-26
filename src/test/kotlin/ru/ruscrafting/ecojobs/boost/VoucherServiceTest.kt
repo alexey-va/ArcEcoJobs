@@ -6,7 +6,8 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.persistence.PersistentDataType
-import org.mockbukkit.mockbukkit.MockBukkit
+import org.mockbukkit.mockbukkit.plugin.PluginMock
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterItemDefinition
 import ru.ruscrafting.ecojobs.config.BoosterPreset
@@ -25,12 +26,13 @@ class VoucherServiceTest : StringSpec({
     val dataFolder = Files.createTempDirectory("arcecojobs-voucher-test-")
     lateinit var service: VoucherService
     lateinit var preset: BoosterPreset
-    lateinit var plugin: org.mockbukkit.mockbukkit.plugin.PluginMock
+    lateinit var paper: MockBukkitTestRuntime
+    lateinit var plugin: PluginMock
     val signingKey = ByteArray(32) { it.toByte() }
 
-    beforeSpec {
-        val server = MockBukkit.mock()
-        plugin = MockBukkit.createMockPlugin("ArcEcoJobs")
+    beforeTest {
+        paper = MockBukkitTestRuntime.open()
+        plugin = paper.createSimplePlugin("ArcEcoJobs")
         Files.createDirectories(dataFolder.resolve("lang"))
         for (language in listOf("ru", "en")) {
             Files.copy(
@@ -81,16 +83,19 @@ class VoucherServiceTest : StringSpec({
                 persistentData = mapOf("ruscrafting:source" to "arcjobs-test"),
             ),
         )
-        server.addPlayer("VoucherQA").setLocale(Locale.forLanguageTag("ru-RU"))
+        paper.addPlayer("VoucherQA").setLocale(Locale.forLanguageTag("ru-RU"))
+    }
+
+    afterTest {
+        paper.close()
     }
 
     afterSpec {
-        MockBukkit.unmock()
         dataFolder.toFile().deleteRecursively()
     }
 
     "created voucher preserves configured item metadata and signed payload" {
-        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val player = paper.server.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
         val valid = service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>()
 
@@ -114,7 +119,7 @@ class VoucherServiceTest : StringSpec({
     }
 
     "changing a signed field makes a voucher invalid" {
-        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val player = paper.server.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
         item.editMeta { meta ->
             meta.persistentDataContainer.set(
@@ -128,7 +133,7 @@ class VoucherServiceTest : StringSpec({
     }
 
     "owner-bound v2 vouchers remain valid but changing their signed legacy recipient is rejected" {
-        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val player = paper.server.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
         val current = service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>().payload
         val legacyRecipient = java.util.UUID.randomUUID()
@@ -155,7 +160,7 @@ class VoucherServiceTest : StringSpec({
     }
 
     "signed v1 bearer vouchers remain redeemable through the global ledger" {
-        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val player = paper.server.getPlayer("VoucherQA")!!
         val item = service.create(preset, player)
         val current = service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>().payload
         val v1 = current.copy(signatureVersion = VoucherPayload.LEGACY_SIGNATURE_VERSION)
@@ -170,7 +175,7 @@ class VoucherServiceTest : StringSpec({
     }
 
     "each issued voucher has a unique replay identity" {
-        val player = MockBukkit.getMock()!!.getPlayer("VoucherQA")!!
+        val player = paper.server.getPlayer("VoucherQA")!!
         val first = service.inspect(service.create(preset, player)).shouldBeInstanceOf<VoucherInspection.Valid>()
         val second = service.inspect(service.create(preset, player)).shouldBeInstanceOf<VoucherInspection.Valid>()
 

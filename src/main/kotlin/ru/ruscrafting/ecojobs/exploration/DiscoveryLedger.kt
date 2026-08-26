@@ -220,7 +220,7 @@ class MySqlDiscoveryLedger private constructor(
         private const val CHUNKS_TABLE = "arcecojobs_explored_chunks"
         private const val DISCOVERIES_TABLE = "arcecojobs_chunk_discoveries"
         private const val MIGRATION_LOCK = "arc:arcecojobs:migrations"
-        private const val MIGRATION_VERSION = 3
+        const val SCHEMA_VERSION = 3
         private val CREATE_CHUNKS = """
             CREATE TABLE IF NOT EXISTS `$CHUNKS_TABLE` (
                 `world_id` BINARY(16) NOT NULL,
@@ -331,7 +331,7 @@ class MySqlDiscoveryLedger private constructor(
                     val existing = connection.prepareStatement(
                         "SELECT `checksum` FROM `$HISTORY_TABLE` WHERE `version` = ?",
                     ).use { statement ->
-                        statement.setInt(1, MIGRATION_VERSION)
+                        statement.setInt(1, SCHEMA_VERSION)
                         statement.executeQuery().use { result ->
                             result.takeIf { it.next() }?.getString("checksum")
                         }
@@ -350,7 +350,7 @@ class MySqlDiscoveryLedger private constructor(
                         VALUES (?, ?, ?, ?)
                         """.trimIndent(),
                     ).use { statement ->
-                        statement.setInt(1, MIGRATION_VERSION)
+                        statement.setInt(1, SCHEMA_VERSION)
                         statement.setString(2, "create least-privilege chunk discovery ledger")
                         statement.setString(3, MIGRATION_CHECKSUM)
                         statement.setTimestamp(4, Timestamp.from(Instant.now()))

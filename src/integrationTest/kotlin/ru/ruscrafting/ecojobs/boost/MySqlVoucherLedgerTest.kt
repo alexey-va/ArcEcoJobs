@@ -4,12 +4,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import org.testcontainers.containers.GenericContainer
-import org.testcontainers.containers.wait.strategy.Wait
-import org.testcontainers.utility.DockerImageName
 import ru.ruscrafting.ecojobs.config.RedemptionStorageSettings
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
+import ru.ruscrafting.ecojobs.testing.ArcEcoJobsMySqlFixture
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -17,35 +15,15 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class MySqlVoucherLedgerTest : StringSpec({
-    val mysql: GenericContainer<*> = GenericContainer(DockerImageName.parse("mysql:8.0.46"))
-        .withEnv("MYSQL_DATABASE", "arcecojobs_test")
-        .withEnv("MYSQL_USER", "arcecojobs_test")
-        .withEnv("MYSQL_PASSWORD", "test-password")
-        .withEnv("MYSQL_ROOT_PASSWORD", "root-password")
-        .withExposedPorts(3306)
-        .waitingFor(Wait.forLogMessage(".*ready for connections.*\\n", 2))
-
+    lateinit var mysql: ArcEcoJobsMySqlFixture
     lateinit var settings: RedemptionStorageSettings
 
     beforeSpec {
-        mysql.start()
-        settings = RedemptionStorageSettings(
-            enabled = true,
-            host = mysql.host,
-            port = mysql.getMappedPort(3306),
-            database = "arcecojobs_test",
-            username = "arcecojobs_test",
-            password = "test-password",
-            sslMode = "DISABLED",
-            minimumIdle = 0,
-            maximumPoolSize = 2,
-            connectionTimeoutMs = 10_000,
-            validationTimeoutMs = 5_000,
-            maxLifetimeMs = 60_000,
-        )
+        mysql = ArcEcoJobsMySqlFixture.start("arcecojobs_test")
+        settings = mysql.settings
     }
 
-    afterSpec { mysql.stop() }
+    afterSpec { mysql.close() }
 
     "two server nodes can claim one voucher ID only once" {
         val firstNode = MySqlVoucherLedger.open(settings)

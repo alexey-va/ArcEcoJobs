@@ -18,7 +18,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerItemConsumeEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
-import org.mockbukkit.mockbukkit.MockBukkit
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.GrantOutcome
 import ru.ruscrafting.ecojobs.boost.GrantResult
@@ -33,8 +33,9 @@ import java.time.Instant
 import java.util.UUID
 
 class JobsListenerEventContractTest : StringSpec({
-    beforeSpec { MockBukkit.mock() }
-    afterSpec { MockBukkit.unmock() }
+    lateinit var paper: MockBukkitTestRuntime
+    beforeTest { paper = MockBukkitTestRuntime.open() }
+    afterTest { paper.close() }
 
     fun listener(player: Player, vouchers: VoucherService): JobsListener {
         val locale = mockk<JobsLocale> {

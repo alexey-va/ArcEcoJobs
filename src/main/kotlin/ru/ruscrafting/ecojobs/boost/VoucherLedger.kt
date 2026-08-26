@@ -35,6 +35,7 @@ sealed interface VoucherClaimResult {
 
 interface VoucherLedger : AutoCloseable {
     val available: Boolean
+    val recoveryBacklog: Int get() = 0
 
     fun claim(payload: VoucherPayload, redeemerId: UUID): CompletableFuture<VoucherClaimResult>
 
@@ -78,6 +79,7 @@ class MySqlVoucherLedger private constructor(
     private val activeClaims = ConcurrentHashMap<UUID, ClaimHandle>()
 
     override val available: Boolean = true
+    override val recoveryBacklog: Int get() = activeClaims.size
 
     override fun claim(payload: VoucherPayload, redeemerId: UUID): CompletableFuture<VoucherClaimResult> =
         submit(claimExecutor) {
@@ -265,6 +267,7 @@ class MySqlVoucherLedger private constructor(
     }
 
     companion object {
+        const val SCHEMA_VERSION = 1
         private const val HISTORY_TABLE = "arcecojobs_schema_history"
         private const val REDEMPTIONS_TABLE = "arcecojobs_voucher_redemptions"
         private const val MIGRATION_LOCK = "arc:arcecojobs:migrations"
@@ -361,7 +364,7 @@ class MySqlVoucherLedger private constructor(
                         )
                     }
                     val existing = connection.prepareStatement(
-                        "SELECT `checksum` FROM `$HISTORY_TABLE` WHERE `version` = 1",
+                        "SELECT `checksum` FROM `$HISTORY_TABLE` WHERE `version` = $SCHEMA_VERSION",
                     ).use { statement ->
                         statement.executeQuery().use { result -> result.takeIf { it.next() }?.getString("checksum") }
                     }
@@ -371,7 +374,7 @@ class MySqlVoucherLedger private constructor(
                     }
                     connection.createStatement().use { it.executeUpdate(CREATE_REDEMPTIONS) }
                     connection.prepareStatement(
-                        "INSERT INTO `$HISTORY_TABLE` (`version`, `description`, `checksum`, `applied_at`) VALUES (1, ?, ?, ?)",
+                        "INSERT INTO `$HISTORY_TABLE` (`version`, `description`, `checksum`, `applied_at`) VALUES ($SCHEMA_VERSION, ?, ?, ?)",
                     ).use { statement ->
                         statement.setString(1, "create voucher redemption ledger")
                         statement.setString(2, MIGRATION_CHECKSUM)

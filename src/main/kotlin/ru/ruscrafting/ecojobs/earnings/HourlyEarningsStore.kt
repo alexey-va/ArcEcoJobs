@@ -162,7 +162,7 @@ class MySqlHourlyEarningsStore private constructor(
         private const val HOURLY_TABLE = "arcecojobs_earnings_hourly"
         private const val BATCHES_TABLE = "arcecojobs_earnings_batches"
         private const val MIGRATION_LOCK = "arc:arcecojobs:migrations"
-        private const val MIGRATION_VERSION = 4
+        const val SCHEMA_VERSION = 4
         private val CREATE_HOURLY = """
             CREATE TABLE IF NOT EXISTS `$HOURLY_TABLE` (
                 `player_id` BINARY(16) NOT NULL,
@@ -265,7 +265,7 @@ class MySqlHourlyEarningsStore private constructor(
                     val existing = connection.prepareStatement(
                         "SELECT `checksum` FROM `$HISTORY_TABLE` WHERE `version` = ?",
                     ).use { statement ->
-                        statement.setInt(1, MIGRATION_VERSION)
+                        statement.setInt(1, SCHEMA_VERSION)
                         statement.executeQuery().use { result ->
                             result.takeIf { it.next() }?.getString("checksum")
                         }
@@ -284,7 +284,7 @@ class MySqlHourlyEarningsStore private constructor(
                         VALUES (?, ?, ?, ?)
                         """.trimIndent(),
                     ).use { statement ->
-                        statement.setInt(1, MIGRATION_VERSION)
+                        statement.setInt(1, SCHEMA_VERSION)
                         statement.setString(2, "create bounded hourly job earnings aggregates")
                         statement.setString(3, MIGRATION_CHECKSUM)
                         statement.setTimestamp(4, Timestamp.from(Instant.now()))

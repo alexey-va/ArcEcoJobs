@@ -15,7 +15,7 @@ import net.luckperms.api.node.Node
 import net.luckperms.api.node.NodeType
 import net.luckperms.api.node.types.PermissionNode
 import org.bukkit.Material
-import org.mockbukkit.mockbukkit.MockBukkit
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.GuiItems
 import ru.ruscrafting.ecojobs.domain.BoostNodeCodec
@@ -27,12 +27,13 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class BoostServiceTest : StringSpec({
-    beforeSpec { MockBukkit.mock() }
-    afterSpec { MockBukkit.unmock() }
+    lateinit var paper: MockBukkitTestRuntime
+    beforeSpec { paper = MockBukkitTestRuntime.open() }
+    afterSpec { paper.close() }
 
     "redeem is replay-safe and revoke counts one multi-scope boost instance" {
-        val server = MockBukkit.getMock()!!
-        val plugin = MockBukkit.createMockPlugin("ArcEcoJobsBoostTest")
+        val server = paper.server
+        val plugin = paper.createSimplePlugin("ArcEcoJobsBoostTest")
         val player = server.addPlayer("BoostQA")
         val stored = linkedMapOf<String, Node>()
         val data = mockk<NodeMap>()

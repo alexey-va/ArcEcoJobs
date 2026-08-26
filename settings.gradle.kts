@@ -7,9 +7,20 @@ pluginManagement {
 
 rootProject.name = "ArcEcoJobs"
 
-val arcCoreDir = providers.gradleProperty("arcCoreDir").orNull?.let(::file)
-    ?: file("../arc-core")
-require(arcCoreDir.resolve("settings.gradle.kts").isFile) {
-    "arcCoreDir must point to an arc-core checkout"
+providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
+    require(arcCoreDir.resolve("settings.gradle.kts").isFile) {
+        "arcCoreDir must point to an arc-core checkout"
+    }
+    includeBuild(arcCoreDir) {
+        dependencySubstitution {
+            listOf(
+                "arc-core",
+                "arc-core-integration-testing",
+                "arc-core-paper",
+                "arc-core-paper-testing",
+            ).forEach { artifact ->
+                substitute(module("ru.ruscrafting.arc:$artifact")).using(project(":$artifact"))
+            }
+        }
+    }
 }
-includeBuild(arcCoreDir)

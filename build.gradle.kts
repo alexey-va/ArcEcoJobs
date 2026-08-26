@@ -16,6 +16,7 @@ val integrationTestSourceSet = sourceSets.create("integrationTest") {
 
 repositories {
     mavenCentral()
+    maven("https://repo.rus-crafting.ru/grocermc/") { content { includeGroup("ru.ruscrafting.arc") } }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.auxilor.io/repository/maven-public/")
     maven("https://repo.extendedclip.com/releases/")
@@ -27,8 +28,8 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
+    implementation("ru.ruscrafting.arc:arc-core:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.0.0")
     implementation("com.zaxxer:HikariCP:7.0.2")
     implementation("com.mysql:mysql-connector-j:9.7.0")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
@@ -51,11 +52,11 @@ dependencies {
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     testImplementation("net.luckperms:api:5.5")
     testImplementation("me.clip:placeholderapi:2.12.3")
-    testImplementation("ru.arc:arc-core-paper-testing:1.0-SNAPSHOT")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.0.0")
     testImplementation("org.yaml:snakeyaml:2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.arc:arc-core-integration-testing:1.0-SNAPSHOT")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.0.0")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }

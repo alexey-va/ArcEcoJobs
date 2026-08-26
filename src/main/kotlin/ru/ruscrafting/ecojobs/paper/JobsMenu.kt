@@ -63,6 +63,11 @@ class JobsMenu(
     private val earnings: () -> EarningsService?,
     private val reload: () -> Result<Unit>,
 ) {
+    internal companion object {
+        const val MAIN_MENU_BACK_SLOT = 45
+        const val MAIN_MENU_COMMAND = "menu"
+    }
+
     private class Holder(val view: JobsView) : InventoryHolder {
         lateinit var backing: Inventory
         override fun getInventory(): Inventory = backing
@@ -153,19 +158,21 @@ class JobsMenu(
             "count" to text(boosts.active(player).size),
         )))
         inventory.setItem(32, item(Material.KNOWLEDGE_BOOK, player, "menu.main.help-name", "menu.main.help-lore"))
+        inventory.setItem(MAIN_MENU_BACK_SLOT, backItem(player))
         if (player.hasPermission("arcecojobs.admin")) {
             inventory.setItem(49, item(Material.COMMAND_BLOCK, player, "menu.main.admin-name", "menu.main.admin-lore"))
         }
         player.openInventory(inventory)
     }
 
-    private fun clickMain(player: Player, slot: Int) {
+    internal fun clickMain(player: Player, slot: Int) {
         when (slot) {
             20 -> open(player, JobsView.Catalog(false, 1, JobsView.Main))
             22 -> open(player, JobsView.Catalog(true, 1, JobsView.Main))
             24 -> open(player, JobsView.LeaderboardSelector(1, JobsView.Main))
             30 -> open(player, JobsView.Boosts(null, 1, JobsView.Main))
             32 -> open(player, JobsView.Help(JobsView.Main))
+            MAIN_MENU_BACK_SLOT -> player.performCommand(MAIN_MENU_COMMAND)
             49 -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(JobsView.Main))
         }
     }

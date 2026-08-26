@@ -170,13 +170,20 @@ async function runScenario (bot, config) {
     `${expectedMainTitle} title, player sections, and correct admin visibility`,
     state,
     state.title === expectedMainTitle &&
-      [20, 22, 24, 30, 32].every((slot) => hasSlot(state, slot)) &&
+      [20, 22, 24, 30, 32, 45].every((slot) => hasSlot(state, slot)) &&
       slotType(state, 20) === 'crafting_table' &&
       !hasNamedItem(state, /^(?:Close|Закрыть)$/i) &&
+      hasNamedItem(state, /^(?:Back|Назад)$/i) &&
       hasNamedItem(state, new RegExp(`^${expectedCatalogName}$`)) &&
       hasSlot(state, 49) === config.expectAdmin
   )
 
+  window = await clickNext(bot, 45)
+  state = snapshot(window)
+  record(results, 'back to server menu', 'back button opens the RusCrafting main menu', state,
+    /Главное меню/i.test(state.title) && hasNamedItem(state, /^Работы$/i))
+
+  window = await openJobs(bot)
   window = await clickNext(bot, 22)
   state = snapshot(window)
   record(results, 'active jobs', 'focused active-jobs view with empty or populated state', state,

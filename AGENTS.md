@@ -6,8 +6,13 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
   PlaceholderAPI 2.12.3, Java 25, and Kotlin 2.3.0.
 - Use the pinned public `arc-core` release by default; opt into a local
   composite only with `-ParcCoreDir=/absolute/path/to/arc-core`. Paper tests use
-  `ru.ruscrafting.arc:arc-core-paper-testing:2.0.0` and
+  `ru.ruscrafting.arc:arc-core-paper-testing:2.0.1` and
   `MockBukkitTestRuntime`; never pin MockBukkit directly.
+- All MySQL contours use `arc-core-sql` for connection settings, pool/executor
+  lifecycle, and checksum-protected migrations. Voucher claims alone retain a
+  connection-scoped advisory lock across the LuckPerms write; keep their
+  completion executor separate so an exhausted claim pool cannot starve its
+  own acknowledgements.
 - EcoJobs owns professions, levels, XP, join/leave prices, and persistent job
   data. Do not duplicate or mutate those stores outside its public API.
 - LuckPerms direct expiring nodes own boost state. Do not dispatch LuckPerms
@@ -29,4 +34,6 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
 - Runtime state (`secret.key`) belongs under `plugins/ArcEcoJobs/` and is never
   tracked or deployed as configuration. Back up the key before production
   rollout or previously issued vouchers become invalid.
-- Build and test with `../arc-core/gradlew -p . clean check shadowJar`.
+- On a local workstation without Docker, run
+  `../arc-core/gradlew -p . clean test shadowJar`. The Docker-capable CI gate
+  separately runs `integrationTest`; use `clean check` only on such a host.

@@ -8,6 +8,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
+private fun Path.isActiveJobDefinition(): Boolean =
+    fileName.toString().let { name -> name.endsWith(".yml") && !name.startsWith("_") }
+
 class EarningsConfigTest : StringSpec({
     val project = Path.of(System.getProperty("arcecojobs.projectDir"))
 
@@ -46,7 +49,7 @@ class EarningsConfigTest : StringSpec({
             project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs"),
         ).forEach { root ->
             Files.list(root).use { paths ->
-                paths.filter { it.fileName.toString().endsWith(".yml") }.forEach { path ->
+                paths.filter(Path::isActiveJobDefinition).forEach { path ->
                     val jobId = path.fileName.toString().removeSuffix(".yml")
                     val job = YamlConfiguration.loadConfiguration(path.toFile())
                     val payouts = job.getMapList("effects").filter { it["id"] == "give_money" }
@@ -60,5 +63,10 @@ class EarningsConfigTest : StringSpec({
                 }
             }
         }
+    }
+
+    "underscore-prefixed templates are not active EcoJobs definitions" {
+        Path.of("_example.yml").isActiveJobDefinition() shouldBe false
+        Path.of("miner.yml").isActiveJobDefinition() shouldBe true
     }
 })

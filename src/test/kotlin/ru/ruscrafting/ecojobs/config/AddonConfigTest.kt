@@ -308,29 +308,6 @@ class AddonConfigTest : StringSpec({
         profiles.first().maximumPendingBuckets shouldBe 4_096
     }
 
-    "every reviewed EcoJobs payout carries its exact earnings marker" {
-        listOf(
-            project.parent.resolve("classic/plugins/EcoJobs/jobs"),
-            project.parent.resolve("classic_survival/plugins/EcoJobs/jobs"),
-            project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs"),
-        ).forEach { root ->
-            Files.list(root).use { paths ->
-                paths.filter { it.fileName.toString().endsWith(".yml") }.forEach { path ->
-                    val jobId = path.fileName.toString().removeSuffix(".yml")
-                    val job = YamlConfiguration.loadConfiguration(path.toFile())
-                    val payouts = job.getMapList("effects").filter { it["id"] == "give_money" }
-                    payouts.isEmpty() shouldBe false
-                    payouts.forEach { effect ->
-                        @Suppress("UNCHECKED_CAST")
-                        val amount = (effect["args"] as Map<String, String>).getValue("amount")
-                        ("%arcecojobs_boost_${jobId}_money_multiplier%" in amount) shouldBe true
-                        ("%arcecojobs_earnings_${jobId}_money_marker%" in amount) shouldBe true
-                    }
-                }
-            }
-        }
-    }
-
     "production and lab explorer jobs preserve one reviewed discovery contract" {
         val paths = listOf(
             project.parent.resolve("classic/plugins/EcoJobs/jobs/explorer.yml"),

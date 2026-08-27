@@ -1,23 +1,19 @@
 package ru.ruscrafting.ecojobs.boost
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
+import ru.arc.sql.MySqlMigrator
+import ru.arc.sql.SqlExecutor
+import ru.arc.sql.SqlMigration
+import ru.arc.sql.SqlRuntime
 import ru.ruscrafting.ecojobs.config.RedemptionStorageSettings
+import ru.ruscrafting.ecojobs.config.toSqlConnectionConfig
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
 import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.sql.Connection
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.ThreadFactory
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 data class VoucherClaim(
     val voucherId: UUID,
@@ -65,9 +61,8 @@ object UnavailableVoucherLedger : VoucherLedger {
 }
 
 class MySqlVoucherLedger private constructor(
-    private val dataSource: HikariDataSource,
-    private val claimExecutor: ExecutorService,
-    private val completionExecutor: ExecutorService,
+    private val runtime: SqlRuntime,
+    private val completionExecutor: SqlExecutor,
 ) : VoucherLedger {
     private data class ClaimHandle(
         val voucherId: UUID,
@@ -82,8 +77,8 @@ class MySqlVoucherLedger private constructor(
     override val recoveryBacklog: Int get() = activeClaims.size
 
     override fun claim(payload: VoucherPayload, redeemerId: UUID): CompletableFuture<VoucherClaimResult> =
-        submit(claimExecutor) {
-            val connection = dataSource.connection
+        runtime.executor.submit {
+            val connection = runtime.dataSource.connection
             val lockName = "$CLAIM_LOCK_PREFIX${payload.voucherId}"
             var retained = false
             try {
@@ -153,7 +148,7 @@ class MySqlVoucherLedger private constructor(
             }
         }
 
-    override fun markApplied(claim: VoucherClaim): CompletableFuture<Boolean> = submit(completionExecutor) {
+    override fun markApplied(claim: VoucherClaim): CompletableFuture<Boolean> = completionExecutor.submit {
         withClaimHandle(claim) { connection ->
             transaction(connection) {
                 val updated = connection.prepareStatement(
@@ -183,7 +178,7 @@ class MySqlVoucherLedger private constructor(
         }
     }
 
-    override fun release(claim: VoucherClaim): CompletableFuture<Boolean> = submit(completionExecutor) {
+    override fun release(claim: VoucherClaim): CompletableFuture<Boolean> = completionExecutor.submit {
         withClaimHandle(claim) { connection ->
             connection.prepareStatement(
                 "DELETE FROM `$REDEMPTIONS_TABLE` WHERE `voucher_id` = ? AND `claim_token` = ? AND `status` = 'CLAIMED'",
@@ -195,32 +190,20 @@ class MySqlVoucherLedger private constructor(
         }
     }
 
-    override fun abandon(claim: VoucherClaim): CompletableFuture<Boolean> = submit(completionExecutor) {
+    override fun abandon(claim: VoucherClaim): CompletableFuture<Boolean> = completionExecutor.submit {
         withClaimHandle(claim) { true }
     }
 
     override fun close() {
-        claimExecutor.shutdown()
-        completionExecutor.shutdown()
-        awaitTermination(claimExecutor)
-        awaitTermination(completionExecutor)
+        // Advisory locks belong to retained JDBC sessions. Stop both queues before
+        // returning those sessions, then close the shared pool last.
+        completionExecutor.close()
+        runtime.executor.close()
         activeClaims.entries.toList().forEach { (token, handle) ->
             if (activeClaims.remove(token, handle)) releaseNamedLock(handle.connection, handle.lockName)
         }
-        dataSource.close()
+        runtime.dataSource.close()
     }
-
-    private fun awaitTermination(executor: ExecutorService) {
-        try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) executor.shutdownNow()
-        } catch (_: InterruptedException) {
-            executor.shutdownNow()
-            Thread.currentThread().interrupt()
-        }
-    }
-
-    private fun <T> submit(executor: ExecutorService, block: () -> T): CompletableFuture<T> =
-        CompletableFuture.supplyAsync(block, executor)
 
     private fun <T> transaction(connection: Connection, block: (Connection) -> T): T {
         connection.autoCommit = false
@@ -248,7 +231,7 @@ class MySqlVoucherLedger private constructor(
             }
         }
         if (released.isFailure) {
-            runCatching { dataSource.evictConnection(connection) }
+            runCatching { runtime.dataSource.evictConnection(connection) }
         } else {
             runCatching { connection.close() }
         }
@@ -268,9 +251,7 @@ class MySqlVoucherLedger private constructor(
 
     companion object {
         const val SCHEMA_VERSION = 1
-        private const val HISTORY_TABLE = "arcecojobs_schema_history"
         private const val REDEMPTIONS_TABLE = "arcecojobs_voucher_redemptions"
-        private const val MIGRATION_LOCK = "arc:arcecojobs:migrations"
         private const val CLAIM_LOCK_PREFIX = "arc:arcecojobs:voucher:"
         private val CREATE_REDEMPTIONS = """
             CREATE TABLE IF NOT EXISTS `$REDEMPTIONS_TABLE` (
@@ -285,122 +266,35 @@ class MySqlVoucherLedger private constructor(
                 CONSTRAINT `arcecojobs_voucher_status_chk` CHECK (`status` IN ('CLAIMED', 'APPLIED'))
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """.trimIndent()
-        private val MIGRATION_CHECKSUM = MessageDigest.getInstance("SHA-256")
-            .digest(CREATE_REDEMPTIONS.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        private val MIGRATION = SqlMigration(
+            version = SCHEMA_VERSION,
+            description = "create voucher redemption ledger",
+            statements = listOf(CREATE_REDEMPTIONS),
+        )
 
         fun open(settings: RedemptionStorageSettings): MySqlVoucherLedger {
             require(settings.enabled) { "voucher redemption MySQL is disabled" }
-            val hikari = HikariConfig().apply {
-                poolName = "ArcEcoJobs-redemptions"
-                jdbcUrl = buildString {
-                    append("jdbc:mysql://")
-                    append(settings.host)
-                    append(':')
-                    append(settings.port)
-                    append('/')
-                    append(settings.database)
-                    append("?useUnicode=true&characterEncoding=utf8")
-                    append("&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true")
-                    append("&sslMode=")
-                    append(settings.sslMode)
-                    if (settings.sslMode == "DISABLED") append("&allowPublicKeyRetrieval=true")
-                    append("&connectTimeout=")
-                    append(settings.connectionTimeoutMs)
-                    append("&socketTimeout=30000")
-                }
-                driverClassName = "com.mysql.cj.jdbc.Driver"
-                username = settings.username
-                password = settings.password
-                minimumIdle = settings.minimumIdle
-                maximumPoolSize = settings.maximumPoolSize
-                connectionTimeout = settings.connectionTimeoutMs
-                validationTimeout = settings.validationTimeoutMs
-                maxLifetime = settings.maxLifetimeMs
-                initializationFailTimeout = settings.connectionTimeoutMs
-                isAutoCommit = true
-                addDataSourceProperty("cachePrepStmts", "true")
-                addDataSourceProperty("prepStmtCacheSize", "250")
-                addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
-                addDataSourceProperty("useServerPrepStmts", "true")
-            }
-            val dataSource = HikariDataSource(hikari)
+            val runtime = SqlRuntime.create(
+                settings.toSqlConnectionConfig(settings.maximumPoolSize),
+                "ArcEcoJobs-redemptions",
+            )
+            // Completion must never queue behind claims blocked on an exhausted
+            // pool: it releases the retained sessions that make capacity available.
+            val completionExecutor = SqlExecutor(
+                runtime.dataSource,
+                threads = 2,
+                threadNamePrefix = "ArcEcoJobs-redemptions-complete",
+            )
             return runCatching {
-                migrate(dataSource)
-                MySqlVoucherLedger(
-                    dataSource,
-                    Executors.newFixedThreadPool(
-                        settings.maximumPoolSize,
-                        LedgerThreadFactory("claim"),
-                    ),
-                    Executors.newFixedThreadPool(2, LedgerThreadFactory("complete")),
-                )
+                MySqlMigrator(runtime.dataSource, "arcecojobs").migrate(listOf(MIGRATION))
+                MySqlVoucherLedger(runtime, completionExecutor)
             }.getOrElse { failure ->
-                dataSource.close()
+                completionExecutor.close()
+                runtime.close()
                 throw failure
             }
         }
-
-        private fun migrate(dataSource: HikariDataSource) {
-            dataSource.connection.use { connection ->
-                connection.prepareStatement("SELECT GET_LOCK(?, 30)").use { statement ->
-                    statement.setString(1, MIGRATION_LOCK)
-                    statement.executeQuery().use { result ->
-                        check(result.next() && result.getInt(1) == 1) { "could not acquire voucher migration lock" }
-                    }
-                }
-                try {
-                    connection.createStatement().use { statement ->
-                        statement.executeUpdate(
-                            """
-                            CREATE TABLE IF NOT EXISTS `$HISTORY_TABLE` (
-                                `version` INT NOT NULL,
-                                `description` VARCHAR(255) NOT NULL,
-                                `checksum` CHAR(64) NOT NULL,
-                                `applied_at` TIMESTAMP(3) NOT NULL,
-                                PRIMARY KEY (`version`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                            """.trimIndent(),
-                        )
-                    }
-                    val existing = connection.prepareStatement(
-                        "SELECT `checksum` FROM `$HISTORY_TABLE` WHERE `version` = $SCHEMA_VERSION",
-                    ).use { statement ->
-                        statement.executeQuery().use { result -> result.takeIf { it.next() }?.getString("checksum") }
-                    }
-                    if (existing != null) {
-                        check(existing == MIGRATION_CHECKSUM) { "voucher migration checksum mismatch" }
-                        return
-                    }
-                    connection.createStatement().use { it.executeUpdate(CREATE_REDEMPTIONS) }
-                    connection.prepareStatement(
-                        "INSERT INTO `$HISTORY_TABLE` (`version`, `description`, `checksum`, `applied_at`) VALUES ($SCHEMA_VERSION, ?, ?, ?)",
-                    ).use { statement ->
-                        statement.setString(1, "create voucher redemption ledger")
-                        statement.setString(2, MIGRATION_CHECKSUM)
-                        statement.setTimestamp(3, Timestamp.from(Instant.now()))
-                        statement.executeUpdate()
-                    }
-                } finally {
-                    connection.prepareStatement("SELECT RELEASE_LOCK(?)").use { statement ->
-                        statement.setString(1, MIGRATION_LOCK)
-                        statement.executeQuery().use { result ->
-                            check(result.next() && result.getInt(1) == 1) {
-                                "could not release voucher migration lock"
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
-}
-
-private class LedgerThreadFactory(private val role: String) : ThreadFactory {
-    private val sequence = AtomicInteger()
-
-    override fun newThread(runnable: Runnable): Thread =
-        Thread(runnable, "ArcEcoJobs-ledger-$role-${sequence.incrementAndGet()}").apply { isDaemon = true }
 }
 
 private fun UUID.bytes(): ByteArray = ByteBuffer.allocate(16)

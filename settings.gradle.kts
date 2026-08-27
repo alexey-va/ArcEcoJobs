@@ -18,6 +18,7 @@ providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
                 "arc-core-integration-testing",
                 "arc-core-paper",
                 "arc-core-paper-testing",
+                "arc-core-sql",
             ).forEach { artifact ->
                 substitute(module("ru.ruscrafting.arc:$artifact")).using(project(":$artifact"))
             }

@@ -4,15 +4,24 @@ ArcEcoJobs is the RusCrafting interface addon for EcoJobs 2026.33. EcoJobs
 continues to own profession progression; ArcEcoJobs adds the player and admin
 menus, global rankings, and LuckPerms-backed XP/money boosts.
 
-Build:
+Local unit/MockBukkit and package gate (no Docker required):
 
 ```bash
-../arc-core/gradlew -p . clean check shadowJar
+../arc-core/gradlew -p . clean test shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.11.jar`. The test suite
-starts a disposable MySQL 8.0.46 container to prove concurrent redemption and
-idempotent hourly earnings aggregation.
+The production artifact is `build/libs/ArcEcoJobs-0.1.12.jar`. The test suite
+uses public `arc-core 2.0.1` dependencies by default. Pass
+`-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
+unpublished local core checkout. GitHub CI additionally runs `integrationTest`
+against a disposable MySQL 8.0.46 service to prove concurrent redemption,
+discovery ordering, migration replay, and idempotent hourly aggregation.
+
+The three MySQL contours share `arc-core-sql` connection validation, Hikari
+lifecycle, bounded executors, and checksum-protected migrations. Voucher
+redemption keeps a separate core-managed completion executor because its
+advisory locks retain JDBC sessions across the LuckPerms write; this prevents
+pool exhaustion from starving the acknowledgement that releases capacity.
 
 ## Explorer job
 

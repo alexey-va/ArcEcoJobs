@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict'
 
-const path = require('node:path')
 const { once } = require('node:events')
-const { Vec3 } = require(path.resolve(__dirname, '../../scripts/player-bot/node_modules/vec3'))
-const mineflayer = require(path.resolve(__dirname, '../../scripts/player-bot/node_modules/mineflayer'))
-const { pathfinder, Movements, goals } = require(path.resolve(__dirname, '../../scripts/player-bot/node_modules/mineflayer-pathfinder'))
+const { playerBotPath } = require('./ops-workspace.cjs')
+const { Vec3 } = require(playerBotPath('node_modules/vec3'))
+const mineflayer = require(playerBotPath('node_modules/mineflayer'))
+const { pathfinder, Movements, goals } = require(playerBotPath('node_modules/mineflayer-pathfinder'))
 
 const LAB_HOST = 'mc.rus-crafting.ru'
 const LAB_PORT = 54294

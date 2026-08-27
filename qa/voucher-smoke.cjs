@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict'
 
-const path = require('node:path')
 const { once } = require('node:events')
+const { playerBotPath } = require('./ops-workspace.cjs')
 
-const mineflayer = require(path.resolve(__dirname, '../../scripts/player-bot/node_modules/mineflayer'))
+const mineflayer = require(playerBotPath('node_modules/mineflayer'))
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 

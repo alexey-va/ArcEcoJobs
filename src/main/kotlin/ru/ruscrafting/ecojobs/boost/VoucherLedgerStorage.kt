@@ -41,18 +41,19 @@ object VoucherLedgerStorage {
             INSERT INTO `arc_one_time_uses`
                 (`purpose`, `use_id`, `fingerprint`, `claimant_id`, `claim_id`, `claim_scope`, `status`, `claimed_at`, `committed_at`)
             SELECT
-                'arcecojobs.voucher', `voucher_id`, `payload_hash`, `redeemer_id`, `voucher_id`, NULL,
-                CASE `status` WHEN 'APPLIED' THEN 'COMMITTED' ELSE 'CLAIMED' END,
-                `claimed_at`, `applied_at`
-            FROM `arcecojobs_voucher_redemptions`
+                'arcecojobs.voucher', legacy.`voucher_id`, legacy.`payload_hash`, legacy.`redeemer_id`,
+                legacy.`voucher_id`, NULL,
+                CASE legacy.`status` WHEN 'APPLIED' THEN 'COMMITTED' ELSE 'CLAIMED' END,
+                legacy.`claimed_at`, legacy.`applied_at`
+            FROM `arcecojobs_voucher_redemptions` AS legacy
             ON DUPLICATE KEY UPDATE
                 `purpose` = IF(
-                    `use_id` = VALUES(`use_id`) AND
-                    `fingerprint` = VALUES(`fingerprint`) AND
-                    `claimant_id` = VALUES(`claimant_id`) AND
-                    `claim_id` = VALUES(`claim_id`) AND
-                    `status` = VALUES(`status`),
-                    `purpose`,
+                    `arc_one_time_uses`.`use_id` = VALUES(`use_id`) AND
+                    `arc_one_time_uses`.`fingerprint` = VALUES(`fingerprint`) AND
+                    `arc_one_time_uses`.`claimant_id` = VALUES(`claimant_id`) AND
+                    `arc_one_time_uses`.`claim_id` = VALUES(`claim_id`) AND
+                    `arc_one_time_uses`.`status` = VALUES(`status`),
+                    `arc_one_time_uses`.`purpose`,
                     NULL
                 )
             """.trimIndent(),

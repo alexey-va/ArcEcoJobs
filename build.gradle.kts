@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.12"
+version = "0.1.13"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -28,9 +28,9 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.0.1")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.0.1")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.0.1")
+    implementation("ru.ruscrafting.arc:arc-core:2.0.3")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.0.3")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.0.3")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.willfp:EcoJobs:2026.33")
     compileOnly("com.willfp:eco:2026.33")
@@ -51,11 +51,11 @@ dependencies {
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     testImplementation("net.luckperms:api:5.5")
     testImplementation("me.clip:placeholderapi:2.12.3")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.0.1")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.0.3")
     testImplementation("org.yaml:snakeyaml:2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.0.1")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.0.3")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }

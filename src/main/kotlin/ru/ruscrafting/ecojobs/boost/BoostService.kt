@@ -7,6 +7,16 @@ import net.luckperms.api.node.NodeType
 import net.luckperms.api.node.matcher.NodeMatcher
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.onetime.OneTimeUseAbandonResult
+import ru.arc.onetime.OneTimeUseClaim
+import ru.arc.onetime.OneTimeUseClaimRequest
+import ru.arc.onetime.OneTimeUseClaimResult
+import ru.arc.onetime.OneTimeUseCommitResult
+import ru.arc.onetime.OneTimeUseFingerprint
+import ru.arc.onetime.OneTimeUseIdentity
+import ru.arc.onetime.OneTimeUseLedger
+import ru.arc.onetime.OneTimeUseReleaseResult
+import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.domain.BoostApplicationDecision
 import ru.ruscrafting.ecojobs.domain.BoostInstance
@@ -63,7 +73,7 @@ class BoostService internal constructor(
     private val luckPerms: LuckPerms,
     private val settings: () -> AddonSettings,
     private val nodeFactory: BoostNodeFactory = LuckPermsBoostNodeFactory,
-    private val voucherLedger: VoucherLedger = UnavailableVoucherLedger,
+    private val voucherLedger: OneTimeUseLedger = UnavailableOneTimeUseLedger,
     private val usedVoucherLookup: UsedVoucherLookup = LuckPermsUsedVoucherLookup(luckPerms),
 ) {
     private data class CacheEntry(val validUntilMillis: Long, val boosts: List<BoostInstance>)
@@ -89,20 +99,35 @@ class BoostService internal constructor(
     }
 
     fun redeemDetailed(payload: VoucherPayload, player: Player, callback: (GrantOutcome) -> Unit) {
-        voucherLedger.claim(payload, player.uniqueId).whenComplete { result, claimFailure ->
+        val request = OneTimeUseClaimRequest(
+            identity = OneTimeUseIdentity(
+                useId = payload.voucherId,
+                fingerprint = OneTimeUseFingerprint.fromBytes(payload.fingerprint()),
+            ),
+            // The voucher id is also the durable operation id. A retry after
+            // restart must recover the exact claim instead of creating a new
+            // operation for the same bearer capability.
+            claimId = payload.voucherId,
+            claimantId = player.uniqueId,
+        )
+        voucherLedger.claim(request).whenComplete { result, claimFailure ->
             if (claimFailure != null || result == null) {
                 logFailure("Could not claim voucher ${payload.voucherId}", claimFailure)
                 onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 return@whenComplete
             }
             when (result) {
-                VoucherClaimResult.AlreadyApplied -> onMain { callback(GrantOutcome(GrantResult.ALREADY_USED)) }
-                VoucherClaimResult.Busy -> onMain { callback(GrantOutcome(GrantResult.BUSY)) }
-                VoucherClaimResult.Conflict -> {
+                OneTimeUseClaimResult.AlreadyConsumed -> onMain { callback(GrantOutcome(GrantResult.ALREADY_USED)) }
+                OneTimeUseClaimResult.Busy -> onMain { callback(GrantOutcome(GrantResult.BUSY)) }
+                OneTimeUseClaimResult.Missing -> {
+                    plugin.logger.severe("Voucher ${payload.voucherId} disappeared from its redemption ledger")
+                    onMain { callback(GrantOutcome(GrantResult.FAILED)) }
+                }
+                OneTimeUseClaimResult.IdentityConflict -> {
                     plugin.logger.severe("Voucher ${payload.voucherId} conflicts with an existing signed redemption identity")
                     onMain { callback(GrantOutcome(GrantResult.FAILED)) }
                 }
-                is VoucherClaimResult.Acquired -> reconcileAndApply(payload, result.claim, callback)
+                is OneTimeUseClaimResult.Acquired -> reconcileAndApply(payload, result.claim, callback)
             }
         }
     }
@@ -140,7 +165,7 @@ class BoostService internal constructor(
 
     private fun reconcileAndApply(
         payload: VoucherPayload,
-        claim: VoucherClaim,
+        claim: OneTimeUseClaim,
         callback: (GrantOutcome) -> Unit,
     ) {
         if (payload.signatureVersion == VoucherPayload.CURRENT_SIGNATURE_VERSION) {
@@ -169,10 +194,10 @@ class BoostService internal constructor(
 
     private fun applyClaim(
         payload: VoucherPayload,
-        claim: VoucherClaim,
+        claim: OneTimeUseClaim,
         callback: (GrantOutcome) -> Unit,
     ) {
-        luckPerms.userManager.loadUser(claim.redeemerId)
+        luckPerms.userManager.loadUser(claim.claimantId)
             .orTimeout(LP_OPERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .whenComplete { user, loadFailure ->
                 if (loadFailure != null || user == null) {
@@ -255,12 +280,12 @@ class BoostService internal constructor(
                 save.orTimeout(LP_OPERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS).whenComplete { _, saveFailure ->
                     if (saveFailure != null) {
                         rollbackMutation(user, added, removed)
-                        cache.remove(claim.redeemerId)
+                        cache.remove(claim.claimantId)
                         logFailure("LuckPerms save failed for voucher ${payload.voucherId}", saveFailure)
                         failAfterPossibleMutation(claim, callback)
                         return@whenComplete
                     }
-                    cache.remove(claim.redeemerId)
+                    cache.remove(claim.claimantId)
                     finishClaim(
                         claim,
                         GrantOutcome(GrantResult.GRANTED, decision.totalRemaining),
@@ -270,44 +295,65 @@ class BoostService internal constructor(
             }
     }
 
-    private fun failBeforeMutation(claim: VoucherClaim, callback: (GrantOutcome) -> Unit) {
+    private fun failBeforeMutation(claim: OneTimeUseClaim, callback: (GrantOutcome) -> Unit) {
         rejectBeforeMutation(claim, GrantOutcome(GrantResult.FAILED), callback)
     }
 
     private fun rejectBeforeMutation(
-        claim: VoucherClaim,
+        claim: OneTimeUseClaim,
         outcome: GrantOutcome,
         callback: (GrantOutcome) -> Unit,
     ) {
-        val released = if (claim.newlyCreated) voucherLedger.release(claim) else voucherLedger.abandon(claim)
-        released.whenComplete { closed, failure ->
-            if (failure != null || closed != true) {
-                logFailure("Could not close failed voucher claim ${claim.voucherId}", failure)
+        if (claim.newlyCreated) {
+            voucherLedger.release(claim).whenComplete { result, failure ->
+                val closed = result == OneTimeUseReleaseResult.RELEASED || result == OneTimeUseReleaseResult.ALREADY_RELEASED
+                completeRejectedClaim(claim, outcome, callback, closed, failure)
             }
-            onMain { callback(if (failure == null && closed == true) outcome else GrantOutcome(GrantResult.FAILED)) }
+        } else {
+            voucherLedger.abandon(claim).whenComplete { result, failure ->
+                val closed = result == OneTimeUseAbandonResult.RETAINED_FOR_RECOVERY ||
+                    result == OneTimeUseAbandonResult.ALREADY_COMMITTED
+                completeRejectedClaim(claim, outcome, callback, closed, failure)
+            }
         }
     }
 
-    private fun failAfterPossibleMutation(claim: VoucherClaim, callback: (GrantOutcome) -> Unit) {
-        voucherLedger.abandon(claim).whenComplete { closed, failure ->
-            if (failure != null || closed != true) {
-                logFailure("Could not release uncertain voucher claim ${claim.voucherId}", failure)
+    private fun completeRejectedClaim(
+        claim: OneTimeUseClaim,
+        outcome: GrantOutcome,
+        callback: (GrantOutcome) -> Unit,
+        closed: Boolean,
+        failure: Throwable?,
+    ) {
+        if (failure != null || !closed) {
+            logFailure("Could not close failed voucher claim ${claim.identity.useId}", failure)
+        }
+        onMain { callback(if (failure == null && closed) outcome else GrantOutcome(GrantResult.FAILED)) }
+    }
+
+    private fun failAfterPossibleMutation(claim: OneTimeUseClaim, callback: (GrantOutcome) -> Unit) {
+        voucherLedger.abandon(claim).whenComplete { result, failure ->
+            val retained = result == OneTimeUseAbandonResult.RETAINED_FOR_RECOVERY ||
+                result == OneTimeUseAbandonResult.ALREADY_COMMITTED
+            if (failure != null || !retained) {
+                logFailure("Could not retain uncertain voucher claim ${claim.identity.useId}", failure)
             }
             onMain { callback(GrantOutcome(GrantResult.FAILED)) }
         }
     }
 
     private fun finishClaim(
-        claim: VoucherClaim,
+        claim: OneTimeUseClaim,
         outcome: GrantOutcome,
         callback: (GrantOutcome) -> Unit,
     ) {
-        voucherLedger.markApplied(claim).whenComplete { applied, failure ->
-            if (failure != null || applied != true) {
-                logFailure("Could not finalize voucher claim ${claim.voucherId}", failure)
+        voucherLedger.commit(claim).whenComplete { result, failure ->
+            val committed = result == OneTimeUseCommitResult.COMMITTED || result == OneTimeUseCommitResult.ALREADY_COMMITTED
+            if (failure != null || !committed) {
+                logFailure("Could not finalize voucher claim ${claim.identity.useId}", failure)
             }
             onMain {
-                callback(if (failure == null && applied == true) outcome else GrantOutcome(GrantResult.FAILED))
+                callback(if (failure == null && committed) outcome else GrantOutcome(GrantResult.FAILED))
             }
         }
     }

@@ -10,8 +10,8 @@ Local unit/MockBukkit and package gate (no Docker required):
 ./gradlew clean test shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.12.jar`. The test suite
-uses public `arc-core 2.0.1` dependencies by default. Pass
+The production artifact is `build/libs/ArcEcoJobs-0.1.13.jar`. The test suite
+uses public `arc-core 2.0.3` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,
@@ -126,15 +126,17 @@ transferred freely. Correctly signed v1 and v2 items remain compatible; the v2
 recipient field is verified as part of its historical signature but no longer
 restricts who can redeem the item.
 
-Replay protection is global rather than player-bound. MySQL table
-`arcecojobs_voucher_redemptions` owns the permanent unique `voucher_id` claim;
-LuckPerms continues to own the actual boost and keeps a deterministic
-per-player application marker for crash reconciliation. A redemption moves
-from `CLAIMED` to `APPLIED` only after LuckPerms saves. If the final MySQL
-acknowledgement is lost, retry detects the LuckPerms marker and completes the
-same claim without issuing a second boost. Applied rows must never be expired
-or purged. A MySQL named lock serializes the same voucher across nodes while
-LuckPerms is being updated; an uncertain pending claim remains reserved to its
+Replay protection is global rather than player-bound. Core's single MySQL
+table `arc_one_time_uses` owns the permanent unique claim under purpose
+`arcecojobs.voucher`; the former `arcecojobs_voucher_redemptions` table is
+compatibility-import input only. LuckPerms continues to own the actual boost
+and keeps a deterministic per-player application marker for crash
+reconciliation. A redemption moves from `CLAIMED` to `COMMITTED` only after
+LuckPerms saves. If the final MySQL acknowledgement is lost, retry detects the
+LuckPerms marker and completes the same claim without issuing a second boost.
+Committed rows must never be expired or purged. A MySQL named lock serializes
+the same voucher across nodes while LuckPerms is being updated; an uncertain
+pending claim remains reserved to its
 first redeemer for safe retry. Every pending claim for a signed v1/v2 item also
 searches LuckPerms for a historical use marker, including after a failed MySQL
 acknowledgement, so a voucher redeemed before this ledger existed cannot

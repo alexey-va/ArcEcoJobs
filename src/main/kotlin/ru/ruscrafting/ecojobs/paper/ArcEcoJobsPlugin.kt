@@ -8,12 +8,12 @@ import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.ScheduledTask
 import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.observability.RuntimeHealthState
+import ru.arc.onetime.OneTimeUseLedger
+import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.paper.runtime.PaperPluginRuntime
 import ru.ruscrafting.ecojobs.boost.BoostService
-import ru.ruscrafting.ecojobs.boost.MySqlVoucherLedger
 import ru.ruscrafting.ecojobs.boost.SigningKeyStore
-import ru.ruscrafting.ecojobs.boost.UnavailableVoucherLedger
-import ru.ruscrafting.ecojobs.boost.VoucherLedger
+import ru.ruscrafting.ecojobs.boost.VoucherLedgerStorage
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
@@ -38,7 +38,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var ecoJobs: EcoJobsBridge
     private lateinit var boosts: BoostService
     private lateinit var vouchers: VoucherService
-    private var voucherLedger: VoucherLedger = UnavailableVoucherLedger
+    private var voucherLedger: OneTimeUseLedger = UnavailableOneTimeUseLedger
     private var discoveryLedger: DiscoveryLedger = UnavailableDiscoveryLedger
     private var earnings: EarningsService? = null
     private var moneyAttribution: MoneyAttribution? = null
@@ -64,12 +64,12 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             lifecycle.own(AutoCloseable { ecoJobs.shutdown() })
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
             voucherLedger = if (settings.redemptionStorage.enabled) {
-                MySqlVoucherLedger.open(settings.redemptionStorage).also {
+                VoucherLedgerStorage.open(settings.redemptionStorage).also {
                     logger.info("Voucher redemption ledger is ready")
                 }
             } else {
                 logger.warning("Voucher redemption is disabled because redemptions.mysql.enabled is false")
-                UnavailableVoucherLedger
+                UnavailableOneTimeUseLedger
             }
             lifecycle.own(voucherLedger)
             discoveryLedger = if (settings.exploration.enabled) {
@@ -145,7 +145,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         moneyAttribution?.clear()
         moneyAttribution = null
         discoveryLedger = UnavailableDiscoveryLedger
-        voucherLedger = UnavailableVoucherLedger
+        voucherLedger = UnavailableOneTimeUseLedger
         initialized = false
     }
 
@@ -229,16 +229,17 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             "earnings_mysql" to (!settings.earnings.enabled || earnings != null),
         )
         val schemas = buildMap {
-            if (settings.redemptionStorage.enabled) put("voucher", MySqlVoucherLedger.SCHEMA_VERSION)
+            if (settings.redemptionStorage.enabled) put("voucher", VoucherLedgerStorage.SCHEMA_VERSION)
             if (settings.exploration.enabled) put("discovery", MySqlDiscoveryLedger.SCHEMA_VERSION)
             if (settings.earnings.enabled) put("earnings", MySqlHourlyEarningsStore.SCHEMA_VERSION)
         }
-        val backlog = (voucherLedger.recoveryBacklog.toLong() + (earnings?.pendingBucketCount() ?: 0))
+        val backlog = (earnings?.pendingBucketCount() ?: 0).toLong()
             .coerceAtMost(Int.MAX_VALUE.toLong())
             .toInt()
         return RuntimeHealthContribution(
             state = if (dependencies.values.all { it }) RuntimeHealthState.UP else RuntimeHealthState.DEGRADED,
             recoveryBacklog = backlog,
+            activeLeases = voucherLedger.activeClaims,
             schemas = schemas,
             dependencies = dependencies,
         )

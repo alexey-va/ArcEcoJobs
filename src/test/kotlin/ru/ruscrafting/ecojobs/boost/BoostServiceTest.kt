@@ -199,7 +199,7 @@ class BoostServiceTest : StringSpec({
             signatureVersion = VoucherPayload.LEGACY_SIGNATURE_VERSION,
         )
         globallyUsed = true
-        ledger.failNextMark = true
+        ledger.failNextCommit = true
         service.redeem(legacyUsedPayload, otherPlayer, copiedRedemption::add)
         server.scheduler.performTicks(2)
         copiedRedemption.last() shouldBe GrantResult.FAILED
@@ -209,7 +209,7 @@ class BoostServiceTest : StringSpec({
         globallyUsed = false
 
         val uncertainLedgerPayload = payload.copy(voucherId = UUID.randomUUID())
-        ledger.failNextMark = true
+        ledger.failNextCommit = true
         service.redeem(uncertainLedgerPayload, player, redemption::add)
         server.scheduler.performTicks(2)
         redemption.last() shouldBe GrantResult.FAILED

@@ -8,7 +8,7 @@ import ru.ruscrafting.ecojobs.config.toSqlConnectionConfig
 
 /** ArcEcoJobs schema ownership and compatibility import for the shared ledger. */
 object VoucherLedgerStorage {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 5
 
     private val partition = MySqlOneTimeUsePartition("arcecojobs.voucher")
 

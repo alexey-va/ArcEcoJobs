@@ -38,11 +38,13 @@ class MySqlVoucherLedgerTest : StringSpec({
 
     afterSpec { mysql.close() }
 
-    "schema v2 imports an empty-era pending legacy claim into the shared table" {
+    "schema v5 preserves historical namespace versions and imports a pending legacy claim" {
         val payload = voucher()
         val player = UUID.randomUUID()
         SqlRuntime.create(settings.toSqlConnectionConfig(1), "legacy-voucher-fixture").use { runtime ->
-            MySqlMigrator(runtime.dataSource, "arcecojobs").migrate(listOf(legacyVoucherMigration()))
+            MySqlMigrator(runtime.dataSource, "arcecojobs").migrate(
+                listOf(legacyVoucherMigration(), historicalDiscoveryMigration()),
+            )
             runtime.executor.write { connection ->
                 connection.prepareStatement(
                     "INSERT INTO arcecojobs_voucher_redemptions " +
@@ -220,6 +222,19 @@ class MySqlVoucherLedgerTest : StringSpec({
                     `applied_at` TIMESTAMP(3) NULL,
                     PRIMARY KEY (`voucher_id`),
                     CONSTRAINT `arcecojobs_voucher_status_chk` CHECK (`status` IN ('CLAIMED', 'APPLIED'))
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """.trimIndent(),
+            ),
+        )
+
+        private fun historicalDiscoveryMigration(): SqlMigration = SqlMigration(
+            version = 2,
+            description = "historical discovery schema fixture",
+            statements = listOf(
+                """
+                CREATE TABLE IF NOT EXISTS `arcecojobs_historical_discovery_fixture` (
+                    `id` INT NOT NULL,
+                    PRIMARY KEY (`id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """.trimIndent(),
             ),

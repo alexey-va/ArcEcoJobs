@@ -35,5 +35,5 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
   tracked or deployed as configuration. Back up the key before production
   rollout or previously issued vouchers become invalid.
 - On a local workstation without Docker, run
-  `../arc-core/gradlew -p . clean test shadowJar`. The Docker-capable CI gate
+  `./gradlew clean test shadowJar`. The Docker-capable CI gate
   separately runs `integrationTest`; use `clean check` only on such a host.

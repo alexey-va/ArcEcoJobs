@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.configuration.file.YamlConfiguration
+import org.opentest4j.TestAbortedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -13,6 +14,8 @@ private fun Path.isActiveJobDefinition(): Boolean =
 
 class EarningsConfigTest : StringSpec({
     val project = Path.of(System.getProperty("arcecojobs.projectDir"))
+    fun opsRoot(): Path = System.getProperty("ruscrafting.opsRoot")?.let(Path::of)
+        ?: throw TestAbortedException("RusCrafting ops checkout is not configured")
 
     fun yaml(contents: String): YamlConfiguration = YamlConfiguration().apply { loadFromString(contents) }
 
@@ -30,9 +33,9 @@ class EarningsConfigTest : StringSpec({
 
     "production and lab share one bounded enabled profile" {
         val profiles = listOf(
-            project.parent.resolve("classic/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
         ).map { path -> EarningsSettings.load(YamlConfiguration.loadConfiguration(path.toFile())) }
 
         profiles.toSet().size shouldBe 1
@@ -44,9 +47,9 @@ class EarningsConfigTest : StringSpec({
 
     "every active payout has matching boost and earnings placeholders" {
         listOf(
-            project.parent.resolve("classic/plugins/EcoJobs/jobs"),
-            project.parent.resolve("classic_survival/plugins/EcoJobs/jobs"),
-            project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs"),
+            opsRoot().resolve("classic/plugins/EcoJobs/jobs"),
+            opsRoot().resolve("classic_survival/plugins/EcoJobs/jobs"),
+            opsRoot().resolve("scripts/lab/plugin-configs/EcoJobs/jobs"),
         ).forEach { root ->
             Files.list(root).use { paths ->
                 paths.filter(Path::isActiveJobDefinition).forEach { path ->

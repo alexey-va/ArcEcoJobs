@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import org.bukkit.configuration.file.YamlConfiguration
+import org.opentest4j.TestAbortedException
 import ru.ruscrafting.ecojobs.domain.BoostType
 import java.nio.file.Files
 import java.nio.file.Path
@@ -12,6 +13,8 @@ import java.time.Duration
 
 class AddonConfigTest : StringSpec({
     val project = Path.of(System.getProperty("arcecojobs.projectDir"))
+    fun opsRoot(): Path = System.getProperty("ruscrafting.opsRoot")?.let(Path::of)
+        ?: throw TestAbortedException("RusCrafting ops checkout is not configured")
     val settings = AddonSettings(
         defaultLocale = "ru",
         useClientLocale = true,
@@ -233,9 +236,9 @@ class AddonConfigTest : StringSpec({
     "production and lab voucher catalogs match the bundled defaults" {
         val expected = Files.readString(project.resolve("src/main/resources/boosters.yml"))
         listOf(
-            project.parent.resolve("classic/plugins/ArcEcoJobs/boosters.yml"),
-            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/boosters.yml"),
-            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/boosters.yml"),
+            opsRoot().resolve("classic/plugins/ArcEcoJobs/boosters.yml"),
+            opsRoot().resolve("classic_survival/plugins/ArcEcoJobs/boosters.yml"),
+            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/boosters.yml"),
         ).forEach { path ->
             Files.readString(path) shouldBe expected
         }
@@ -244,7 +247,7 @@ class AddonConfigTest : StringSpec({
     "production GUI overlays use the reviewed RusCrafting model data on both nodes" {
         val roots = listOf("classic", "classic_survival")
         val overlays = roots.map { root ->
-            AddonSettings.load(project.parent.resolve("$root/plugins/ArcEcoJobs/config.yml").toFile()).guiItems
+            AddonSettings.load(opsRoot().resolve("$root/plugins/ArcEcoJobs/config.yml").toFile()).guiItems
         }
         overlays[0] shouldBe overlays[1]
         val gui = overlays[0]
@@ -276,7 +279,7 @@ class AddonConfigTest : StringSpec({
     "production nodes share one reviewed voucher ledger profile" {
         val roots = listOf("classic", "classic_survival")
         val stores = roots.map { root ->
-            AddonSettings.load(project.parent.resolve("$root/plugins/ArcEcoJobs/config.yml").toFile())
+            AddonSettings.load(opsRoot().resolve("$root/plugins/ArcEcoJobs/config.yml").toFile())
                 .redemptionStorage
         }
         stores[0] shouldBe stores[1]
@@ -287,18 +290,18 @@ class AddonConfigTest : StringSpec({
 
     "production and lab enable the same bounded exploration implementation" {
         listOf(
-            project.parent.resolve("classic/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
         ).map { AddonSettings.load(it.toFile()).exploration } shouldBe
             List(3) { ExplorationSettings(enabled = true, maximumInFlight = 256) }
     }
 
     "production and lab enable the same bounded hourly earnings profile" {
         val profiles = listOf(
-            project.parent.resolve("classic/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
-            project.parent.resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("classic_survival/plugins/ArcEcoJobs/config.yml"),
+            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/config.yml"),
         ).map { AddonSettings.load(it.toFile()).earnings }
 
         profiles.toSet().size shouldBe 1
@@ -310,13 +313,13 @@ class AddonConfigTest : StringSpec({
 
     "production and lab explorer jobs preserve one reviewed discovery contract" {
         val paths = listOf(
-            project.parent.resolve("classic/plugins/EcoJobs/jobs/explorer.yml"),
-            project.parent.resolve("classic_survival/plugins/EcoJobs/jobs/explorer.yml"),
-            project.parent.resolve("scripts/lab/plugin-configs/EcoJobs/jobs/explorer.yml"),
+            opsRoot().resolve("classic/plugins/EcoJobs/jobs/explorer.yml"),
+            opsRoot().resolve("classic_survival/plugins/EcoJobs/jobs/explorer.yml"),
+            opsRoot().resolve("scripts/lab/plugin-configs/EcoJobs/jobs/explorer.yml"),
         )
         paths.map(Files::readString).toSet().size shouldBe 1
         val explorer = YamlConfiguration.loadConfiguration(
-            paths.single { it.startsWith(project.parent.resolve("scripts/lab")) }.toFile(),
+            paths.single { it.startsWith(opsRoot().resolve("scripts/lab")) }.toFile(),
         )
         explorer.getString("name") shouldBe "&#57B8C2Исследователь"
         explorer.getInt("max-level") shouldBe 50

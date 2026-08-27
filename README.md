@@ -7,7 +7,7 @@ menus, global rankings, and LuckPerms-backed XP/money boosts.
 Local unit/MockBukkit and package gate (no Docker required):
 
 ```bash
-../arc-core/gradlew -p . clean test shadowJar
+./gradlew clean test shadowJar
 ```
 
 The production artifact is `build/libs/ArcEcoJobs-0.1.12.jar`. The test suite

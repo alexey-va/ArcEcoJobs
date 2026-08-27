@@ -67,6 +67,10 @@ tasks {
     test {
         useJUnitPlatform()
         systemProperty("arcecojobs.projectDir", projectDir.absolutePath)
+        providers.gradleProperty("ruscraftingOpsRoot")
+            .orElse(providers.environmentVariable("RUSCRAFTING_OPS_ROOT"))
+            .orNull
+            ?.let { systemProperty("ruscrafting.opsRoot", it) }
     }
     register<Test>("integrationTest") {
         description = "Runs disposable MySQL storage integration tests."

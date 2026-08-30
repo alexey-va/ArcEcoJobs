@@ -5,7 +5,7 @@ api-version: '1.21.11'
 authors: [RusCrafting]
 description: Rich EcoJobs interface and LuckPerms-backed boosts
 depend: [EcoJobs, LuckPerms, PlaceholderAPI, Vault]
-softdepend: [RedisEconomy]
+softdepend: [RedisEconomy, ARC]
 commands:
   arcjobs:
     description: RusCrafting jobs interface

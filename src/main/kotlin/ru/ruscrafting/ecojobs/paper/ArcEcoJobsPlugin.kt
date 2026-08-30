@@ -29,6 +29,7 @@ import ru.ruscrafting.ecojobs.exploration.UnavailableDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
+import ru.ruscrafting.ecojobs.integration.ReflectiveArcAuditBridge
 import java.util.logging.Level
 
 class ArcEcoJobsPlugin : JavaPlugin() {
@@ -250,9 +251,14 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             "A Vault economy provider must be registered before ArcEcoJobs initializes"
         }
         EconomyManager.register(
-            VaultEconomyIntegration(economy, moneyAttribution) { player, jobId, amount ->
-                earnings?.recordMoney(player.uniqueId, jobId, amount)
-            },
+            VaultEconomyIntegration(
+                economy = economy,
+                moneyAttribution = moneyAttribution,
+                recordEarnings = { player, jobId, amount ->
+                    earnings?.recordMoney(player.uniqueId, jobId, amount)
+                },
+                auditBridge = ReflectiveArcAuditBridge.discover(),
+            ),
         )
         check(EconomyManager.hasRegistrations()) { "eco did not accept the Vault economy integration" }
         logger.info("EcoJobs money effects bound to Vault provider ${economy.name}")

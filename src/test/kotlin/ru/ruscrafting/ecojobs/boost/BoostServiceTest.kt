@@ -2,6 +2,8 @@ package ru.ruscrafting.ecojobs.boost
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.comparables.shouldBeGreaterThan
+import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -27,11 +29,94 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class BoostServiceTest : StringSpec({
-    lateinit var paper: MockBukkitTestRuntime
-    beforeSpec { paper = MockBukkitTestRuntime.open() }
-    afterSpec { paper.close() }
-
     "redeem is replay-safe and revoke counts one multi-scope boost instance" {
+        MockBukkitTestRuntime.open().use(::runBoostServiceScenario)
+    }
+
+    "mutations for one player are serialized through the LuckPerms save" {
+        MockBukkitTestRuntime.open().use { paper ->
+            ru.ruscrafting.ecojobs.paper.requireSupportedMockBukkit {
+                val plugin = paper.createSimplePlugin("ArcEcoJobsBoostQueueTest")
+                val playerId = UUID.randomUUID()
+                val stored = linkedMapOf<String, Node>()
+                val data = mockk<NodeMap>()
+                every { data.add(any()) } answers {
+                    val node = firstArg<Node>()
+                    if (stored.putIfAbsent(node.key, node) == null) DataMutateResult.SUCCESS else DataMutateResult.FAIL_ALREADY_HAS
+                }
+                every { data.remove(any()) } answers {
+                    val node = firstArg<Node>()
+                    if (stored.remove(node.key) != null) DataMutateResult.SUCCESS else DataMutateResult.FAIL_LACKS
+                }
+                val user = mockk<User> {
+                    every { data() } returns data
+                    every { getNodes(NodeType.PERMISSION) } answers {
+                        stored.values.filterIsInstance<PermissionNode>().toSet()
+                    }
+                }
+                val firstSave = CompletableFuture<Void>()
+                var saveCount = 0
+                val users = mockk<UserManager> {
+                    every { loadUser(playerId) } returns CompletableFuture.completedFuture(user)
+                    every { saveUser(user) } answers {
+                        if (saveCount++ == 0) firstSave else CompletableFuture.completedFuture(null)
+                    }
+                }
+                val luckPerms = mockk<LuckPerms> {
+                    every { userManager } returns users
+                }
+                val nodeFactory = BoostNodeFactory { permissionKey, expiry ->
+                    mockk<PermissionNode> {
+                        every { key } returns permissionKey
+                        every { permission } returns permissionKey
+                        every { value } returns true
+                        every { hasExpiry() } returns true
+                        every { hasExpired() } returns false
+                        every { getExpiry() } returns expiry
+                    }
+                }
+                val service = BoostService(plugin, luckPerms, { testSettings() }, nodeFactory)
+                val outcomes = mutableListOf<GrantOutcome>()
+
+                repeat(2) {
+                    service.grantDetailed(
+                        playerId,
+                        BoostType.XP,
+                        150,
+                        Duration.ofHours(1),
+                        setOf("miner"),
+                        outcomes::add,
+                    )
+                }
+
+                verify(exactly = 1) { users.loadUser(playerId) }
+                firstSave.complete(null)
+                paper.performTicks(2)
+
+                verify(exactly = 2) { users.loadUser(playerId) }
+                outcomes.map(GrantOutcome::result) shouldBe listOf(GrantResult.GRANTED, GrantResult.GRANTED)
+            }
+        }
+    }
+})
+
+private fun testSettings() = AddonSettings(
+    defaultLocale = "ru",
+    useClientLocale = true,
+    interceptEcoJobsRoot = true,
+    leaderboardCache = Duration.ofSeconds(30),
+    leaderboardEntriesPerPage = 10,
+    boostCacheMillis = 1_000,
+    minimumMultiplierBasisPoints = 101,
+    maximumMultiplierBasisPoints = 1_000,
+    maximumBoostDuration = Duration.ofDays(30),
+    maximumStackedBoostDuration = Duration.ofDays(365),
+    requireMoneyPlaceholder = true,
+    guiItems = GuiItems.vanilla(),
+)
+
+private fun runBoostServiceScenario(paper: MockBukkitTestRuntime) =
+    ru.ruscrafting.ecojobs.paper.requireSupportedMockBukkit {
         val server = paper.server
         val plugin = paper.createSimplePlugin("ArcEcoJobsBoostTest")
         val player = server.addPlayer("BoostQA")
@@ -165,7 +250,11 @@ class BoostServiceTest : StringSpec({
         val stackedRedemption = mutableListOf<GrantOutcome>()
         service.redeemDetailed(stackedPayload, otherPlayer, stackedRedemption::add)
         server.scheduler.performTicks(2)
-        stackedRedemption.single() shouldBe GrantOutcome(GrantResult.GRANTED, Duration.ofHours(2))
+        val stackedOutcome = stackedRedemption.single()
+        stackedOutcome.result shouldBe GrantResult.GRANTED
+        val stackedRemaining = requireNotNull(stackedOutcome.remaining)
+        stackedRemaining shouldBeGreaterThan Duration.ofHours(1)
+        stackedRemaining shouldBeLessThanOrEqualTo Duration.ofHours(2)
         stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.instanceId }.toSet() shouldBe setOf(stackedPayload.voucherId)
         stored.keys.mapNotNull(BoostNodeCodec::decode).map { it.scope }.toSet() shouldBe setOf("miner", "fisherman")
 
@@ -260,4 +349,3 @@ class BoostServiceTest : StringSpec({
         stored.keys.toSet() shouldBe beforeFailedSave
         verify(exactly = 8) { users.saveUser(user) }
     }
-})

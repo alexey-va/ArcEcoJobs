@@ -6,12 +6,17 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import org.bukkit.configuration.file.YamlConfiguration
 import org.opentest4j.TestAbortedException
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.ruscrafting.ecojobs.domain.BoostType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 
 class AddonConfigTest : StringSpec({
+    lateinit var paper: MockBukkitTestRuntime
+    beforeSpec { paper = MockBukkitTestRuntime.open() }
+    afterSpec { paper.close() }
+
     val project = Path.of(System.getProperty("arcecojobs.projectDir"))
     fun opsRoot(): Path = System.getProperty("ruscrafting.opsRoot")?.let(Path::of)
         ?: throw TestAbortedException("RusCrafting ops checkout is not configured")

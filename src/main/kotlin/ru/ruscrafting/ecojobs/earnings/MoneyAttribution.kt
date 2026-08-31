@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
  */
 class MoneyAttribution(
     private val nanoTime: () -> Long = System::nanoTime,
-    private val ttlNanos: Long = TimeUnit.SECONDS.toNanos(1),
+    private val ttlNanos: Long = DEFAULT_SYNCHRONOUS_GAP_NANOS,
 ) {
     private data class Marker(
         val playerId: UUID,
@@ -30,4 +30,8 @@ class MoneyAttribution(
     }
 
     fun clear() = current.remove()
+
+    internal companion object {
+        val DEFAULT_SYNCHRONOUS_GAP_NANOS: Long = TimeUnit.MILLISECONDS.toNanos(10)
+    }
 }

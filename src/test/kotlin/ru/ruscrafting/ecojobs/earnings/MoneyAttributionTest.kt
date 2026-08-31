@@ -31,4 +31,15 @@ class MoneyAttributionTest : StringSpec({
         now = 111L
         attribution.consume(player).shouldBeNull()
     }
+
+    "the default marker window only covers the immediate synchronous deposit" {
+        var now = 1_000L
+        val player = UUID.randomUUID()
+        val attribution = MoneyAttribution(nanoTime = { now })
+
+        attribution.mark(player, "builder")
+        now += MoneyAttribution.DEFAULT_SYNCHRONOUS_GAP_NANOS + 1L
+
+        attribution.consume(player).shouldBeNull()
+    }
 })

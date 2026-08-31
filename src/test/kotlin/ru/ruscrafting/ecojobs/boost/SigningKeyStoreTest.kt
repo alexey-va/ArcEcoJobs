@@ -41,4 +41,29 @@ class SigningKeyStoreTest : StringSpec({
             folder.toFile().deleteRecursively()
         }
     }
+
+
+    "valid Base64 without the required trailing newline fails closed" {
+        val folder = Files.createTempDirectory("arcecojobs-unterminated-signing-key-")
+        try {
+            Files.writeString(folder.resolve("secret.key"), Base64.getEncoder().encodeToString(ByteArray(32)))
+            shouldThrow<IllegalArgumentException> { SigningKeyStore.loadOrCreate(folder) }
+        } finally {
+            folder.toFile().deleteRecursively()
+        }
+    }
+
+    "symbolic link signing key fails closed" {
+        val folder = Files.createTempDirectory("arcecojobs-linked-signing-key-")
+        val target = Files.createTempFile("arcecojobs-signing-key-target-", ".key")
+        try {
+            Files.writeString(target, Base64.getEncoder().encodeToString(ByteArray(32)) + "\n")
+            Files.createSymbolicLink(folder.resolve("secret.key"), target)
+
+            shouldThrow<IllegalArgumentException> { SigningKeyStore.loadOrCreate(folder) }
+        } finally {
+            folder.toFile().deleteRecursively()
+            Files.deleteIfExists(target)
+        }
+    }
 })

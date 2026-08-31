@@ -18,7 +18,9 @@ import ru.ruscrafting.ecojobs.exploration.ExplorationTrigger
 import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
 class ExplorationListener(
@@ -30,8 +32,14 @@ class ExplorationListener(
     private val maximumInFlight: Int,
 ) : Listener {
     private data class Attempt(val key: DiscoveryKey, val playerId: UUID)
+    private data class Delivery(
+        val completion: CompletableFuture<Unit> = CompletableFuture(),
+        val finishing: AtomicBoolean = AtomicBoolean(),
+    )
 
     private val inFlight = ConcurrentHashMap.newKeySet<Attempt>()
+    private val operations = ConcurrentHashMap.newKeySet<CompletableFuture<Unit>>()
+    private val deliveries = ConcurrentHashMap<DiscoveryClaim, Delivery>()
 
     @Volatile
     private var stopped = false
@@ -52,41 +60,59 @@ class ExplorationListener(
             player.uniqueId,
         )
         if (inFlight.size >= maximumInFlight || !inFlight.add(attempt)) return
-        ledger.claim(attempt.key, attempt.playerId).whenComplete { result, failure ->
-            inFlight.remove(attempt)
+        val operation = ledger.claim(attempt.key, attempt.playerId).handle { result, failure ->
             if (failure != null) {
                 plugin.logger.log(Level.WARNING, "Could not claim a chunk discovery", failure)
-                return@whenComplete
+                null
+            } else {
+                (result as? DiscoveryClaimResult.Acquired)?.claim
             }
-            if (result is DiscoveryClaimResult.Acquired) scheduleDelivery(result.claim)
+        }.thenCompose { claim ->
+            if (claim == null) CompletableFuture.completedFuture(Unit) else scheduleDelivery(claim)
+        }
+        operations.add(operation)
+        operation.whenComplete { _, failure ->
+            operations.remove(operation)
+            inFlight.remove(attempt)
+            if (failure != null) {
+                plugin.logger.log(Level.WARNING, "Could not complete a chunk discovery operation", failure)
+            }
         }
     }
 
-    fun shutdown() {
+    fun shutdown(): CompletableFuture<Unit> {
         stopped = true
+        deliveries.forEach { (claim, delivery) ->
+            finish(claim, delivery, DiscoveryDeliveryStatus.ABANDONED)
+        }
+        return CompletableFuture.allOf(*operations.toTypedArray()).thenApply { Unit }
     }
 
-    private fun scheduleDelivery(claim: DiscoveryClaim) {
+    private fun scheduleDelivery(claim: DiscoveryClaim): CompletableFuture<Unit> {
+        val delivery = Delivery()
+        deliveries[claim] = delivery
         if (stopped || !plugin.isEnabled) {
-            finish(claim, DiscoveryDeliveryStatus.ABANDONED)
-            return
+            finish(claim, delivery, DiscoveryDeliveryStatus.ABANDONED)
+            return delivery.completion
         }
         runCatching {
-            plugin.server.scheduler.runTask(plugin, Runnable { deliver(claim) })
+            plugin.server.scheduler.runTask(plugin, Runnable { deliver(claim, delivery) })
         }.onFailure { failure ->
             plugin.logger.log(Level.WARNING, "Could not schedule a chunk discovery reward", failure)
-            finish(claim, DiscoveryDeliveryStatus.ABANDONED)
+            finish(claim, delivery, DiscoveryDeliveryStatus.ABANDONED)
         }
+        if (stopped) finish(claim, delivery, DiscoveryDeliveryStatus.ABANDONED)
+        return delivery.completion
     }
 
-    private fun deliver(claim: DiscoveryClaim) {
+    private fun deliver(claim: DiscoveryClaim, completion: Delivery) {
         check(Bukkit.isPrimaryThread()) { "chunk discovery rewards must be delivered on the server thread" }
         val player = Bukkit.getPlayer(claim.playerId)
         if (stopped || player == null || !player.isOnline || !ecoJobs.active(player, explorerJob)) {
-            finish(claim, DiscoveryDeliveryStatus.ABANDONED)
+            finish(claim, completion, DiscoveryDeliveryStatus.ABANDONED)
             return
         }
-        val delivery = runCatching {
+        val dispatch = runCatching {
             trigger.dispatch(
                 player,
                 claim.rank,
@@ -94,17 +120,25 @@ class ExplorationListener(
                 moneyFactor(claim.rank),
             )
         }
-        if (delivery.isFailure) {
-            plugin.logger.log(Level.WARNING, "Could not dispatch a chunk discovery reward", delivery.exceptionOrNull())
+        if (dispatch.isFailure) {
+            plugin.logger.log(Level.WARNING, "Could not dispatch a chunk discovery reward", dispatch.exceptionOrNull())
         }
         finish(
             claim,
-            if (delivery.isSuccess) DiscoveryDeliveryStatus.APPLIED else DiscoveryDeliveryStatus.ABANDONED,
+            completion,
+            if (dispatch.isSuccess) DiscoveryDeliveryStatus.APPLIED else DiscoveryDeliveryStatus.ABANDONED,
         )
     }
 
-    private fun finish(claim: DiscoveryClaim, status: DiscoveryDeliveryStatus) {
-        ledger.finish(claim, status).whenComplete { finished, failure ->
+    private fun finish(claim: DiscoveryClaim, delivery: Delivery, status: DiscoveryDeliveryStatus) {
+        if (!delivery.finishing.compareAndSet(false, true)) return
+        val finishing = runCatching { ledger.finish(claim, status) }.getOrElse { failure ->
+            plugin.logger.log(Level.WARNING, "Could not start chunk discovery completion for rank ${claim.rank}", failure)
+            deliveries.remove(claim, delivery)
+            delivery.completion.complete(Unit)
+            return
+        }
+        finishing.whenComplete { finished, failure ->
             if (failure != null || finished != true) {
                 plugin.logger.log(
                     Level.WARNING,
@@ -112,6 +146,8 @@ class ExplorationListener(
                     failure,
                 )
             }
+            deliveries.remove(claim, delivery)
+            delivery.completion.complete(Unit)
         }
     }
 

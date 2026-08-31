@@ -1,6 +1,7 @@
 package ru.ruscrafting.ecojobs.boost
 
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.StandardCopyOption
@@ -13,11 +14,11 @@ object SigningKeyStore {
     fun loadOrCreate(dataFolder: Path): ByteArray {
         Files.createDirectories(dataFolder)
         val path = dataFolder.resolve("secret.key")
-        if (Files.isRegularFile(path)) {
+        if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             restrictPermissions(path)
             return load(path)
         }
-        require(!Files.exists(path)) { "secret.key exists but is not a regular file" }
+        require(!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) { "secret.key exists but is not a regular file" }
         val bytes = ByteArray(32).also(SecureRandom()::nextBytes)
         val temporary = Files.createTempFile(dataFolder, ".secret-key-", ".tmp")
         try {
@@ -40,8 +41,14 @@ object SigningKeyStore {
         return bytes
     }
 
-    private fun load(path: Path): ByteArray = Base64.getDecoder().decode(Files.readString(path).trim()).also {
-        require(it.size >= 32) { "secret.key is too short" }
+    private fun load(path: Path): ByteArray {
+        val encoded = Files.readString(path)
+        require(encoded.endsWith('\n')) { "secret.key must end with a newline" }
+        val line = encoded.dropLast(1).removeSuffix("\r")
+        require(line.isNotEmpty() && line.none(Char::isWhitespace)) { "secret.key must contain one Base64 line" }
+        return Base64.getDecoder().decode(line).also {
+            require(it.size >= 32) { "secret.key is too short" }
+        }
     }
 
     private fun restrictPermissions(path: Path) {

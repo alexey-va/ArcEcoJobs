@@ -12,6 +12,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class EarningsServiceTest : StringSpec({
     val instant = Instant.parse("2026-08-24T01:15:00Z")
@@ -109,7 +111,62 @@ class EarningsServiceTest : StringSpec({
         service.pendingBucketCount() shouldBe 0
         service.close()
     }
+
+    "sub-micro earnings are aggregated before persisted rounding" {
+        val store = RecordingEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+
+        service.recordMoney(player, "builder", BigDecimal("0.0000004"))
+        service.recordMoney(player, "builder", BigDecimal("0.0000004"))
+        service.flush().join()
+
+        store.writes.single().single().totals shouldBe EarningsTotals(
+            money = BigDecimal("0.000001"),
+            xp = BigDecimal("0.000000"),
+            moneyEvents = 2,
+        )
+        service.close()
+    }
+
+    "close rejects new observations before draining the final asynchronous write" {
+        val store = BlockingCloseStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        service.recordMoney(player, "builder", BigDecimal.ONE)
+
+        val closing = CompletableFuture.runAsync(service::close)
+        store.started.await(5, TimeUnit.SECONDS) shouldBe true
+        service.recordMoney(player, "builder", BigDecimal.TEN)
+        store.release.complete(Unit)
+        closing.get(5, TimeUnit.SECONDS)
+
+        store.writes.flatten().single().totals shouldBe EarningsTotals(
+            money = BigDecimal("1.000000"),
+            xp = BigDecimal("0.000000"),
+            moneyEvents = 1,
+        )
+    }
 })
+
+private class BlockingCloseStore : HourlyEarningsStore {
+    val started = CountDownLatch(1)
+    val release = CompletableFuture<Unit>()
+    val writes = mutableListOf<List<HourlyEarnings>>()
+
+    override fun write(batchId: UUID, entries: List<HourlyEarnings>): CompletableFuture<Unit> {
+        started.countDown()
+        return release.thenApply {
+            writes += entries
+            Unit
+        }
+    }
+
+    override fun read(playerId: UUID, jobId: String, fromEpochHour: Long) =
+        CompletableFuture.completedFuture(emptyList<HourlyEarnings>())
+
+    override fun prune(beforeEpochHour: Long) = CompletableFuture.completedFuture(0)
+}
 
 private class RecordingEarningsStore : HourlyEarningsStore {
     val writes = mutableListOf<List<HourlyEarnings>>()

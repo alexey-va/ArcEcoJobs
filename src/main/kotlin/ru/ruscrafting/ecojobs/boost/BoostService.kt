@@ -27,10 +27,12 @@ import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
 import java.time.Duration
 import java.time.Instant
+import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
 enum class GrantResult {
@@ -77,8 +79,14 @@ class BoostService internal constructor(
     private val usedVoucherLookup: UsedVoucherLookup = LuckPermsUsedVoucherLookup(luckPerms),
 ) {
     private data class CacheEntry(val validUntilMillis: Long, val boosts: List<BoostInstance>)
+    private data class QueuedMutation(
+        val operation: (() -> Unit) -> Unit,
+        val onFailure: (Throwable) -> Unit,
+    )
 
     private val cache = ConcurrentHashMap<UUID, CacheEntry>()
+    private val mutationLock = Any()
+    private val mutationQueues = mutableMapOf<UUID, ArrayDeque<QueuedMutation>>()
 
     fun active(player: Player): List<BoostInstance> = active(player.uniqueId)
 
@@ -193,6 +201,25 @@ class BoostService internal constructor(
     }
 
     private fun applyClaim(
+        payload: VoucherPayload,
+        claim: OneTimeUseClaim,
+        callback: (GrantOutcome) -> Unit,
+    ) {
+        enqueueMutation(
+            claim.claimantId,
+            onFailure = { failure ->
+                logFailure("Could not start serialized voucher mutation ${payload.voucherId}", failure)
+                failBeforeMutation(claim, callback)
+            },
+        ) { done ->
+            applyClaimNow(payload, claim) { outcome ->
+                done()
+                callback(outcome)
+            }
+        }
+    }
+
+    private fun applyClaimNow(
         payload: VoucherPayload,
         claim: OneTimeUseClaim,
         callback: (GrantOutcome) -> Unit,
@@ -371,6 +398,18 @@ class BoostService internal constructor(
     }
 
     fun revoke(uuid: UUID, selector: String, callback: (Int?, Throwable?) -> Unit) {
+        enqueueMutation(
+            uuid,
+            onFailure = { failure -> onMain { callback(null, failure) } },
+        ) { done ->
+            revokeNow(uuid, selector) { count, failure ->
+                done()
+                callback(count, failure)
+            }
+        }
+    }
+
+    private fun revokeNow(uuid: UUID, selector: String, callback: (Int?, Throwable?) -> Unit) {
         luckPerms.userManager.loadUser(uuid).whenComplete { user, loadFailure ->
             if (loadFailure != null || user == null) {
                 onMain { callback(null, loadFailure ?: IllegalStateException("LuckPerms user was unavailable")) }
@@ -414,6 +453,22 @@ class BoostService internal constructor(
     }
 
     private fun mutate(
+        uuid: UUID,
+        payload: VoucherPayload,
+        callback: (GrantOutcome) -> Unit,
+    ) {
+        enqueueMutation(
+            uuid,
+            onFailure = { onMain { callback(GrantOutcome(GrantResult.FAILED)) } },
+        ) { done ->
+            mutateNow(uuid, payload) { outcome ->
+                done()
+                callback(outcome)
+            }
+        }
+    }
+
+    private fun mutateNow(
         uuid: UUID,
         payload: VoucherPayload,
         callback: (GrantOutcome) -> Unit,
@@ -483,6 +538,50 @@ class BoostService internal constructor(
                 }
             }
         }
+    }
+
+    private fun enqueueMutation(
+        uuid: UUID,
+        onFailure: (Throwable) -> Unit,
+        operation: (() -> Unit) -> Unit,
+    ) {
+        val mutation = QueuedMutation(operation, onFailure)
+        val start = synchronized(mutationLock) {
+            mutationQueues.getOrPut(uuid, ::ArrayDeque).let { queue ->
+                queue.addLast(mutation)
+                queue.size == 1
+            }
+        }
+        if (start) runMutation(uuid, mutation)
+    }
+
+    private fun runMutation(uuid: UUID, mutation: QueuedMutation) {
+        val completed = AtomicBoolean()
+        val done = {
+            if (completed.compareAndSet(false, true)) completeMutation(uuid)
+        }
+        runCatching { mutation.operation(done) }.onFailure { failure ->
+            if (completed.compareAndSet(false, true)) {
+                completeMutation(uuid)
+                mutation.onFailure(failure)
+            } else {
+                logFailure("Serialized boost mutation failed after completion", failure)
+            }
+        }
+    }
+
+    private fun completeMutation(uuid: UUID) {
+        val next = synchronized(mutationLock) {
+            val queue = mutationQueues[uuid] ?: return
+            queue.removeFirst()
+            if (queue.isEmpty()) {
+                mutationQueues.remove(uuid)
+                null
+            } else {
+                queue.first()
+            }
+        }
+        if (next != null) runMutation(uuid, next)
     }
 
     private fun BoostApplicationDecision.outcome(): GrantOutcome = when (this) {

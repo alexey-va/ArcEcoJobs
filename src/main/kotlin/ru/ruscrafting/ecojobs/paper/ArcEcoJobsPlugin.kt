@@ -28,8 +28,9 @@ import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
 import ru.ruscrafting.ecojobs.exploration.UnavailableDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
-import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
 import ru.ruscrafting.ecojobs.integration.ReflectiveArcAuditBridge
+import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
+import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
 class ArcEcoJobsPlugin : JavaPlugin() {
@@ -203,7 +204,9 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 settings.exploration.maximumInFlight,
             ).also {
                 server.pluginManager.registerEvents(it, this)
-                requireNotNull(pluginRuntime).own(AutoCloseable { it.shutdown() })
+                requireNotNull(pluginRuntime).own(AutoCloseable {
+                    it.shutdown().get(EXPLORATION_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                })
             }
         }
         initialized = true
@@ -328,5 +331,6 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private companion object {
         const val HEALTH_REPORT_TICKS = 1_200L
+        const val EXPLORATION_SHUTDOWN_TIMEOUT_SECONDS = 5L
     }
 }

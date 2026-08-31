@@ -125,12 +125,20 @@ class VoucherService(
         val inventory = player.inventory
         for (slot in 0 until inventory.size) {
             val item = inventory.getItem(slot) ?: continue
+            if (!matchesVoucherId(item, voucherId)) continue
             val valid = inspect(item) as? VoucherInspection.Valid ?: continue
             if (valid.payload.voucherId != voucherId) continue
             if (item.amount > 1) item.amount -= 1 else inventory.setItem(slot, null)
             return true
         }
+        plugin.logger.warning("Spent voucher $voucherId was not present in ${player.name}'s inventory")
         return false
+    }
+
+    fun matchesVoucherId(item: ItemStack?, voucherId: UUID): Boolean {
+        val data = item?.itemMeta?.persistentDataContainer ?: return false
+        if (!data.has(markerKey, PersistentDataType.STRING)) return false
+        return data.get(voucherIdKey, PersistentDataType.STRING) == voucherId.toString()
     }
 
     fun displayValues(payload: VoucherPayload, audience: Player): Map<String, Component> = mapOf(

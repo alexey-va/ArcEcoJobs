@@ -261,6 +261,7 @@ class JobsMenu(
             33 -> open(player, JobsView.Boosts(job.id, 1, view))
             40 -> when {
                 ecoJobs.active(player, job) -> open(player, JobsView.LeaveConfirm(job.id, view))
+                !ecoJobs.canJoin(player, job) -> Unit
                 ecoJobs.join(player, job) -> {
                     player.sendMessage(locale.render("message.joined", player, mapOf("job" to ecoJobs.name(job))))
                     open(player, view)

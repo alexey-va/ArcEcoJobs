@@ -51,14 +51,14 @@ class EarningsService(
     }
 
     fun recordMoney(playerId: UUID, jobId: String, amount: BigDecimal) {
-        val normalized = normalize(amount) ?: return
-        record(playerId, jobId, EarningsTotals(money = normalized, moneyEvents = 1))
+        val accepted = accept(amount) ?: return
+        record(playerId, jobId, EarningsTotals(money = accepted, moneyEvents = 1))
     }
 
     fun recordXp(playerId: UUID, jobId: String, amount: Double) {
         if (!amount.isFinite() || amount <= 0.0) return
-        val normalized = normalize(BigDecimal.valueOf(amount)) ?: return
-        record(playerId, jobId, EarningsTotals(xp = normalized, xpEvents = 1))
+        val accepted = accept(BigDecimal.valueOf(amount)) ?: return
+        record(playerId, jobId, EarningsTotals(xp = accepted, xpEvents = 1))
     }
 
     fun report(playerId: UUID, jobId: String): CompletableFuture<EarningsReport> {
@@ -92,12 +92,14 @@ class EarningsService(
         }
     }
 
-    fun flush(): CompletableFuture<Unit> {
+    fun flush(): CompletableFuture<Unit> = flush(allowClosed = false)
+
+    private fun flush(allowClosed: Boolean): CompletableFuture<Unit> {
         val write: CompletableFuture<Unit>
         val completion = CompletableFuture<Unit>()
         val batchId: UUID
         synchronized(lock) {
-            if (closed) return CompletableFuture.completedFuture(Unit)
+            if (closed && !allowClosed) return CompletableFuture.completedFuture(Unit)
             writeInFlight?.let { return it }
             val batch = retryBatch ?: drainPending() ?: return CompletableFuture.completedFuture(Unit)
             retryBatch = batch
@@ -118,9 +120,9 @@ class EarningsService(
         return completion
     }
 
-    private fun flushAll(): CompletableFuture<Unit> = flush().thenCompose {
+    private fun flushAll(allowClosed: Boolean = false): CompletableFuture<Unit> = flush(allowClosed).thenCompose {
         val hasMore = synchronized(lock) { retryBatch != null || pending.isNotEmpty() }
-        if (hasMore) flushAll() else CompletableFuture.completedFuture(Unit)
+        if (hasMore) flushAll(allowClosed) else CompletableFuture.completedFuture(Unit)
     }
 
     private fun record(playerId: UUID, jobId: String, addition: EarningsTotals) {
@@ -151,7 +153,15 @@ class EarningsService(
     private fun drainPending(): PendingBatch? {
         if (pending.isEmpty()) return null
         val entries = pending.map { (key, totals) ->
-            HourlyEarnings(key.playerId, key.jobId, key.epochHour, totals)
+            HourlyEarnings(
+                key.playerId,
+                key.jobId,
+                key.epochHour,
+                totals.copy(
+                    money = normalize(totals.money),
+                    xp = normalize(totals.xp),
+                ),
+            )
         }
         pending.clear()
         return PendingBatch(UUID.randomUUID(), entries)
@@ -182,10 +192,10 @@ class EarningsService(
         cleanupTask?.cancel()
         flushTask = null
         cleanupTask = null
-        val finalWrite = flushAll()
+        synchronized(lock) { closed = true }
+        val finalWrite = flushAll(allowClosed = true)
         runCatching { finalWrite.get(5, TimeUnit.SECONDS) }
             .onFailure { plugin.logger.log(Level.WARNING, "Could not finish the final ArcEcoJobs earnings flush", it) }
-        synchronized(lock) { closed = true }
         store.close()
     }
 
@@ -201,11 +211,16 @@ class EarningsService(
 
         internal fun epochHour(instant: Instant): Long = instant.epochSecond.floorDiv(SECONDS_PER_HOUR)
 
-        private fun normalize(amount: BigDecimal): BigDecimal? {
+        private fun accept(amount: BigDecimal): BigDecimal? {
             if (amount.signum() <= 0) return null
-            val normalized = amount.setScale(STORED_SCALE, RoundingMode.HALF_UP)
-            return normalized.takeIf { it.signum() > 0 && it.precision() <= STORED_PRECISION }
+            val integerDigits = amount.precision() - amount.scale()
+            return amount.takeIf { integerDigits <= STORED_PRECISION - STORED_SCALE }
         }
+
+        private fun normalize(amount: BigDecimal): BigDecimal =
+            amount.setScale(STORED_SCALE, RoundingMode.HALF_UP).also {
+                require(it.precision() <= STORED_PRECISION) { "earnings aggregate exceeds the persisted decimal contract" }
+            }
     }
 }
 

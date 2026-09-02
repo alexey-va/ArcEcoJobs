@@ -53,7 +53,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                     root.getItem(24)?.type shouldBe Material.GOLDEN_HELMET
                     root.getItem(30)?.type shouldBe Material.EXPERIENCE_BOTTLE
                     root.getItem(32)?.type shouldBe Material.KNOWLEDGE_BOOK
-                    root.getItem(JobsMenu.MAIN_MENU_BACK_SLOT)?.type shouldBe Material.BLUE_STAINED_GLASS_PANE
+                    root.getItem(harness.layouts.slot(JobsView.Main, "back"))?.type shouldBe Material.BLUE_STAINED_GLASS_PANE
                     root.getItem(49)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
                     root.assertNamedSurfacesAreNonItalic()
 
@@ -183,6 +183,7 @@ private class JobsMenuHarness(
     val player: PlayerMock,
     val menu: JobsMenu,
     val ecoJobs: EcoJobsBridge,
+    val layouts: JobsMenuLayouts,
     private val dataFolder: Path,
 ) : AutoCloseable {
     override fun close() {
@@ -203,7 +204,9 @@ private fun menuHarness(paper: MockBukkitTestRuntime): JobsMenuHarness {
             langFolder.resolve("$language.yml"),
         )
     }
-    val settings = AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile())
+    Files.copy(project.resolve("src/main/resources/config.yml"), dataFolder.resolve("config.yml"))
+    val settings = AddonSettings.load(dataFolder.resolve("config.yml").toFile())
+    val layouts = JobsMenuLayouts(dataFolder)
     val locale = JobsLocale(dataFolder.toFile()) { settings }.also(JobsLocale::validate)
     val ecoJobs = spyk(EcoJobsBridge(plugin) { settings }) {
         every { activeJobs(player) } returns emptyList()
@@ -230,12 +233,13 @@ private fun menuHarness(paper: MockBukkitTestRuntime): JobsMenuHarness {
         vouchers = vouchers,
         earnings = { null },
         reload = { Result.success(Unit) },
+        layouts = layouts,
     )
     plugin.server.pluginManager.registerEvents(
         JobsListener({ settings }, locale, menu, boosts, vouchers),
         plugin,
     )
-    return JobsMenuHarness(plugin, player, menu, ecoJobs, dataFolder)
+    return JobsMenuHarness(plugin, player, menu, ecoJobs, layouts, dataFolder)
 }
 
 private fun clickTop(

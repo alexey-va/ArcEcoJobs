@@ -10,12 +10,41 @@ Local unit/MockBukkit and package gate (no Docker required):
 ./gradlew clean test shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.13.jar`. The test suite
-uses public `arc-core 2.0.3` dependencies by default. Pass
+The production artifact is `build/libs/ArcEcoJobs-0.1.14.jar`. The test suite
+uses public `arc-core 2.3.0` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,
 discovery ordering, migration replay, and idempotent hourly aggregation.
+
+## Menu configuration
+
+Every inventory is described under `gui.layouts` in `config.yml`. `rows`, fixed
+`elements`, paged `regions`, background material, button materials and optional
+`custom-model-data` can be changed without recompiling. Code refers only to
+semantic IDs such as `profile`, `action`, `content`, `back`, `previous` and
+`next`. Reload validates the complete candidate for missing elements, invalid
+slots, overlaps and minimum region capacity, then activates it atomically and
+closes inventories from the previous generation.
+
+Names and lore are MiniMessage templates under `menu.*` in `lang/ru.yml` and
+`lang/en.yml`. Runtime values are injected as safe Adventure components, so a
+player or job name cannot smuggle formatting tags into the template. The two
+locales must expose the same keys, row counts and tag counts. Main lore tag
+groups are:
+
+| Surface | Available value/block tags |
+|---|---|
+| profile and catalog | `<player>`, `<active>`, `<limit>`, `<level>`, `<max>`, `<state>`, `<workers>`, `<description>` |
+| job card | `<job>`, `<xp>`, `<required>`, `<progress>`, `<rank>`, `<free>`, `<xp_multiplier>`, `<money_multiplier>` |
+| level scale | `<level>`, `<required>`, `<status>`, standalone `<rewards>` block |
+| earnings | `<date>`, `<from>`, `<to>`, `<money>`, `<xp>`, `<today_money>`, `<today_xp>`, `<hour_money>`, `<hour_xp>`, `<week_money>`, `<week_xp>` |
+| leaderboard | `<job>`, `<rank>`, `<rank_color>`, `<player>`, `<level>`, `<xp>` |
+| boosts and admin | `<type>`, `<multiplier>`, `<duration>`, `<jobs>`, `<instance>`, `<count>`, `<ecojobs>`, `<luckperms>`, `<papi>`, `<money>`, `<action>`, `<state>` |
+
+Formatting tags such as gradients, colors and decorations can be combined with
+value tags freely. A block tag on its own lore row expands to any number of
+components; this is how the rewards list stays fully template-driven.
 
 The three MySQL contours share `arc-core-sql` connection validation, Hikari
 lifecycle, bounded executors, and checksum-protected migrations. Voucher

@@ -35,6 +35,8 @@ import java.util.logging.Level
 
 class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var settings: AddonSettings
+    private lateinit var menuLayouts: JobsMenuLayouts
+    private lateinit var jobsMenu: JobsMenu
     private lateinit var boosterRegistry: BoosterRegistry
     private lateinit var locale: JobsLocale
     private lateinit var ecoJobs: EcoJobsBridge
@@ -61,6 +63,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             saveResourceIfMissing("lang/ru.yml")
             saveResourceIfMissing("lang/en.yml")
             settings = AddonSettings.load(dataFolder.resolve("config.yml"))
+            menuLayouts = JobsMenuLayouts(dataFolder.toPath())
             locale = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
             ecoJobs = EcoJobsBridge(this) { settings }
             lifecycle.own(AutoCloseable { ecoJobs.shutdown() })
@@ -179,17 +182,17 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         locale.validate(boosterRegistry.values())
         enforceMoneyIntegration()
         enforceExplorationIntegration()
-        val menu = JobsMenu(
-            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin,
+        jobsMenu = JobsMenu(
+            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin, menuLayouts,
         )
         val command = JobsCommand(
-            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, menu, ::reloadPlugin,
+            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin,
         )
         requireNotNull(getCommand("arcjobs")).apply {
             setExecutor(command)
             tabCompleter = command
         }
-        server.pluginManager.registerEvents(JobsListener({ settings }, locale, menu, boosts, vouchers), this)
+        server.pluginManager.registerEvents(JobsListener({ settings }, locale, jobsMenu, boosts, vouchers), this)
         earnings?.let { server.pluginManager.registerEvents(EarningsListener(it), this) }
         if (settings.exploration.enabled) {
             val explorer = requireNotNull(ecoJobs.job(ExplorationListener.JOB_ID)) {
@@ -269,6 +272,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
 
     private fun reloadPlugin(): Result<Unit> = runCatching {
         val candidateSettings = AddonSettings.load(dataFolder.resolve("config.yml"))
+        val candidateLayouts = menuLayouts.prepare(dataFolder.toPath())
         val jobIds = validatedJobIds()
         val candidateBoosters = BoosterRegistry.load(
             dataFolder.resolve("boosters.yml"),
@@ -288,6 +292,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
         boosterRegistry = candidateBoosters
+        menuLayouts.replace(candidateLayouts)
+        jobsMenu.closeOpenMenus()
         ecoJobs.invalidateLeaderboards()
         ecoJobs.prepareLeaderboards()
     }

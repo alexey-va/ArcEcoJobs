@@ -54,6 +54,128 @@ redemptions:
       max-lifetime-ms: 1700000
 
 gui:
+  # Every inventory row, action and dynamic region is operator-controlled.
+  # Layouts are validated atomically: missing IDs, overlaps and invalid slots reject reload.
+  layouts:
+    main:
+      schema-version: 1
+      rows: 6
+      elements:
+        profile: {slot: 4}
+        catalog: {slot: 20}
+        active: {slot: 22}
+        leaderboard: {slot: 24}
+        boosts: {slot: 30}
+        help: {slot: 32}
+        back: {slot: 45}
+        admin: {slot: 49}
+    catalog:
+      schema-version: 1
+      rows: 6
+      elements:
+        empty: {slot: 22}
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '18-21', '23-25', '28-34', '37-43']}}
+    job:
+      schema-version: 1
+      rows: 6
+      elements:
+        overview: {slot: 13}
+        earnings: {slot: 22}
+        scale: {slot: 29}
+        leaderboard: {slot: 31}
+        boosts: {slot: 33}
+        action: {slot: 40}
+        back: {slot: 45}
+    leave:
+      schema-version: 1
+      rows: 3
+      elements:
+        confirm: {slot: 11}
+        cancel: {slot: 15}
+    levels:
+      schema-version: 1
+      rows: 6
+      elements:
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '19-25', '28-34', '37-43']}}
+    earnings:
+      schema-version: 1
+      rows: 6
+      elements:
+        status: {slot: 22}
+        summary: {slot: 4}
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '18-21', '23-25', '28-34', '37-43']}}
+    earnings-hours:
+      schema-version: 1
+      rows: 6
+      elements:
+        status: {slot: 22}
+        summary: {slot: 4}
+        back: {slot: 45}
+      regions: {content: {slots: ['10-16', '18-21', '23-25', '28-34', '37-43']}}
+    leaderboard-selector:
+      schema-version: 1
+      rows: 6
+      elements:
+        global: {slot: 4}
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '19-25', '28-34', '37-43']}}
+    leaderboard:
+      schema-version: 1
+      rows: 6
+      elements:
+        status: {slot: 22}
+        self: {slot: 49}
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '18-21', '23-25', '28-34', '37-43']}}
+    boosts:
+      schema-version: 1
+      rows: 6
+      elements:
+        summary: {slot: 4}
+        empty: {slot: 22}
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '18-21', '23-25', '28-34', '37-43']}}
+    help:
+      schema-version: 1
+      rows: 5
+      elements:
+        jobs: {slot: 10}
+        levels: {slot: 12}
+        boosts: {slot: 14}
+        commands: {slot: 16}
+        back: {slot: 36}
+    admin:
+      schema-version: 1
+      rows: 5
+      elements:
+        status: {slot: 4}
+        reload: {slot: 20}
+        presets: {slot: 22}
+        help: {slot: 24}
+        back: {slot: 36}
+    presets:
+      schema-version: 1
+      rows: 6
+      elements:
+        back: {slot: 45}
+        previous: {slot: 47}
+        next: {slot: 51}
+      regions: {content: {slots: ['10-16', '19-25', '28-34', '37-43']}}
   items:
     background:
       material: GRAY_STAINED_GLASS_PANE
@@ -73,3 +195,38 @@ gui:
       material: REPEATER
     catalog:
       material: CRAFTING_TABLE
+    # All non-domain menu icons are configurable. Names and rich lore templates,
+    # including their MiniMessage value tags, live under menu.* in lang/*.yml.
+    main-active: {material: WRITABLE_BOOK}
+    main-leaderboard: {material: GOLDEN_HELMET}
+    main-boosts: {material: EXPERIENCE_BOTTLE}
+    main-help: {material: KNOWLEDGE_BOOK}
+    main-admin: {material: COMMAND_BLOCK}
+    empty: {material: GRAY_DYE}
+    job-scale: {material: REPEATER}
+    job-leaderboard: {material: GOLDEN_HELMET}
+    job-boosts: {material: EXPERIENCE_BOTTLE}
+    job-leave: {material: RED_DYE}
+    job-join: {material: LIME_DYE}
+    job-unavailable: {material: GRAY_DYE}
+    level-reached: {material: LIME_DYE}
+    level-current: {material: YELLOW_DYE}
+    level-future: {material: RED_DYE}
+    earnings-loading: {material: CLOCK}
+    earnings-unavailable: {material: REDSTONE_TORCH}
+    earnings-summary: {material: GOLD_INGOT}
+    earnings-day-empty: {material: PAPER}
+    earnings-day-active: {material: FILLED_MAP}
+    earnings-hour-empty: {material: GRAY_DYE}
+    earnings-hour-active: {material: LIME_DYE}
+    leaderboard-global: {material: NETHER_STAR}
+    leaderboard-loading: {material: CLOCK}
+    leaderboard-self: {material: NAME_TAG}
+    leaderboard-failed: {material: REDSTONE_TORCH}
+    boosts-summary: {material: BEACON}
+    help-levels: {material: REPEATER}
+    help-boosts: {material: EXPERIENCE_BOTTLE}
+    help-commands: {material: WRITABLE_BOOK}
+    admin-status: {material: COMPARATOR}
+    admin-presets: {material: CHEST}
+    admin-help: {material: COMMAND_BLOCK}

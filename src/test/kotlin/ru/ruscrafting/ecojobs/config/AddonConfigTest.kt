@@ -204,6 +204,19 @@ class AddonConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> { AddonSettings.load(config) }
     }
 
+    "every named menu icon can be changed without recompiling" {
+        val config = yaml("""
+            gui:
+              items:
+                leaderboard-loading:
+                  material: AMETHYST_SHARD
+                  custom-model-data: 731
+        """.trimIndent())
+
+        AddonSettings.load(config).guiItems["leaderboard-loading"] shouldBe
+            GuiItemDefinition(Material.AMETHYST_SHARD, 731)
+    }
+
     "bundled GUI config remains resource-pack independent" {
         val gui = AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile()).guiItems
         listOf(
@@ -217,6 +230,7 @@ class AddonConfigTest : StringSpec({
             gui.refresh,
             gui.catalog,
         ).map(GuiItemDefinition::customModelData) shouldBe List(9) { null }
+        gui.named.values.map(GuiItemDefinition::customModelData).all { it == null } shouldBe true
         gui.background.material shouldBe Material.GRAY_STAINED_GLASS_PANE
         gui.back.material shouldBe Material.BLUE_STAINED_GLASS_PANE
         gui.refresh.material shouldBe Material.REPEATER

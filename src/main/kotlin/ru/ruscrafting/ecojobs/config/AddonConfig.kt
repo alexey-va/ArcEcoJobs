@@ -240,19 +240,61 @@ data class GuiItems(
     val cancel: GuiItemDefinition,
     val refresh: GuiItemDefinition,
     val catalog: GuiItemDefinition,
+    val named: Map<String, GuiItemDefinition>,
 ) {
+    operator fun get(id: String): GuiItemDefinition = named[id]
+        ?: error("Unknown GUI item definition: $id")
+
     companion object {
-        fun vanilla(): GuiItems = GuiItems(
-            background = GuiItemDefinition(Material.GRAY_STAINED_GLASS_PANE, null),
-            back = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
-            previous = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
-            next = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
-            close = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
-            confirm = GuiItemDefinition(Material.GREEN_STAINED_GLASS_PANE, null),
-            cancel = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
-            refresh = GuiItemDefinition(Material.REPEATER, null),
-            catalog = GuiItemDefinition(Material.CRAFTING_TABLE, null),
-        )
+        fun vanilla(): GuiItems {
+            val named = linkedMapOf(
+                "main-active" to Material.WRITABLE_BOOK,
+                "main-leaderboard" to Material.GOLDEN_HELMET,
+                "main-boosts" to Material.EXPERIENCE_BOTTLE,
+                "main-help" to Material.KNOWLEDGE_BOOK,
+                "main-admin" to Material.COMMAND_BLOCK,
+                "empty" to Material.GRAY_DYE,
+                "job-scale" to Material.REPEATER,
+                "job-leaderboard" to Material.GOLDEN_HELMET,
+                "job-boosts" to Material.EXPERIENCE_BOTTLE,
+                "job-leave" to Material.RED_DYE,
+                "job-join" to Material.LIME_DYE,
+                "job-unavailable" to Material.GRAY_DYE,
+                "level-reached" to Material.LIME_DYE,
+                "level-current" to Material.YELLOW_DYE,
+                "level-future" to Material.RED_DYE,
+                "earnings-loading" to Material.CLOCK,
+                "earnings-unavailable" to Material.REDSTONE_TORCH,
+                "earnings-summary" to Material.GOLD_INGOT,
+                "earnings-day-empty" to Material.PAPER,
+                "earnings-day-active" to Material.FILLED_MAP,
+                "earnings-hour-empty" to Material.GRAY_DYE,
+                "earnings-hour-active" to Material.LIME_DYE,
+                "leaderboard-global" to Material.NETHER_STAR,
+                "leaderboard-loading" to Material.CLOCK,
+                "leaderboard-self" to Material.NAME_TAG,
+                "leaderboard-failed" to Material.REDSTONE_TORCH,
+                "boosts-summary" to Material.BEACON,
+                "help-levels" to Material.REPEATER,
+                "help-boosts" to Material.EXPERIENCE_BOTTLE,
+                "help-commands" to Material.WRITABLE_BOOK,
+                "admin-status" to Material.COMPARATOR,
+                "admin-presets" to Material.CHEST,
+                "admin-help" to Material.COMMAND_BLOCK,
+            ).mapValues { GuiItemDefinition(it.value, null) }
+            return GuiItems(
+                background = GuiItemDefinition(Material.GRAY_STAINED_GLASS_PANE, null),
+                back = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+                previous = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+                next = GuiItemDefinition(Material.BLUE_STAINED_GLASS_PANE, null),
+                close = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
+                confirm = GuiItemDefinition(Material.GREEN_STAINED_GLASS_PANE, null),
+                cancel = GuiItemDefinition(Material.RED_STAINED_GLASS_PANE, null),
+                refresh = GuiItemDefinition(Material.REPEATER, null),
+                catalog = GuiItemDefinition(Material.CRAFTING_TABLE, null),
+                named = named,
+            )
+        }
 
         fun load(yaml: YamlConfiguration): GuiItems {
             val fallback = vanilla()
@@ -271,6 +313,9 @@ data class GuiItems(
                 cancel = loadItem(yaml, "gui.items.cancel", fallback.cancel),
                 refresh = loadItem(yaml, "gui.items.refresh", fallback.refresh),
                 catalog = loadItem(yaml, "gui.items.catalog", fallback.catalog),
+                named = fallback.named.mapValues { (id, definition) ->
+                    loadItem(yaml, "gui.items.$id", definition)
+                },
             )
         }
 

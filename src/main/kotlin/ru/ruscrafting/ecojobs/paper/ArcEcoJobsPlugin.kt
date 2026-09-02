@@ -185,6 +185,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         jobsMenu = JobsMenu(
             this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin, menuLayouts,
         )
+        requireNotNull(pluginRuntime).own(jobsMenu)
         val command = JobsCommand(
             { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin,
         )
@@ -292,8 +293,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         locale.reload(dataFolder, candidateBoosters.values())
         settings = candidateSettings
         boosterRegistry = candidateBoosters
-        menuLayouts.replace(candidateLayouts)
-        jobsMenu.closeOpenMenus()
+        jobsMenu.replaceMenus(candidateLayouts)
         ecoJobs.invalidateLeaderboards()
         ecoJobs.prepareLeaderboards()
     }

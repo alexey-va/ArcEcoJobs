@@ -54,7 +54,6 @@ class JobsListener(
             event.isCancelled = true
             return
         }
-        menu.onClick(event)
     }
 
     @EventHandler
@@ -65,7 +64,6 @@ class JobsListener(
             event.isCancelled = true
             return
         }
-        menu.onDrag(event)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)

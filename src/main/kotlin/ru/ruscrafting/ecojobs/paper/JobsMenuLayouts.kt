@@ -1,37 +1,33 @@
 package ru.ruscrafting.ecojobs.paper
 
-import net.kyori.adventure.text.Component
-import org.bukkit.Bukkit
-import org.bukkit.inventory.Inventory
-import org.bukkit.inventory.InventoryHolder
 import ru.arc.config.Config
 import ru.arc.menu.MenuCatalog
-import ru.arc.menu.MenuCatalogRepository
 import ru.arc.menu.MenuContract
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
 import ru.arc.menu.MenuLayoutParser
 import ru.arc.menu.MenuRegionId
+import ru.arc.paper.menu.PaperMenuConfiguration
 import java.nio.file.Path
 
 /** Validated semantic topology for every ArcEcoJobs inventory view. */
 class JobsMenuLayouts(dataRoot: Path) {
-    private val repository = MenuCatalogRepository(loadConfiguration(dataRoot))
+    private var configuration = PaperMenuConfiguration(loadConfiguration(dataRoot), emptyMap())
 
-    fun prepare(dataRoot: Path): MenuCatalog = loadConfiguration(dataRoot)
+    fun prepare(dataRoot: Path): PaperMenuConfiguration =
+        PaperMenuConfiguration(loadConfiguration(dataRoot), emptyMap())
 
-    fun replace(candidate: MenuCatalog) {
-        repository.replace(candidate)
+    fun replace(candidate: PaperMenuConfiguration) {
+        configuration = candidate
     }
 
-    fun create(holder: InventoryHolder, view: JobsView, title: Component): Inventory =
-        Bukkit.createInventory(holder, repository.current().require(menu(view)).rows * 9, title)
+    fun current(): PaperMenuConfiguration = configuration
 
     fun slot(view: JobsView, element: String): Int =
-        repository.current().require(menu(view)).slot(MenuElementId.of(element)).index
+        configuration.catalog.require(menu(view)).slot(MenuElementId.of(element)).index
 
     fun region(view: JobsView, region: String): List<Int> =
-        repository.current().require(menu(view)).region(MenuRegionId.of(region)).map { it.index }
+        configuration.catalog.require(menu(view)).region(MenuRegionId.of(region)).map { it.index }
 
     companion object {
         val MAIN = MenuId.of("main")

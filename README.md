@@ -11,7 +11,7 @@ Local unit/MockBukkit and package gate (no Docker required):
 ```
 
 The production artifact is `build/libs/ArcEcoJobs-0.1.14.jar`. The test suite
-uses public `arc-core 2.3.0` dependencies by default. Pass
+uses public `arc-core 2.4.3` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,

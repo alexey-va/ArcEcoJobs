@@ -57,6 +57,17 @@ class JobsMenuMockBukkitTest : StringSpec({
                     root.getItem(49)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
                     root.assertNamedSurfacesAreNonItalic()
 
+                    val unsafeSwap = clickTop(
+                        paper,
+                        harness.player,
+                        20,
+                        ClickType.NUMBER_KEY,
+                        InventoryAction.HOTBAR_SWAP,
+                    )
+                    unsafeSwap.isCancelled shouldBe true
+                    paper.performTicks(1)
+                    harness.player.openInventory.topInventory shouldBe root
+
                     val catalogClick = clickTop(paper, harness.player, 20)
                     catalogClick.isCancelled shouldBe true
                     harness.player.openInventory.topInventory shouldBe root

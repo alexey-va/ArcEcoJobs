@@ -9,13 +9,14 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
-import org.bukkit.event.inventory.InventoryClickEvent
-import org.bukkit.event.inventory.InventoryDragEvent
-import org.bukkit.inventory.Inventory
-import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.core.BukkitTaskScheduler
+import ru.arc.paper.menu.PaperMenuConfiguration
+import ru.arc.paper.menu.PaperMenuFrame
+import ru.arc.paper.menu.PaperMenuRuntime
+import ru.arc.paper.menu.physicalFrame
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
@@ -63,19 +64,19 @@ class JobsMenu(
     private val earnings: () -> EarningsService?,
     private val reload: () -> Result<Unit>,
     private val layouts: JobsMenuLayouts,
-) {
+) : AutoCloseable {
     internal companion object {
         const val MAIN_MENU_COMMAND = "menu"
-    }
-
-    private class Holder(val view: JobsView) : InventoryHolder {
-        lateinit var backing: Inventory
-        override fun getInventory(): Inventory = backing
     }
 
     private val number = DecimalFormat("#,##0.##")
     private val plain = PlainTextComponentSerializer.plainText()
     private val pendingClicks = mutableSetOf<java.util.UUID>()
+    private val menuRuntimeDelegate = lazy { PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), layouts.current()) }
+    private val menuRuntime by menuRuntimeDelegate
+    private val activeFrames = mutableMapOf<java.util.UUID, ActiveFrame>()
+
+    private data class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame)
     fun open(player: Player, view: JobsView = JobsView.Main) {
         when (view) {
             JobsView.Main -> openMain(player)
@@ -94,17 +95,12 @@ class JobsMenu(
         }
     }
 
-    fun onClick(event: InventoryClickEvent) {
-        val holder = event.view.topInventory.holder as? Holder ?: return
-        event.isCancelled = true
-        if (event.clickedInventory !== event.view.topInventory) return
-        val player = event.whoClicked as? Player ?: return
+    private fun dispatchClick(player: Player, view: JobsView, slot: Int) {
         if (!pendingClicks.add(player.uniqueId)) return
-        val slot = event.rawSlot
         plugin.server.scheduler.runTask(plugin, Runnable {
             try {
-                if (player.openInventory.topInventory.holder !== holder) return@Runnable
-                when (val view = holder.view) {
+                if (activeFrames[player.uniqueId]?.view != view || menuRuntime.session(player) == null) return@Runnable
+                when (view) {
                     JobsView.Main -> clickMain(player, slot)
                     is JobsView.Catalog -> clickCatalog(player, view, slot)
                     is JobsView.JobCard -> clickJobCard(player, view, slot)
@@ -130,14 +126,15 @@ class JobsMenu(
         })
     }
 
-    fun onDrag(event: InventoryDragEvent) {
-        if (event.view.topInventory.holder is Holder) event.isCancelled = true
+    fun replaceMenus(candidate: PaperMenuConfiguration) {
+        layouts.replace(candidate)
+        activeFrames.clear()
+        menuRuntime.replace(candidate)
     }
 
-    fun closeOpenMenus() {
-        plugin.server.onlinePlayers
-            .filter { it.openInventory.topInventory.holder is Holder }
-            .forEach(Player::closeInventory)
+    override fun close() {
+        activeFrames.clear()
+        if (menuRuntimeDelegate.isInitialized()) menuRuntime.close()
     }
 
     private fun openMain(player: Player) {
@@ -162,7 +159,7 @@ class JobsMenu(
         if (player.hasPermission("arcecojobs.admin")) {
             inventory.setItem(element(view, "admin"), item(settings().guiItems["main-admin"], player, "menu.main.admin-name", "menu.main.admin-lore"))
         }
-        player.openInventory(inventory)
+        show(player, view, inventory)
     }
 
     internal fun clickMain(player: Player, slot: Int) {
@@ -200,7 +197,7 @@ class JobsMenu(
         }
         if (jobs.isEmpty()) inventory.setItem(element(current, "empty"), item(settings().guiItems["empty"], player, "menu.catalog.empty-name", "menu.catalog.empty-lore"))
         navigation(inventory, player, current, current.page, pages)
-        player.openInventory(inventory)
+        show(player, current, inventory)
     }
 
     private fun clickCatalog(player: Player, view: JobsView.Catalog, slot: Int) {
@@ -249,9 +246,9 @@ class JobsMenu(
             else -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-unavailable"], player, "menu.job.unavailable-name", "menu.job.unavailable-lore"))
         }
         inventory.setItem(element(view, "back"), backItem(player))
-        player.openInventory(inventory)
+        show(player, view, inventory)
         loadEarnings(player, view) { report ->
-            player.openInventory.topInventory.setItem(element(view, "earnings"), earningsSummaryItem(player, report))
+            updateFrame(player, view) { it.setItem(element(view, "earnings"), earningsSummaryItem(player, report)) }
         }
     }
 
@@ -283,7 +280,7 @@ class JobsMenu(
         val inventory = inventory(player, view, "menu.leave.title", mapOf("job" to titleText(ecoJobs.name(job))))
         inventory.setItem(element(view, "confirm"), item(settings().guiItems.confirm, player, "menu.leave.confirm-name", "menu.leave.confirm-lore", mapOf("job" to ecoJobs.name(job))))
         inventory.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
-        player.openInventory(inventory)
+        show(player, view, inventory)
     }
 
     private fun clickLeave(player: Player, view: JobsView.LeaveConfirm, slot: Int) {
@@ -321,7 +318,7 @@ class JobsMenu(
             ), loreBlocks = mapOf("rewards" to rewards)))
         }
         navigation(inventory, player, currentView, currentView.page, pages)
-        player.openInventory(inventory)
+        show(player, currentView, inventory)
     }
 
     private fun openEarnings(player: Player, view: JobsView.Earnings) {
@@ -334,7 +331,7 @@ class JobsMenu(
         )
         inventory.setItem(element(view, "status"), earningsLoadingItem(player))
         navigation(inventory, player, view, view.page, pageCount(settings().earnings.retentionDays, content(view).size))
-        player.openInventory(inventory)
+        show(player, view, inventory)
         loadEarnings(player, view) { report -> renderEarnings(player, view, report) }
     }
 
@@ -366,7 +363,7 @@ class JobsMenu(
             )
         }
         navigation(inventory, player, current, current.page, pages)
-        player.openInventory(inventory)
+        replaceFrame(player, view, current, inventory)
     }
 
     private fun clickEarnings(player: Player, view: JobsView.Earnings, slot: Int) {
@@ -405,7 +402,7 @@ class JobsMenu(
         )
         inventory.setItem(element(view, "status"), earningsLoadingItem(player))
         inventory.setItem(element(view, "back"), backItem(player))
-        player.openInventory(inventory)
+        show(player, view, inventory)
         loadEarnings(player, view) { report ->
             val rendered = inventory(
                 player,
@@ -437,14 +434,14 @@ class JobsMenu(
                 )
             }
             rendered.setItem(element(view, "back"), backItem(player))
-            player.openInventory(rendered)
+            replaceFrame(player, view, view, rendered)
         }
     }
 
     private fun loadEarnings(player: Player, view: JobsView, render: (EarningsReport) -> Unit) {
         val service = earnings()
         if (!settings().earnings.enabled || service == null) {
-            player.openInventory.topInventory.setItem(earningsSlot(view), earningsUnavailableItem(player))
+            updateFrame(player, view) { it.setItem(earningsSlot(view), earningsUnavailableItem(player)) }
             return
         }
         val jobId = when (view) {
@@ -456,10 +453,9 @@ class JobsMenu(
         service.report(player.uniqueId, jobId).whenComplete { report, failure ->
             if (!plugin.isEnabled) return@whenComplete
             plugin.server.scheduler.runTask(plugin, Runnable {
-                val current = player.openInventory.topInventory.holder as? Holder
-                if (!player.isOnline || current?.view != view) return@Runnable
+                if (!player.isOnline || activeFrames[player.uniqueId]?.view != view) return@Runnable
                 if (failure == null) render(report) else {
-                    player.openInventory.topInventory.setItem(earningsSlot(view), earningsUnavailableItem(player))
+                    updateFrame(player, view) { it.setItem(earningsSlot(view), earningsUnavailableItem(player)) }
                 }
             })
         }
@@ -516,7 +512,7 @@ class JobsMenu(
             inventory.setItem(content[index], jobItem(job, player, "menu.leaderboard.job-lore", mapOf("job" to ecoJobs.name(job))))
         }
         navigation(inventory, player, currentView, currentView.page, pages)
-        player.openInventory(inventory)
+        show(player, currentView, inventory)
     }
 
     private fun clickLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector, slot: Int) {
@@ -540,10 +536,9 @@ class JobsMenu(
             val inventory = inventory(player, loadingView, titlePath, titleValues)
             inventory.setItem(element(loadingView, "status"), item(settings().guiItems["leaderboard-loading"], player, "menu.leaderboard.loading-name", "menu.leaderboard.loading-lore"))
             navigation(inventory, player, loadingView, 1, 1)
-            player.openInventory(inventory)
+            show(player, loadingView, inventory)
             ecoJobs.prepareLeaderboards { result ->
-                val current = player.openInventory.topInventory.holder as? Holder
-                if (!player.isOnline || current?.view != loadingView) return@prepareLeaderboards
+                if (!player.isOnline || activeFrames[player.uniqueId]?.view != loadingView) return@prepareLeaderboards
                 if (result.isSuccess) open(player, loadingView) else openLeaderboardFailure(player, loadingView, titlePath, titleValues)
             }
             return
@@ -572,7 +567,7 @@ class JobsMenu(
         )))
         if (rankings.isEmpty()) inventory.setItem(element(currentView, "status"), item(settings().guiItems["empty"], player, "menu.leaderboard.empty-name", "menu.leaderboard.empty-lore"))
         navigation(inventory, player, currentView, currentView.page, pages)
-        player.openInventory(inventory)
+        show(player, currentView, inventory)
     }
 
     private fun openLeaderboardFailure(
@@ -584,7 +579,7 @@ class JobsMenu(
         val inventory = inventory(player, view, titlePath, titleValues)
         inventory.setItem(element(view, "status"), item(settings().guiItems["leaderboard-failed"], player, "menu.leaderboard.failed-name", "menu.leaderboard.failed-lore"))
         navigation(inventory, player, view, 1, 1)
-        player.openInventory(inventory)
+        show(player, view, inventory)
     }
 
     private fun openBoosts(player: Player, view: JobsView.Boosts) {
@@ -612,7 +607,7 @@ class JobsMenu(
         }
         if (applicable.isEmpty()) inventory.setItem(element(currentView, "empty"), item(settings().guiItems["empty"], player, "menu.boosts.empty-name", "menu.boosts.empty-lore"))
         navigation(inventory, player, currentView, currentView.page, pages)
-        player.openInventory(inventory)
+        show(player, currentView, inventory)
     }
 
     private fun openHelp(player: Player, view: JobsView.Help) {
@@ -622,7 +617,7 @@ class JobsMenu(
         inventory.setItem(element(view, "boosts"), item(settings().guiItems["help-boosts"], player, "menu.help.boosts-name", "menu.help.boosts-lore"))
         inventory.setItem(element(view, "commands"), item(settings().guiItems["help-commands"], player, "menu.help.commands-name", "menu.help.commands-lore"))
         inventory.setItem(element(view, "back"), backItem(player))
-        player.openInventory(inventory)
+        show(player, view, inventory)
     }
 
     private fun openAdmin(player: Player, view: JobsView.Admin) {
@@ -642,7 +637,7 @@ class JobsMenu(
         inventory.setItem(element(view, "presets"), item(settings().guiItems["admin-presets"], player, "menu.admin.presets-name", "menu.admin.presets-lore", mapOf("count" to text(boosters().values().size))))
         inventory.setItem(element(view, "help"), item(settings().guiItems["admin-help"], player, "menu.admin.help-name", "menu.admin.help-lore"))
         inventory.setItem(element(view, "back"), backItem(player))
-        player.openInventory(inventory)
+        show(player, view, inventory)
     }
 
     private fun clickAdmin(player: Player, view: JobsView.Admin, slot: Int) {
@@ -690,7 +685,7 @@ class JobsMenu(
             inventory.setItem(content[index], preview)
         }
         navigation(inventory, player, currentView, currentView.page, pages)
-        player.openInventory(inventory)
+        show(player, currentView, inventory)
     }
 
     private fun clickPresets(player: Player, view: JobsView.Presets, slot: Int) {
@@ -750,7 +745,7 @@ class JobsMenu(
         }
     }
 
-    private fun navigation(inventory: Inventory, player: Player, view: JobsView, page: Int, pages: Int) {
+    private fun navigation(inventory: PaperMenuFrame, player: Player, view: JobsView, page: Int, pages: Int) {
         inventory.setItem(element(view, "back"), backItem(player))
         if (page > 1) inventory.setItem(element(view, "previous"), item(settings().guiItems.previous, player, "common.previous-name", "common.previous-lore", mapOf(
             "page" to text(page), "pages" to text(pages),
@@ -765,13 +760,33 @@ class JobsMenu(
         view: JobsView,
         titlePath: String,
         values: Map<String, Component> = emptyMap(),
-    ): Inventory {
-        val holder = Holder(view)
-        val inventory = layouts.create(holder, view, locale.render(titlePath, player, values))
-        holder.backing = inventory
+    ): PaperMenuFrame {
         val filler = styledItem(settings().guiItems.background).apply { editMeta { it.displayName(Component.empty()) } }
-        repeat(inventory.size) { inventory.setItem(it, filler) }
-        return inventory
+        return menuRuntime.physicalFrame(
+            JobsMenuLayouts.menu(view),
+            locale.render(titlePath, player, values),
+            filler,
+        )
+    }
+
+    private fun show(player: Player, view: JobsView, frame: PaperMenuFrame) {
+        activeFrames[player.uniqueId] = ActiveFrame(view, frame)
+        menuRuntime.open(player, JobsMenuLayouts.menu(view)) {
+            val active = activeFrames[player.uniqueId].takeIf { it?.view == view } ?: ActiveFrame(view, frame)
+            active.frame.content { slot, _ -> dispatchClick(player, active.view, slot) }
+        }
+    }
+
+    private fun replaceFrame(player: Player, expected: JobsView, next: JobsView, frame: PaperMenuFrame) {
+        if (activeFrames[player.uniqueId]?.view != expected) return
+        activeFrames[player.uniqueId] = ActiveFrame(next, frame)
+        menuRuntime.session(player)?.refresh()
+    }
+
+    private fun updateFrame(player: Player, expected: JobsView, update: (PaperMenuFrame) -> Unit) {
+        val active = activeFrames[player.uniqueId].takeIf { it?.view == expected } ?: return
+        update(active.frame)
+        menuRuntime.session(player)?.requestRefresh()
     }
 
     private fun element(view: JobsView, id: String): Int = layouts.slot(view, id)

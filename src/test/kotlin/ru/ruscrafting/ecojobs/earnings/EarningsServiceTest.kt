@@ -60,6 +60,21 @@ class EarningsServiceTest : StringSpec({
         service.close()
     }
 
+    "an empty report is cached, then invalidated by the first event" {
+        val store = RecordingEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+
+        service.report(player, "miner").join().total.money shouldBe BigDecimal.ZERO
+        service.report(player, "miner").join().total.money shouldBe BigDecimal.ZERO
+        store.reads shouldBe 1
+
+        service.recordMoney(player, "miner", BigDecimal.ONE)
+        service.report(player, "miner").join().total.money shouldBe BigDecimal("1.000000")
+        store.reads shouldBe 2
+        service.close()
+    }
+
     "a failed write retries the exact same idempotency batch" {
         val store = RecordingEarningsStore().apply { failNextWrite = true }
         val service = EarningsService(plugin, settings(), store, clock)

@@ -84,7 +84,7 @@ class EarningsService(
         }.thenApply { (flushSucceeded, rows) ->
             EarningsReport(rows, settings.zoneId).also { report ->
                 synchronized(lock) {
-                    if (flushSucceeded && !closed && revisions[cacheKey] == revision) {
+                    if (flushSucceeded && !closed && (revisions[cacheKey] ?: 0L) == revision) {
                         cache[cacheKey] = CachedReport(clock.instant().plus(settings.cacheDuration), report)
                     }
                 }

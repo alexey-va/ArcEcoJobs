@@ -124,7 +124,7 @@ class MySqlHourlyEarningsStore private constructor(
     companion object {
         private const val HOURLY_TABLE = "arcecojobs_earnings_hourly"
         private const val BATCHES_TABLE = "arcecojobs_earnings_batches"
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 6
         private val CREATE_HOURLY = """
             CREATE TABLE IF NOT EXISTS `$HOURLY_TABLE` (
                 `player_id` BINARY(16) NOT NULL,
@@ -148,18 +148,27 @@ class MySqlHourlyEarningsStore private constructor(
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """.trimIndent()
         private val MIGRATION = SqlMigration(
-            version = SCHEMA_VERSION,
+            version = 4,
             description = "create bounded hourly job earnings aggregates",
             statements = listOf(CREATE_HOURLY, CREATE_BATCHES),
         )
         private val MIGRATION_COMPATIBILITY = SqlMigrationCompatibility.legacyConcatenated(MIGRATION)
+        private val AGGREGATE_CAPACITY_MIGRATION = SqlMigration(
+            version = SCHEMA_VERSION,
+            description = "allow sums of valid hourly earnings events",
+            statements = listOf(
+                "ALTER TABLE `$HOURLY_TABLE` " +
+                    "MODIFY `money` DECIMAL(65,6) NOT NULL DEFAULT 0, " +
+                    "MODIFY `xp` DECIMAL(65,6) NOT NULL DEFAULT 0",
+            ),
+        )
 
         fun open(settings: RedemptionStorageSettings): MySqlHourlyEarningsStore {
             require(settings.enabled) { "earnings MySQL is disabled" }
             val runtime = SqlRuntime.create(settings.toSqlConnectionConfig(poolSize = 1), "ArcEcoJobs-earnings")
             return runCatching {
                 MySqlMigrator(runtime.dataSource, "arcecojobs").migrate(
-                    listOf(MIGRATION),
+                    listOf(MIGRATION, AGGREGATE_CAPACITY_MIGRATION),
                     MIGRATION_COMPATIBILITY,
                 )
                 MySqlHourlyEarningsStore(runtime)

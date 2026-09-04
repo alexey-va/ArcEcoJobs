@@ -138,10 +138,19 @@ after the feature is deployed.
 Events are combined into one in-memory bucket per player, job, and UTC hour,
 then written to the shared MySQL database every 10 seconds on a dedicated
 single-thread pool. Batch IDs make retries idempotent across uncertain commit
-outcomes. GUI reads are asynchronous and cached briefly. Production retains 30
+outcomes. GUI reads wait for the active and buffered batches without chasing
+new events indefinitely. The short-lived report cache retains at most 4096
+player/job pairs; an older concurrent read cannot replace a newer snapshot.
+Production retains 30
 days, prunes older buckets every six hours, and caps the pending buffer at 4096
 unique buckets. If analytics storage is unavailable, jobs and Vault payouts
 continue while the GUI reports that history is temporarily unavailable.
+
+Schema migration 6 widens hourly money and XP totals to `DECIMAL(65,6)` so
+summing individually valid events does not overflow the original columns.
+The per-event limit remains 18 integer digits. Migration 4 and its checksum
+remain unchanged, and version 5 continues to belong to voucher storage.
+MySQL 8.0 supports this precision for [exact decimal arithmetic](https://dev.mysql.com/doc/refman/8.0/en/precision-math-decimal-characteristics.html).
 
 ## Voucher safety
 

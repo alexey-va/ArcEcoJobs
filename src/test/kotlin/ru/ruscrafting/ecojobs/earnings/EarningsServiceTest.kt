@@ -1,6 +1,7 @@
 package ru.ruscrafting.ecojobs.earnings
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import org.bukkit.plugin.java.JavaPlugin
@@ -162,7 +163,143 @@ class EarningsServiceTest : StringSpec({
             moneyEvents = 1,
         )
     }
+
+    "a report drains the batches preceding it without chasing later earnings forever" {
+        val store = ControlledEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        service.recordMoney(player, "builder", BigDecimal.ONE)
+        service.flush()
+        service.recordMoney(player, "builder", BigDecimal.TEN)
+        val report = service.report(player, "builder")
+        store.completions[0].complete(Unit)
+        service.recordMoney(player, "builder", BigDecimal("100"))
+        store.completions[1].complete(Unit)
+
+        report.isDone shouldBe true
+        report.join().total.money shouldBe BigDecimal("11.000000")
+        service.pendingBucketCount() shouldBe 1
+        service.flush()
+        store.completions[2].complete(Unit)
+        service.close()
+    }
+
+    "a synchronous write rejection retains the batch and returns a failed future" {
+        val store = RecordingEarningsStore().apply { throwNextWrite = true }
+        val service = EarningsService(plugin, settings(), store, clock)
+        service.recordMoney(UUID.randomUUID(), "builder", BigDecimal.ONE)
+        service.flush().isCompletedExceptionally shouldBe true
+        service.flush().join()
+        store.attemptedBatchIds.toSet().size shouldBe 1
+        store.writes.size shouldBe 1
+        service.close()
+    }
+
+    "closed earnings service rejects reports and cannot restart" {
+        val store = RecordingEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        service.report(player, "builder").join()
+        service.close()
+        service.report(player, "builder").isCompletedExceptionally shouldBe true
+        shouldThrow<IllegalStateException> { service.start() }
+        service.close()
+        store.closeCalls shouldBe 1
+        store.reads shouldBe 1
+    }
+
+    "large valid events retain their exact sum instead of poisoning the flush" {
+        val store = RecordingEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        val amount = BigDecimal("999999999999999999.999999")
+        repeat(2) { service.recordMoney(player, "builder", amount) }
+        service.recordMoney(player, "miner", BigDecimal.ONE)
+        service.flush().join()
+        store.writes.single().first().totals.money shouldBe amount * BigDecimal(2)
+        store.writes.single().size shouldBe 2
+        service.close()
+    }
+
+    "a stale report completion cannot repopulate the cache after new earnings" {
+        val store = RecordingEarningsStore()
+        val delayed = CompletableFuture<List<HourlyEarnings>>()
+        store.nextRead = delayed
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        val first = service.report(player, "builder")
+        service.recordMoney(player, "builder", BigDecimal.ONE)
+        delayed.complete(emptyList())
+        first.join().total.money shouldBe BigDecimal.ZERO
+        service.report(player, "builder").join().total.money shouldBe BigDecimal("1.000000")
+        store.reads shouldBe 2
+        service.close()
+    }
+
+    "report cache evicts old entries instead of retaining every player forever" {
+        val store = RecordingEarningsStore()
+        val service = EarningsService(plugin, settings(), store, clock)
+        val first = UUID.randomUUID()
+        service.report(first, "builder").join()
+        repeat(4096) { service.report(UUID.randomUUID(), "builder").join() }
+        val before = store.reads
+        service.report(first, "builder").join()
+        store.reads shouldBe before + 1
+        service.close()
+    }
+
+    "an older database response cannot overwrite a newer cached snapshot" {
+        val store = RecordingEarningsStore()
+        val delayed = CompletableFuture<List<HourlyEarnings>>()
+        store.nextRead = delayed
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        val older = service.report(player, "builder")
+        // Another backend may write to this player's shared ledger without a local event.
+        store.write(UUID.randomUUID(), listOf(HourlyEarnings(
+            player, "builder", EarningsService.epochHour(instant), EarningsTotals(money = BigDecimal.ONE),
+        ))).join()
+        service.report(player, "builder").join().total.money shouldBe BigDecimal.ONE
+        delayed.complete(emptyList())
+        older.join().total.money shouldBe BigDecimal.ZERO
+        service.report(player, "builder").join().total.money shouldBe BigDecimal.ONE
+        store.reads shouldBe 2
+        service.close()
+    }
+
+    "a database response arriving after close fails without reviving the cache" {
+        val store = RecordingEarningsStore()
+        val delayed = CompletableFuture<List<HourlyEarnings>>()
+        store.nextRead = delayed
+        val service = EarningsService(plugin, settings(), store, clock)
+        val report = service.report(UUID.randomUUID(), "builder")
+        service.close()
+        delayed.complete(emptyList())
+        report.isCompletedExceptionally shouldBe true
+        store.closeCalls shouldBe 1
+    }
+
+    "a failed report read does not block a later successful lookup" {
+        val store = RecordingEarningsStore().apply {
+            nextRead = CompletableFuture.failedFuture(IllegalStateException("read outage"))
+        }
+        val service = EarningsService(plugin, settings(), store, clock)
+        val player = UUID.randomUUID()
+        service.report(player, "builder").isCompletedExceptionally shouldBe true
+        service.report(player, "builder").join().total.money shouldBe BigDecimal.ZERO
+        store.reads shouldBe 2
+        service.close()
+    }
 })
+
+private class ControlledEarningsStore : HourlyEarningsStore {
+    private val delegate = RecordingEarningsStore()
+    val completions = mutableListOf<CompletableFuture<Unit>>()
+    override fun write(batchId: UUID, entries: List<HourlyEarnings>): CompletableFuture<Unit> =
+        CompletableFuture<Unit>().also(completions::add).thenCompose { delegate.write(batchId, entries) }
+    override fun read(playerId: UUID, jobId: String, fromEpochHour: Long) = delegate.read(playerId, jobId, fromEpochHour)
+    override fun prune(beforeEpochHour: Long) = delegate.prune(beforeEpochHour)
+}
 
 private class BlockingCloseStore : HourlyEarningsStore {
     val started = CountDownLatch(1)
@@ -187,12 +324,19 @@ private class RecordingEarningsStore : HourlyEarningsStore {
     val writes = mutableListOf<List<HourlyEarnings>>()
     val attemptedBatchIds = mutableListOf<UUID>()
     var failNextWrite = false
+    var throwNextWrite = false
+    var nextRead: CompletableFuture<List<HourlyEarnings>>? = null
+    var closeCalls = 0
     var reads = 0
     private val rows = linkedMapOf<Triple<UUID, String, Long>, HourlyEarnings>()
     private val batches = mutableSetOf<UUID>()
 
     override fun write(batchId: UUID, entries: List<HourlyEarnings>): CompletableFuture<Unit> {
         attemptedBatchIds += batchId
+        if (throwNextWrite) {
+            throwNextWrite = false
+            throw java.util.concurrent.RejectedExecutionException("simulated executor rejection")
+        }
         if (failNextWrite) {
             failNextWrite = false
             return CompletableFuture.failedFuture(IllegalStateException("simulated outage"))
@@ -214,6 +358,7 @@ private class RecordingEarningsStore : HourlyEarningsStore {
         fromEpochHour: Long,
     ): CompletableFuture<List<HourlyEarnings>> {
         reads++
+        nextRead?.let { nextRead = null; return it }
         return CompletableFuture.completedFuture(
             rows.values.filter { it.playerId == playerId && it.jobId == jobId && it.epochHour >= fromEpochHour },
         )
@@ -224,6 +369,8 @@ private class RecordingEarningsStore : HourlyEarningsStore {
         expired.forEach(rows::remove)
         return CompletableFuture.completedFuture(expired.size)
     }
+
+    override fun close() { closeCalls++ }
 }
 
 private fun settings(maximumPendingBuckets: Int = 4_096) = EarningsSettings(

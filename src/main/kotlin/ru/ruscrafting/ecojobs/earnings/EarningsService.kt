@@ -24,8 +24,12 @@ class EarningsService(
 
     private val lock = Any()
     private val pending = linkedMapOf<BucketKey, EarningsTotals>()
-    private val cache = mutableMapOf<Pair<UUID, String>, CachedReport>()
-    private val revisions = mutableMapOf<Pair<UUID, String>, Long>()
+    private val cache = object : LinkedHashMap<Pair<UUID, String>, CachedReport>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<UUID, String>, CachedReport>?): Boolean =
+            size > MAXIMUM_CACHED_REPORTS
+    }
+    // Only the latest outstanding read for a player/job may publish its snapshot.
+    private val reportReads = mutableMapOf<Pair<UUID, String>, Any>()
     private var retryBatch: PendingBatch? = null
     private var writeInFlight: CompletableFuture<Unit>? = null
     private var lastOverflowWarning = Instant.EPOCH
@@ -35,6 +39,7 @@ class EarningsService(
     private var cleanupTask: BukkitTask? = null
 
     fun start() {
+        check(!closed) { "earnings service is closed" }
         check(flushTask == null && cleanupTask == null) { "earnings service is already started" }
         flushTask = plugin.server.scheduler.runTaskTimer(
             plugin,
@@ -64,14 +69,15 @@ class EarningsService(
     fun report(playerId: UUID, jobId: String): CompletableFuture<EarningsReport> {
         val normalizedJob = jobId.lowercase()
         val cacheKey = playerId to normalizedJob
-        val revision: Long
+        val readToken = Any()
         synchronized(lock) {
+            if (closed) return CompletableFuture.failedFuture(IllegalStateException("earnings service is closed"))
             cache[cacheKey]?.takeIf { it.validUntil.isAfter(clock.instant()) }?.let {
                 return CompletableFuture.completedFuture(it.report)
             }
-            revision = revisions[cacheKey] ?: 0L
+            reportReads[cacheKey] = readToken
         }
-        return flushAll().handle { _, failure ->
+        return flushBuffered().handle { _, failure ->
             if (failure != null) {
                 warnWrite(failure)
                 false
@@ -80,15 +86,21 @@ class EarningsService(
             }
         }.thenCompose { flushSucceeded ->
             val from = epochHour(clock.instant()) - settings.retentionDays * 24L - 24L
-            store.read(playerId, normalizedJob, from).thenApply { rows -> flushSucceeded to rows }
+            synchronized(lock) {
+                check(!closed) { "earnings service is closed" }
+                store.read(playerId, normalizedJob, from)
+            }.thenApply { rows -> flushSucceeded to rows }
         }.thenApply { (flushSucceeded, rows) ->
             EarningsReport(rows, settings.zoneId).also { report ->
                 synchronized(lock) {
-                    if (flushSucceeded && !closed && (revisions[cacheKey] ?: 0L) == revision) {
+                    check(!closed) { "earnings service is closed" }
+                    if (flushSucceeded && reportReads[cacheKey] === readToken) {
                         cache[cacheKey] = CachedReport(clock.instant().plus(settings.cacheDuration), report)
                     }
                 }
             }
+        }.whenComplete { _, _ ->
+            synchronized(lock) { reportReads.remove(cacheKey, readToken) }
         }
     }
 
@@ -104,8 +116,9 @@ class EarningsService(
             val batch = retryBatch ?: drainPending() ?: return CompletableFuture.completedFuture(Unit)
             retryBatch = batch
             batchId = batch.id
-            write = store.write(batch.id, batch.entries)
             writeInFlight = completion
+            write = runCatching { store.write(batch.id, batch.entries) }
+                .getOrElse { CompletableFuture.failedFuture(it) }
         }
         write.whenComplete { _, failure ->
             synchronized(lock) {
@@ -120,10 +133,10 @@ class EarningsService(
         return completion
     }
 
-    private fun flushAll(allowClosed: Boolean = false): CompletableFuture<Unit> = flush(allowClosed).thenCompose {
-        val hasMore = synchronized(lock) { retryBatch != null || pending.isNotEmpty() }
-        if (hasMore) flushAll(allowClosed) else CompletableFuture.completedFuture(Unit)
-    }
+    // A request can encounter one active batch and one buffered batch. Later observations
+    // belong to a later flush, otherwise a busy server can indefinitely delay reports.
+    private fun flushBuffered(allowClosed: Boolean = false): CompletableFuture<Unit> =
+        flush(allowClosed).thenCompose { flush(allowClosed) }
 
     private fun record(playerId: UUID, jobId: String, addition: EarningsTotals) {
         val normalizedJob = jobId.lowercase()
@@ -146,7 +159,7 @@ class EarningsService(
             pending[key] = (existing ?: EarningsTotals()) + addition
             val cacheKey = playerId to key.jobId
             cache.remove(cacheKey)
-            revisions[cacheKey] = (revisions[cacheKey] ?: 0L) + 1L
+            reportReads.remove(cacheKey)
         }
     }
 
@@ -188,14 +201,21 @@ class EarningsService(
     }
 
     override fun close() {
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            cache.clear()
+            reportReads.clear()
+        }
         flushTask?.cancel()
         cleanupTask?.cancel()
         flushTask = null
         cleanupTask = null
-        synchronized(lock) { closed = true }
-        val finalWrite = flushAll(allowClosed = true)
-        runCatching { finalWrite.get(5, TimeUnit.SECONDS) }
-            .onFailure { plugin.logger.log(Level.WARNING, "Could not finish the final ArcEcoJobs earnings flush", it) }
+        runCatching { flushBuffered(allowClosed = true).get(5, TimeUnit.SECONDS) }
+            .onFailure {
+                if (it is InterruptedException) Thread.currentThread().interrupt()
+                plugin.logger.log(Level.WARNING, "Could not finish the final ArcEcoJobs earnings flush", it)
+            }
         store.close()
     }
 
@@ -205,7 +225,9 @@ class EarningsService(
 
     companion object {
         private const val STORED_SCALE = 6
-        private const val STORED_PRECISION = 24
+        private const val STORED_PRECISION = 65
+        private const val MAXIMUM_EVENT_INTEGER_DIGITS = 18
+        private const val MAXIMUM_CACHED_REPORTS = 4_096
         private const val INITIAL_CLEANUP_DELAY_TICKS = 20L * 60L
         private val JOB_ID = Regex("[a-z0-9_-]{1,64}")
 
@@ -214,7 +236,7 @@ class EarningsService(
         private fun accept(amount: BigDecimal): BigDecimal? {
             if (amount.signum() <= 0) return null
             val integerDigits = amount.precision() - amount.scale()
-            return amount.takeIf { integerDigits <= STORED_PRECISION - STORED_SCALE }
+            return amount.takeIf { integerDigits <= MAXIMUM_EVENT_INTEGER_DIGITS }
         }
 
         private fun normalize(amount: BigDecimal): BigDecimal =

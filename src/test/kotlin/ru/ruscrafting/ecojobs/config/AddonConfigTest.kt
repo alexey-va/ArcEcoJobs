@@ -204,6 +204,51 @@ class AddonConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> { AddonSettings.load(config) }
     }
 
+    "GUI and booster custom model data share the same acceptance boundary" {
+        data class Case(val name: String, val yamlValue: String?, val accepted: Boolean, val expected: Int? = null)
+        val cases = listOf(
+            Case("null", null, true),
+            Case("negative", "-1", false),
+            Case("zero", "0", true),
+            Case("fractional", "1.5", false),
+            Case("maximum", Int.MAX_VALUE.toString(), true, Int.MAX_VALUE),
+            Case("overflow", (Int.MAX_VALUE.toLong() + 1).toString(), false),
+            Case("nan", ".NaN", false),
+            Case("positive infinity", ".inf", false),
+            Case("negative infinity", "-.inf", false),
+            Case("string", "'123'", false),
+        )
+
+        cases.forEach { case ->
+            val field = case.yamlValue?.let { "custom-model-data: $it" }.orEmpty()
+            val gui = yaml("""
+                gui:
+                  items:
+                    close:
+                      material: RED_STAINED_GLASS_PANE
+                      $field
+            """.trimIndent())
+            if (case.name in setOf("nan", "positive infinity", "negative infinity")) {
+                (YamlConfiguration.loadConfiguration(gui).get("gui.items.close.custom-model-data") is Number) shouldBe true
+            }
+            val boosterConfig = case.yamlValue?.let {
+                booster().replace("name-key:", "$field\n      name-key:")
+            } ?: booster()
+            val guiResult = runCatching { AddonSettings.load(gui).guiItems.close.customModelData }
+            val boosterResult = runCatching {
+                BoosterRegistry.load(yaml(boosterConfig), settings, setOf("miner"))
+                    .get("sample")!!.item.customModelData
+            }
+            if (case.accepted) {
+                guiResult.getOrElse { throw AssertionError("GUI case ${case.name} failed", it) } shouldBe case.expected
+                boosterResult.getOrElse { throw AssertionError("booster case ${case.name} failed", it) } shouldBe case.expected
+            } else {
+                guiResult.isFailure shouldBe true
+                boosterResult.isFailure shouldBe true
+            }
+        }
+    }
+
     "every named menu icon can be changed without recompiling" {
         val config = yaml("""
             gui:

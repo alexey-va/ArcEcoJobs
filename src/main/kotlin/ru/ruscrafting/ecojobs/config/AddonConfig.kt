@@ -13,6 +13,22 @@ import java.time.ZoneId
 
 internal fun loadYamlStrict(file: File): YamlConfiguration = YamlConfiguration().apply { load(file) }
 
+private fun customModelData(yaml: YamlConfiguration, path: String, label: String): Int? {
+    val raw = yaml.get(path)
+    return when (raw) {
+        null -> null
+        is Number -> {
+            val numeric = raw.toDouble()
+            val integral = raw.toLong()
+            require(numeric.isFinite() && numeric == integral.toDouble() && integral in 0..Int.MAX_VALUE.toLong()) {
+                "$label must be a non-negative integer"
+            }
+            integral.toInt().takeIf { it > 0 }
+        }
+        else -> error("$label must be an integer")
+    }
+}
+
 data class AddonSettings(
     val defaultLocale: String,
     val useClientLocale: Boolean,
@@ -331,19 +347,7 @@ data class GuiItems(
             val material = Material.matchMaterial(rawMaterial)
                 ?: error("$path.material is invalid")
             require(material.isItem && !material.isAir) { "$path.material must be a usable item" }
-            val rawModelData = yaml.get("$path.custom-model-data")
-            val modelData = when (rawModelData) {
-                null -> null
-                is Number -> {
-                    val numeric = rawModelData.toDouble()
-                    val integral = rawModelData.toLong()
-                    require(numeric.isFinite() && numeric == integral.toDouble() && integral in 0..Int.MAX_VALUE.toLong()) {
-                        "$path.custom-model-data must be a non-negative integer"
-                    }
-                    integral.toInt().takeIf { it > 0 }
-                }
-                else -> error("$path.custom-model-data must be an integer")
-            }
+            val modelData = customModelData(yaml, "$path.custom-model-data", "$path.custom-model-data")
             return GuiItemDefinition(material, modelData)
         }
     }
@@ -401,19 +405,11 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
                 require("all" !in jobs || jobs.size == 1) { "Booster $id cannot combine all with job IDs" }
                 val material = Material.matchMaterial(yaml.getString("$path.item.material") ?: "")
                     ?: error("Invalid material for booster $id")
-                val rawModelData = yaml.get("$path.item.custom-model-data")
-                val modelData = when (rawModelData) {
-                    null -> null
-                    is Number -> {
-                        val numeric = rawModelData.toDouble()
-                        val integral = rawModelData.toLong()
-                        require(numeric.isFinite() && numeric == integral.toDouble() && integral in 0..Int.MAX_VALUE.toLong()) {
-                            "custom-model-data for booster $id must be a non-negative integer"
-                        }
-                        integral.toInt().takeIf { it > 0 }
-                    }
-                    else -> error("custom-model-data for booster $id must be an integer")
-                }
+                val modelData = customModelData(
+                    yaml,
+                    "$path.item.custom-model-data",
+                    "custom-model-data for booster $id",
+                )
                 val itemModel = yaml.getString("$path.item.item-model")?.takeIf(String::isNotBlank)?.also { raw ->
                     require(NamespacedKey.fromString(raw) != null) { "Invalid item-model for booster $id: $raw" }
                 }

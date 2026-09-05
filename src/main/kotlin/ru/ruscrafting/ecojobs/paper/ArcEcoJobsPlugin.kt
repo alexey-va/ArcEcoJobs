@@ -189,6 +189,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         val command = JobsCommand(
             { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin,
         )
+        jobsMenu.installAdminActions(command::executeAdmin)
         requireNotNull(getCommand("arcjobs")).apply {
             setExecutor(command)
             tabCompleter = command

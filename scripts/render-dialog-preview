@@ -10,6 +10,7 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--ops-root', type=Path, default=Path.home() / 'mcserver')
 parser.add_argument('--client-jar', type=Path)
+parser.add_argument('--screen-prefix', help='Render only captured screen IDs starting with this prefix')
 parser.add_argument('--output', type=Path, default=root / 'build/reports/dialog-preview')
 args = parser.parse_args()
 manifest = yaml.safe_load((root / 'visual-preview.yml').read_text())
@@ -18,6 +19,8 @@ manifest['surfaces'] = {'dialogs': []}
 # Deduplicate repeat visits while preserving distinct loading/disabled/selected states.
 seen = set()
 for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
+    if args.screen_prefix and not path.stem.split('-', 1)[-1].startswith(args.screen_prefix):
+        continue
     serialized = path.read_text()
     if serialized in seen:
         continue
@@ -26,13 +29,15 @@ for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
     source = 'screen_' + path.stem.replace('.', '_').replace('-', '_')
     manifest['sources'][source] = {
         'path': str(path.relative_to(root)),
-        'include': ['name', 'external_title', 'body.*.text', 'buttons.*.text', 'buttons.*.tooltip', 'exit.text', 'exit.tooltip'],
+        'include': ['name', 'external_title', 'body.*.text', 'buttons.*.text', 'buttons.*.tooltip', 'exit.text', 'exit.tooltip', 'inputs.*.label', 'inputs.*.initial'],
     }
     manifest['surfaces']['dialogs'].append({
         'id': path.stem, 'source': source, 'format': 'reference-multi-action',
         'name-key': 'name', 'external-title-key': 'external_title', 'columns': screen['columns'],
         'body': [{'id': key, 'text-key': f'body.{key}.text', 'width': value['width']}
                  for key, value in screen['body'].items()],
+        'inputs': [{'id': key, 'label-key': f'inputs.{key}.label', 'initial-key': f'inputs.{key}.initial', 'width': value['width']}
+                   for key, value in screen.get('inputs', {}).items()],
         'buttons': [{'id': key, 'text-key': f'buttons.{key}.text',
                      'tooltip-key': f'buttons.{key}.tooltip', 'width': value['width']}
                     for key, value in screen['buttons'].items()],

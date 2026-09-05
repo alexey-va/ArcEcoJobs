@@ -224,3 +224,18 @@ Offline previews of composed dialog states (after running the tests):
 ```bash
 python3 -B scripts/render-dialog-preview --ops-root /path/to/ruscrafting-ops
 ```
+
+### Administrative dialogs
+
+`/arcjobs admin`, the Management button in the jobs dialog, and administrative
+player subcommands open native Paper dialogs. `/arcjobs help` also opens this
+panel for administrators; console command output remains textual.
+The panel shows only permitted actions: preset inspection, held-voucher
+inspection, voucher issuance (including optional overrides), active player
+boosts, direct grants/revocation, diagnostics, and addon reload.
+Issuance, grants, revocation and reload require a confirmation screen. Results
+and validation errors stay in the dialog; Back retains submitted form values.
+Escape follows ARC's `arc-menu-escape` preference. Closing or switching back to
+player menus prevents late operation results from reopening the old screen.
+All operations reuse the same permission checks and validators as console
+commands. Grid buttons use the same width, including Close when Escape means Back.

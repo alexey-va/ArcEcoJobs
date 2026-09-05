@@ -60,7 +60,7 @@ class JobsCommandTest : StringSpec({
         }
 
         handler.onTabComplete(sender, command, "arcjobs", arrayOf("")) shouldBe
-            listOf("help", "boost", "dialog", "inventory", "boosters", "booster")
+            listOf("help", "boost", "dialog", "inventory", "admin", "boosters", "booster")
 
         handler.onTabComplete(
             sender,

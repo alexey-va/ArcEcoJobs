@@ -291,6 +291,10 @@ class JobsMenuMockBukkitTest : StringSpec({
                 screens.last().exitButton?.id?.value shouldBe "close"
                 screens.last().buttons.any { it.id.value == "back" } shouldBe true
                 screens.all { it.canCloseWithEscape && it.exitButton != null } shouldBe true
+                screens.forEach { screen ->
+                    screen.buttons.map { it.width }.distinct().size shouldBe 1
+                    screen.exitButton!!.width shouldBe 200
+                }
                 val last = screens.last()
                 click("close")
                 last.exitButton!!.onClick.handle(mockk(relaxed = true))
@@ -471,6 +475,133 @@ class JobsMenuMockBukkitTest : StringSpec({
             }
         }
     }
+    "admin forms share command validation, require confirmation and consume mutations once" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG, escapeBack = { true }) { _, screen -> screens += screen }.use { h ->
+                listOf("boost", "booster", "reload", "diagnose").forEach { h.player.addAttachment(h.plugin, "arcecojobs.admin.$it", true) }
+                val settings = AddonSettings.load(h.dataFolder.resolve("config.yml").toFile())
+                val locale = JobsLocale(h.dataFolder.toFile()) { settings }
+                var reloads = 0
+                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { reloads++; Result.success(Unit) })
+                h.menu.installAdminActions(command::executeAdmin)
+                fun click(id: String, values: Map<String, String> = emptyMap()) {
+                    val screen = screens.last()
+                    val context = mockk<PaperDialogClickContext> {
+                        every { text(any()) } answers { values[firstArg<String>()] }
+                    }
+                    (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }.onClick.handle(context)
+                    paper.performTicks(1)
+                }
+                h.menu.openRoot(h.player, JobsMenuPresentation.DIALOG)
+                click("admin")
+                screens.last().id shouldBe "ecojobs.admin.root"
+                command.onCommand(h.player, mockk(), "arcjobs", arrayOf("help")) shouldBe true
+                screens.last().buttons.map { it.id.value }.containsAll(listOf("presets", "give", "hand", "list", "grant", "revoke", "diagnose", "reload")) shouldBe true
+                screens.last().exitButton!!.id.value shouldBe "back"
+                click("grant")
+                screens.last().inputs.size shouldBe 5
+                val values = mapOf("player" to h.player.name, "duration" to "2h", "multiplier" to "1.5", "type" to "ALL", "jobs" to "all")
+                click("review", values)
+                screens.last().id shouldBe "ecojobs.admin.confirm"
+                verify(exactly = 0) { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) }
+                click("back")
+                screens.last().inputs.associate { it.id.value to it.initial } shouldBe values
+                click("review", values + ("duration" to "invalid"))
+                click("confirm")
+                screens.last().id shouldBe "ecojobs.admin.result"
+                screens.last().body.joinToString { plain(it.text) }.contains("Некорректный срок") shouldBe true
+                verify(exactly = 0) { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) }
+                click("back")
+                click("review", values)
+                every { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) } answers {
+                    lastArg<(ru.ruscrafting.ecojobs.boost.GrantOutcome) -> Unit>().invoke(
+                        ru.ruscrafting.ecojobs.boost.GrantOutcome(ru.ruscrafting.ecojobs.boost.GrantResult.GRANTED, java.time.Duration.ofHours(2)))
+                }
+                val confirm = screens.last().buttons.single { it.id.value == "confirm" }
+                confirm.onClick.handle(mockk(relaxed = true))
+                confirm.onClick.handle(mockk(relaxed = true))
+                val playerId = h.player.uniqueId
+                verify(exactly = 1) { h.boosts.grantDetailed(playerId, BoostType.ALL, 150, java.time.Duration.ofHours(2), setOf("all"), any()) }
+                screens.last().body.joinToString { plain(it.text) }.contains("выдано усиление") shouldBe true
+                h.menu.openAdminCommand(h.player, listOf("reload"))
+                reloads shouldBe 0
+                click("confirm")
+                reloads shouldBe 1
+                screens.last().id shouldBe "ecojobs.admin.result"
+                h.menu.openAdminCommand(h.player, listOf("admin"))
+                click("give")
+                click("continue", mapOf("player" to h.player.name, "preset" to "workday", "amount" to "2"))
+                screens.last().id shouldBe "ecojobs.admin.give_options"
+                click("continue", mapOf("duration" to "1h", "multiplier" to "2", "type" to "XP", "jobs" to "all"))
+                screens.last().id shouldBe "ecojobs.admin.confirm"
+                click("back")
+                screens.last().inputs.single { it.id.value == "duration" }.initial shouldBe "1h"
+                val registry = BoosterRegistry.load(Path.of(System.getProperty("arcecojobs.projectDir"), "src/main/resources/boosters.yml").toFile(), settings, setOf("miner"))
+                val preset = registry.values().first()
+                every { h.boosters.get(preset.id) } returns preset
+                every { h.boosters.values() } returns listOf(preset)
+                every { h.vouchers.create(preset, h.player, any()) } returns ItemStack(Material.PAPER)
+                h.menu.openAdminCommand(h.player, listOf("booster", "give", h.player.name, preset.id, "2", "--duration", "1h", "--type", "XP"))
+                click("continue", mapOf("player" to h.player.name, "preset" to preset.id, "amount" to "2"))
+                screens.last().inputs.single { it.id.value == "duration" }.initial shouldBe "1h"
+                click("continue", mapOf("duration" to "1h", "type" to "XP"))
+                val voucherConfirm = screens.last().buttons.single { it.id.value == "confirm" }
+                voucherConfirm.onClick.handle(mockk(relaxed = true))
+                voucherConfirm.onClick.handle(mockk(relaxed = true))
+                h.player.inventory.contents.filterNotNull().filter { it.type == Material.PAPER }.sumOf { it.amount } shouldBe 2
+                verify(exactly = 2) { h.vouchers.create(preset, any(), ru.ruscrafting.ecojobs.boost.VoucherOverrides(java.time.Duration.ofHours(1), null, BoostType.XP, null)) }
+                h.menu.openAdminCommand(h.player, listOf("booster", "inspect", preset.id))
+                screens.last().id shouldBe "ecojobs.admin.result"
+                h.menu.openAdminCommand(h.player, listOf("boost", "revoke", h.player.name, "all"))
+                click("review", mapOf("player" to h.player.name, "instance" to "all"))
+                h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", false)
+                click("confirm")
+                screens.last().id shouldBe "ecojobs.admin.denied"
+                verify(exactly = 0) { h.boosts.revoke(any(), any(), any()) }
+                screens.forEach { screen -> screen.buttons.map { it.width }.distinct().size shouldBe 1 }
+                verify(exactly = 0) { h.player.sendMessage(any<Component>()) }
+                verify(exactly = 0) { h.player.closeInventory() }
+            }
+        }
+    }
+
+    "admin async results cannot reopen after Escape or a player menu command" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
+                h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", true)
+                val settings = AddonSettings.load(h.dataFolder.resolve("config.yml").toFile())
+                val locale = JobsLocale(h.dataFolder.toFile()) { settings }
+                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { Result.success(Unit) })
+                val replies = mutableListOf<(List<ru.ruscrafting.ecojobs.domain.BoostInstance>?, Throwable?) -> Unit>()
+                every { h.boosts.loadActive(any(), any()) } answers { replies += lastArg<(List<ru.ruscrafting.ecojobs.domain.BoostInstance>?, Throwable?) -> Unit>() }
+                h.menu.installAdminActions(command::executeAdmin)
+                fun list() {
+                    h.menu.openAdminCommand(h.player, listOf("boost", "list"))
+                    val context = mockk<PaperDialogClickContext> { every { text(any()) } returns h.player.name }
+                    screens.last().buttons.single { it.id.value == "show" }.onClick.handle(context)
+                    screens.last().id shouldBe "ecojobs.admin.loading"
+                }
+                list()
+                screens.last().exitButton!!.id.value shouldBe "close"
+                screens.last().exitButton!!.onClick.handle(mockk(relaxed = true))
+                val closed = screens.size
+                replies.last()(emptyList(), null)
+                screens.size shouldBe closed
+                list()
+                h.menu.openRoot(h.player, JobsMenuPresentation.DIALOG)
+                val replaced = screens.size
+                replies.last()(emptyList(), null)
+                screens.size shouldBe replaced
+                screens.last().id shouldBe "ecojobs.main"
+                h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", false)
+                h.menu.openAdminCommand(h.player, listOf("admin"))
+                screens.last().id shouldBe "ecojobs.admin.denied"
+            }
+        }
+    }
+
 })
 
 private fun mockJob(h: JobsMenuHarness): Job {
@@ -505,7 +636,7 @@ private class JobsMenuHarness(
     val boosts: BoostService,
     val boosters: BoosterRegistry,
     val vouchers: VoucherService,
-    private val dataFolder: Path,
+    val dataFolder: Path,
 ) : AutoCloseable {
     override fun close() {
         menu.close()
@@ -638,6 +769,11 @@ private fun captureDialog(screen: PaperDialogScreen) {
     screen.body.forEachIndexed { i, body ->
         yaml.set("body.row_$i.text", mini.serialize(body.text))
         yaml.set("body.row_$i.width", body.width)
+    }
+    screen.inputs.forEach { field ->
+        yaml.set("inputs.${field.id.value}.label", mini.serialize(field.label))
+        yaml.set("inputs.${field.id.value}.initial", field.initial)
+        yaml.set("inputs.${field.id.value}.width", field.width)
     }
     screen.buttons.forEach { button ->
         yaml.set("buttons.${button.id.value}.text", mini.serialize(button.label))

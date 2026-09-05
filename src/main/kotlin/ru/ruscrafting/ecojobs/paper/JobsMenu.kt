@@ -91,6 +91,26 @@ class JobsMenu(
     private val dialogs by dialogDisplayDelegate
     private val presentations = mutableMapOf<java.util.UUID, JobsMenuPresentation>()
     private var listening = false
+    private var adminMenu: JobsAdminMenu? = null
+
+    internal fun installAdminActions(execute: (Player, List<String>, (List<Component>) -> Unit) -> Unit) {
+        if (!listening) {
+            plugin.server.pluginManager.registerEvents(this, plugin)
+            listening = true
+        }
+        adminMenu = JobsAdminMenu(locale, boosters, execute, { player, screen -> dialogs.show(player, screen) },
+            { player -> dialogs.close(player) }, { player -> openRoot(player, JobsMenuPresentation.DIALOG) }, escapeGoesBack)
+    }
+
+    internal fun openAdminCommand(player: Player, args: List<String>): Boolean {
+        val command = args.firstOrNull()?.lowercase() ?: return false
+        if (command !in setOf("admin", "help", "reload", "boosters", "booster", "boost", "diagnose")) return false
+        if (command != "admin" && !JobsAdminMenu.canOpen(player)) return false
+        val admin = adminMenu ?: return false
+        dismiss(player, closeDialog = false)
+        admin.route(player, args)
+        return true
+    }
 
     private class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame, var detailSlot: Int? = null, var revision: Long = 0)
 
@@ -104,6 +124,7 @@ class JobsMenu(
     private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
 
     private fun dismiss(player: Player, closeDialog: Boolean = true) {
+        adminMenu?.invalidate(player)
         activeFrames.remove(player.uniqueId)
         if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG && closeDialog) dialogs.close(player)
         if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
@@ -111,6 +132,7 @@ class JobsMenu(
 
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
+        adminMenu?.invalidate(event.player)
         activeFrames.remove(event.player.uniqueId)
         presentations.remove(event.player.uniqueId)
         pendingClicks.remove(event.player.uniqueId)
@@ -126,6 +148,7 @@ class JobsMenu(
     }
 
     fun open(player: Player, view: JobsView = JobsView.Main) {
+        adminMenu?.invalidate(player)
         if (!listening) {
             plugin.server.pluginManager.registerEvents(this, plugin)
             listening = true
@@ -196,6 +219,7 @@ class JobsMenu(
 
     override fun close() {
         activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
+        adminMenu?.clear()
         activeFrames.clear()
         presentations.clear()
         pendingClicks.clear()
@@ -223,7 +247,7 @@ class JobsMenu(
         )))
         inventory.setItem(element(view, "help"), item(settings().guiItems["main-help"], player, "menu.main.help-name", "menu.main.help-lore"))
         inventory.setItem(element(view, "back"), backItem(player))
-        if (player.hasPermission("arcecojobs.admin")) {
+        if (JobsAdminMenu.canOpen(player)) {
             inventory.setItem(element(view, "admin"), item(settings().guiItems["main-admin"], player, "menu.main.admin-name", "menu.main.admin-lore"))
         }
         show(player, view, inventory)
@@ -242,7 +266,7 @@ class JobsMenu(
                 dismiss(player, closeDialog = !usesDialog(player))
                 player.performCommand(MAIN_MENU_COMMAND)
             }
-            element(view, "admin") -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(view))
+            element(view, "admin") -> if (JobsAdminMenu.canOpen(player)) open(player, JobsView.Admin(view))
         }
     }
 
@@ -694,6 +718,10 @@ class JobsMenu(
     }
 
     private fun openAdmin(player: Player, view: JobsView.Admin) {
+        if (usesDialog(player) && adminMenu != null) {
+            openAdminCommand(player, listOf("admin"))
+            return
+        }
         if (!player.hasPermission("arcecojobs.admin")) return open(player, view.back)
         val problems = ecoJobs.moneyIntegrationProblems()
         val ok = Component.text("OK", NamedTextColor.GREEN)

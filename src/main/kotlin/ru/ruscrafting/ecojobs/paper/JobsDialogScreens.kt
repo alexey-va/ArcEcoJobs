@@ -49,7 +49,7 @@ internal object JobsDialogScreens {
                 tooltip = tooltip, width = if (view is JobsView.EarningsHours && detailSlot == null) 102 else 210, onClick = { action() },
             )
         val closeButton = button("close", locale.render("common.close-name", player),
-            locale.render("dialog.close-tooltip", player), close).copy(width = 200)
+            locale.render("dialog.close-tooltip", player), close)
         fun screen(title: Component, body: List<PaperDialogBody>, actions: List<PaperDialogButton>, back: PaperDialogButton, suffix: String = "") =
             PaperDialogScreen(
                 id = "ecojobs.${JobsMenuLayouts.menu(view).value}$suffix",
@@ -58,7 +58,7 @@ internal object JobsDialogScreens {
                 buttons = actions + if (escapeGoesBack) closeButton else back,
                 // Native exitAction is both the separate footer and the Escape action.
                 // Always handle it so late async results cannot revive a closed screen.
-                exitButton = if (escapeGoesBack) back.copy(width = 200) else closeButton,
+                exitButton = if (escapeGoesBack) back.copy(width = 200) else closeButton.copy(width = 200),
                 columns = if (view is JobsView.EarningsHours && suffix.isEmpty()) 4 else if (actions.isEmpty()) 1 else 2,
             )
         val selected = rows.firstOrNull { it.slot == detailSlot }

@@ -43,7 +43,7 @@ message:
   booster-received: '<prefix><#e6fff3>You received <amount> × <item><#e6fff3>.'
   shop-purchased: '<prefix><#79c99e>The booster was delivered to your inventory.'
   shop-disabled: '<prefix><#e36d6d>The booster shop is closed right now.'
-  shop-insufficient: '<prefix><#e36d6d>You do not have enough coins.'
+  shop-insufficient: '<prefix><#e36d6d>You do not have enough currency for this purchase.'
   shop-failed: '<prefix><#e36d6d>The purchase did not finish. Try again later.'
   shop-pending: '<prefix><#d8a657>This operation is pending reconciliation. No second charge will be attempted.'
   shop-unavailable: '<prefix><#e36d6d>This booster is currently unavailable.'
@@ -117,7 +117,7 @@ menu:
       - '<#92bed8>Click to open'
     shop-name: '<#92bed8>Booster shop'
     shop-lore:
-      - '<#e6fff3>Buy boosts with coins or premium tokens'
+      - '<#e6fff3>Buy boosts with premium tokens'
       - '<#92bed8>Click to open'
     help-name: '<#92bed8>How jobs work'
     help-lore:

@@ -43,7 +43,7 @@ message:
   booster-received: '<prefix><#e6fff3>Вы получили <amount> × <item><#e6fff3>.'
   shop-purchased: '<prefix><#79c99e>Усилитель доставлен в инвентарь.'
   shop-disabled: '<prefix><#e36d6d>Магазин усилителей сейчас закрыт.'
-  shop-insufficient: '<prefix><#e36d6d>Недостаточно монет.'
+  shop-insufficient: '<prefix><#e36d6d>Недостаточно валюты для этой покупки.'
   shop-failed: '<prefix><#e36d6d>Покупка не завершена. Повторите попытку позже.'
   shop-pending: '<prefix><#d8a657>Операция отправлена на сверку. Повторная оплата не выполняется.'
   shop-unavailable: '<prefix><#e36d6d>Этот усилитель сейчас недоступен.'
@@ -117,7 +117,7 @@ menu:
       - '<#92bed8>Нажмите, чтобы открыть'
     shop-name: '<#92bed8>Магазин усилителей'
     shop-lore:
-      - '<#e6fff3>Купите усиление за монеты или премиум-жетоны'
+      - '<#e6fff3>Купите усиление за премиум-жетоны'
       - '<#92bed8>Нажмите, чтобы открыть'
     help-name: '<#92bed8>Как работают профессии'
     help-lore:

@@ -767,7 +767,7 @@ class JobsMenu(
             "multiplier" to locale.text(Multipliers.format(preset.multiplierBasisPoints)),
             "duration" to locale.text(locale.duration(preset.duration, player)),
         )))
-        frame.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
+        frame.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.shop.cancel-name", "menu.shop.cancel-lore"))
         show(player, view, frame)
     }
 
@@ -1146,7 +1146,7 @@ class JobsMenu(
     private fun jobsLabel(jobs: Set<String>, player: Player): Component =
         if ("all" in jobs) locale.allJobs(player) else ecoJobs.names(jobs)
 
-    private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "menu.leave.cancel-name", "menu.leave.cancel-lore")
+    private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "common.back-name", "common.back-lore")
     private fun text(value: Any?): Component = locale.text(value)
     private fun titleText(value: Component): Component = Component.text(plain.serialize(value))
     private fun formatMultiplier(multiplier: Double): String = Multipliers.format(Multipliers.toBasisPoints(multiplier))

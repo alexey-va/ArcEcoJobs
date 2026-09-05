@@ -137,9 +137,11 @@ menu:
     price: '<#d8a657>Price: <price> coins'
     confirm-title: '<#20252b>Confirm purchase'
     confirm-name: '<#79c99e>Buy boost for <price> coins'
+    cancel-name: '<#92bed8>Cancel'
+    cancel-lore: '<#8c8c8c>Return to the shop without buying'
     confirm-lore:
       - '<#e6fff3>Effect: <benefit>'
-      - '<#e6fff3><type> ×<multiplier> · <duration>'
+      - '<#e6fff3><type> <multiplier> · <duration>'
       - '<#8c8c8c>The voucher will be delivered after confirmation'
       - '<#92bed8>Click to confirm'
   catalog:

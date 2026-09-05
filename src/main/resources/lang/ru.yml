@@ -137,9 +137,11 @@ menu:
     price: '<#d8a657>Цена: <price> монет'
     confirm-title: '<#20252b>Подтвердите покупку'
     confirm-name: '<#79c99e>Купить усиление за <price> монет'
+    cancel-name: '<#92bed8>Отмена'
+    cancel-lore: '<#8c8c8c>Вернуться в магазин без покупки'
     confirm-lore:
       - '<#e6fff3>Эффект: <benefit>'
-      - '<#e6fff3><type> ×<multiplier> · <duration>'
+      - '<#e6fff3><type> <multiplier> · <duration>'
       - '<#8c8c8c>После подтверждения талон будет выдан в инвентарь'
       - '<#92bed8>Нажмите, чтобы подтвердить'
   catalog:

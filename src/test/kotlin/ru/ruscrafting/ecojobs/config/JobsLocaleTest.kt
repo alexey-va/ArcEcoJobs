@@ -45,6 +45,31 @@ class JobsLocaleTest : StringSpec({
         lines.map(plain::serialize).all { line -> '\n' !in line && '\r' !in line } shouldBe true
     }
 
+    "older operator locales inherit new dialog text without replacing overrides" {
+        val dataFolder = Files.createTempDirectory("arcecojobs-locale-upgrade-")
+        val langFolder = Files.createDirectories(dataFolder.resolve("lang"))
+        try {
+            for (language in listOf("ru", "en")) {
+                val yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(
+                    project.resolve("src/main/resources/lang/$language.yml").toFile(),
+                )
+                yaml.set("dialog", null)
+                yaml.set("common.back-name", "Custom back")
+                yaml.save(langFolder.resolve("$language.yml").toFile())
+            }
+            val settings = AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile())
+            val locale = JobsLocale(dataFolder.toFile()) { settings }
+            locale.validate()
+            val plain = PlainTextComponentSerializer.plainText()
+            plain.serialize(locale.render("dialog.main.description")).contains("профессию") shouldBe true
+            plain.serialize(locale.render("common.back-name")) shouldBe "Custom back"
+            org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(langFolder.resolve("ru.yml").toFile())
+                .contains("dialog") shouldBe false
+        } finally {
+            dataFolder.toFile().deleteRecursively()
+        }
+    }
+
     "locale validation rejects placeholder drift between languages" {
         val dataFolder = Files.createTempDirectory("arcecojobs-locale-placeholder-")
         val langFolder = Files.createDirectories(dataFolder.resolve("lang"))

@@ -4,6 +4,11 @@ Native Paper dialogs are the default for `/arcjobs`, `/jobs`, and `/job`.
 All existing views share the same data and actions with the original inventory menu.
 Use `/arcjobs inventory` for that fallback, `/arcjobs dialog` to open a dialog explicitly,
 or set `gui.presentation: inventory` and reload to change the server default.
+Dialogs share ARC's Escape preference (`arc-menu-escape`): back returns to the parent,
+close returns to the game. The native footer follows that preference; Back remains
+available in both modes. Internal navigation and earnings updates replace the dialog
+directly without closing the window first. Each section has its own introductory text;
+missing new locale entries fall back to bundled translations without rewriting overrides.
 Navigation retains the selected presentation; a fresh root command uses the configured default.
 Dialogs include an explicit Close button so pending data loads cannot reopen a closed screen.
 

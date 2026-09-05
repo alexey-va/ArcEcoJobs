@@ -26,7 +26,7 @@ for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
     source = 'screen_' + path.stem.replace('.', '_').replace('-', '_')
     manifest['sources'][source] = {
         'path': str(path.relative_to(root)),
-        'include': ['name', 'external_title', 'body.*.text', 'buttons.*.text', 'buttons.*.tooltip'],
+        'include': ['name', 'external_title', 'body.*.text', 'buttons.*.text', 'buttons.*.tooltip', 'exit.text', 'exit.tooltip'],
     }
     manifest['surfaces']['dialogs'].append({
         'id': path.stem, 'source': source, 'format': 'reference-multi-action',
@@ -36,6 +36,9 @@ for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
         'buttons': [{'id': key, 'text-key': f'buttons.{key}.text',
                      'tooltip-key': f'buttons.{key}.tooltip', 'width': value['width']}
                     for key, value in screen['buttons'].items()],
+        **({'exit-button': {'id': 'exit', 'text-key': 'exit.text',
+                            'tooltip-key': 'exit.tooltip', 'width': screen['exit']['width']}}
+           if 'exit' in screen else {}),
         'variants': [{'id': 'default'}], 'viewport': [640, 360],
     })
 if not seen:

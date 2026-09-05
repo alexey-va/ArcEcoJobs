@@ -23,6 +23,7 @@ internal object JobsDialogScreens {
         layouts: JobsMenuLayouts,
         locale: JobsLocale,
         detailSlot: Int?,
+        escapeGoesBack: Boolean,
         actionable: (String, Int?) -> Boolean,
         click: (Int) -> Unit,
         detail: (Int?) -> Unit,
@@ -47,20 +48,36 @@ internal object JobsDialogScreens {
                 id = PaperDialogActionId.of(id.replace('-', '_')), label = label.decoration(TextDecoration.ITALIC, false),
                 tooltip = tooltip, width = if (view is JobsView.EarningsHours && detailSlot == null) 102 else 210, onClick = { action() },
             )
-        val closeButton = button("close", locale.render("common.close-name", player), action = close)
+        val closeButton = button("close", locale.render("common.close-name", player),
+            locale.render("dialog.close-tooltip", player), close).copy(width = 200)
+        fun screen(title: Component, body: List<PaperDialogBody>, actions: List<PaperDialogButton>, back: PaperDialogButton, suffix: String = "") =
+            PaperDialogScreen(
+                id = "ecojobs.${JobsMenuLayouts.menu(view).value}$suffix",
+                title = recolor(title, TextColor.color(0xf4bd6a)),
+                body = body,
+                buttons = actions + if (escapeGoesBack) closeButton else back,
+                // Native exitAction is both the separate footer and the Escape action.
+                // Always handle it so late async results cannot revive a closed screen.
+                exitButton = if (escapeGoesBack) back.copy(width = 200) else closeButton,
+                columns = if (view is JobsView.EarningsHours && suffix.isEmpty()) 4 else if (actions.isEmpty()) 1 else 2,
+            )
         val selected = rows.firstOrNull { it.slot == detailSlot }
-        if (selected != null) return PaperDialogScreen(
-            id = "ecojobs.${JobsMenuLayouts.menu(view).value}.detail",
-            title = name(selected.item),
-            body = listOf(PaperDialogBody(join(lore(selected.item)), 440)),
-            buttons = listOf(button("detail_back", locale.render("common.back-name", player)) { detail(null) }, closeButton),
-            // Paper has no Escape-close event. Explicit close invalidates pending async updates.
-            canCloseWithEscape = false,
+        if (selected != null) return screen(
+            name(selected.item),
+            listOf(PaperDialogBody(join(lore(selected.item)), 440)),
+            emptyList(),
+            button("detail_back", locale.render("common.back-name", player), locale.render("common.back-lore", player)) { detail(null) },
+            ".detail",
         )
 
-        val body = mutableListOf<PaperDialogBody>()
+        val description = when (view) {
+            is JobsView.Catalog -> if (view.activeOnly) "active" else "catalog"
+            else -> JobsMenuLayouts.menu(view).value
+        }
+        val body = mutableListOf(PaperDialogBody(locale.render("dialog.$description.description", player), 440))
         val buttons = mutableListOf<PaperDialogButton>()
-        val navigation = mutableListOf<PaperDialogButton>()
+        val pagination = mutableListOf<PaperDialogButton>()
+        var back: PaperDialogButton? = null
         rows.forEach { row ->
             val title = name(row.item)
             val lines = lore(row.item)
@@ -73,19 +90,16 @@ internal object JobsDialogScreens {
                 inline -> null
                 else -> button("info_${row.id}", title, tooltip) { detail(row.slot) }
             }
-            if (control != null) {
-                if (row.id in setOf("back", "cancel", "previous", "next")) navigation += control else buttons += control
+            if (control != null) when (row.id) {
+                "back", "cancel" -> back = control.copy(
+                    label = if (view == JobsView.Main) locale.render("dialog.main.back", player) else control.label,
+                )
+                "previous", "next" -> pagination += control
+                else -> buttons += control
             }
         }
-        buttons += navigation
-        buttons += closeButton
-        return PaperDialogScreen(
-            id = "ecojobs.${JobsMenuLayouts.menu(view).value}",
-            title = recolor(frame.title, TextColor.color(0xf4bd6a)),
-            body = body, buttons = buttons,
-            columns = if (view is JobsView.EarningsHours) 4 else if (buttons.size == 1) 1 else 2,
-            canCloseWithEscape = false,
-        )
+        buttons += pagination
+        return screen(frame.title, body, buttons, requireNotNull(back) { "Jobs dialog requires a parent action" })
     }
 
     private fun name(item: ItemStack): Component =

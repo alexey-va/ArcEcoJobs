@@ -412,3 +412,35 @@ booster:
       - '<#8c8c8c>Another type can start after this one ends'
       - ''
       - '<#92bed8>Right-click to activate'
+
+dialog:
+  close-tooltip: '<#969696>Return to the game. Escape follows the shared ARC menu setting.'
+  main:
+    back: '<#969696>Main menu'
+    description: '<italic:false><#e6fff3>Choose a job and earn money and XP for its activities.<newline><newline><#c8a477>Sections<#e6fff3><newline>Catalog — choose a job; my jobs — your progress.<newline>Leaders — rankings; boosts — your active bonuses.'
+  catalog:
+    description: '<italic:false><#e6fff3>Compare jobs and choose your next profession.<newline><#969696>Each job card shows joining conditions, levels, earnings, and boosts.'
+  active:
+    description: '<italic:false><#e6fff3>Your active jobs and current progress.<newline><#969696>Open a job to see earnings, rewards, and boosts.'
+  job:
+    description: '<italic:false><#e6fff3>Progress in this job by performing its in-game activities.<newline><#969696>Levels and rewards, earnings history, rankings, and boosts are below.'
+  leave:
+    description: '<italic:false><#e6fff3>You are about to leave this job.<newline><#969696>Review the conditions below. Leaving requires your confirmation.'
+  levels:
+    description: '<italic:false><#e6fff3>Rewards and requirements for each job level.<newline><#969696>Open a level to read all its rewards and conditions.'
+  earnings:
+    description: '<italic:false><#e6fff3>Money and XP earned in this job over time.<newline><#969696>Select a day to see its hourly breakdown.'
+  earnings-hours:
+    description: '<italic:false><#e6fff3>Money and XP for the selected day, grouped by hour.<newline><#969696>Select an hour to see its totals.'
+  leaderboard-selector:
+    description: '<italic:false><#e6fff3>Compare player progress across all jobs or in one profession.<newline><#969696>Select the overall ranking or a specific job.'
+  leaderboard:
+    description: '<italic:false><#e6fff3>Player rankings by job level and XP.<newline><#969696>Open a player entry for details.'
+  boosts:
+    description: '<italic:false><#e6fff3>Active money and XP boosts.<newline><#969696>Open a boost to see its multiplier, jobs, and remaining time.'
+  help:
+    description: '<italic:false><#e6fff3>How to choose a job, earn rewards, and use boosts.<newline><#969696>Select a topic for a detailed explanation.'
+  admin:
+    description: '<italic:false><#e6fff3>Administration of jobs and boosters.<newline><#969696>Voucher presets, configuration reload, and administrator help.'
+  presets:
+    description: '<italic:false><#e6fff3>Configured boost voucher presets.<newline><#969696>Click to receive a voucher in your inventory; activate the boost separately.'

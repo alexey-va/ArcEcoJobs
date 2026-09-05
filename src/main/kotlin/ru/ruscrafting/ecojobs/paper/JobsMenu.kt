@@ -1,6 +1,7 @@
 package ru.ruscrafting.ecojobs.paper
 
 import com.willfp.ecojobs.jobs.Job
+import net.luckperms.api.LuckPerms
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -70,6 +71,10 @@ class JobsMenu(
     private val reload: () -> Result<Unit>,
     private val layouts: JobsMenuLayouts,
     dialogDisplay: JobsDialogDisplay? = null,
+    private val escapeGoesBack: (Player) -> Boolean = { player ->
+        plugin.server.servicesManager.load(LuckPerms::class.java)?.userManager
+            ?.getUser(player.uniqueId)?.cachedData?.metaData?.getMetaValue("arc-menu-escape") == "back"
+    },
 ) : AutoCloseable, Listener {
     internal companion object {
         const val MAIN_MENU_COMMAND = "menu"
@@ -90,16 +95,17 @@ class JobsMenu(
     private class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame, var detailSlot: Int? = null, var revision: Long = 0)
 
     fun openRoot(player: Player, presentation: JobsMenuPresentation? = null) {
-        dismiss(player)
-        presentations[player.uniqueId] = presentation ?: settings().menuPresentation
+        val next = presentation ?: settings().menuPresentation
+        dismiss(player, closeDialog = next != JobsMenuPresentation.DIALOG)
+        presentations[player.uniqueId] = next
         open(player)
     }
 
     private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
 
-    private fun dismiss(player: Player) {
+    private fun dismiss(player: Player, closeDialog: Boolean = true) {
         activeFrames.remove(player.uniqueId)
-        if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG) dialogs.close(player)
+        if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG && closeDialog) dialogs.close(player)
         if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
     }
 
@@ -232,7 +238,8 @@ class JobsMenu(
             element(view, "boosts") -> open(player, JobsView.Boosts(null, 1, view))
             element(view, "help") -> open(player, JobsView.Help(view))
             element(view, "back") -> {
-                dismiss(player)
+                // The ARC root replaces the current dialog directly; closing first resets the mouse.
+                dismiss(player, closeDialog = !usesDialog(player))
                 player.performCommand(MAIN_MENU_COMMAND)
             }
             element(view, "admin") -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(view))
@@ -840,8 +847,8 @@ class JobsMenu(
     private fun show(player: Player, view: JobsView, frame: PaperMenuFrame) {
         val presentation = presentations.getValue(player.uniqueId)
         if (presentation == JobsMenuPresentation.DIALOG) {
-            if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
-            player.closeInventory()
+            // DialogAfterAction.NONE keeps the client screen open across navigation and refreshes.
+            // closeInventory here would send close_window and recenter the mouse on every click.
             val active = ActiveFrame(view, frame)
             activeFrames[player.uniqueId] = active
             showDialog(player, active)
@@ -863,7 +870,7 @@ class JobsMenu(
         fun current() = player.isOnline && activeFrames[player.uniqueId] === active &&
             active.revision == revision && player.uniqueId !in pendingClicks
         val screen = JobsDialogScreens.screen(
-            player, active.view, active.frame, layouts, locale, active.detailSlot,
+            player, active.view, active.frame, layouts, locale, active.detailSlot, escapeGoesBack(player),
             actionable = { id, index -> dialogActionable(player, active.view, id, index) },
             click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
             detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
@@ -916,7 +923,7 @@ class JobsMenu(
     private fun element(view: JobsView, id: String): Int = layouts.slot(view, id)
 
     private fun content(view: JobsView, player: Player): List<Int> = layouts.region(view, "content").let {
-        if (usesDialog(player) && view !is JobsView.EarningsHours) it.take(8) else it
+        if (usesDialog(player) && view !is JobsView.EarningsHours) it.take(if (view is JobsView.Earnings) 6 else 8) else it
     }
 
     private fun leaderboardPageSize(player: Player): Int =

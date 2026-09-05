@@ -213,9 +213,11 @@ class JobsMenuMockBukkitTest : StringSpec({
                 root.id shouldBe "ecojobs.main"
                 plain(root.title) shouldBe "Работы"
                 root.title.color()?.value() shouldBe 0xf4bd6a
-                root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help", "back", "close")
+                root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help", "back")
+                root.exitButton?.id?.value shouldBe "close"
+                root.canCloseWithEscape shouldBe true
                 (h.player.openInventory.topInventory?.type == InventoryType.CHEST) shouldBe false
-                plain(root.body.single().text).contains("MenuQA") shouldBe true
+                root.body.joinToString { plain(it.text) }.contains("MenuQA") shouldBe true
                 fun click(screen: PaperDialogScreen, id: String) {
                     (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }
                         .onClick.handle(mockk<PaperDialogClickContext>(relaxed = true))
@@ -223,7 +225,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 }
                 click(root, "catalog")
                 screens.last().id shouldBe "ecojobs.catalog"
-                plain(screens.last().body.single().text).contains("Нет активных") shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("Нет активных") shouldBe true
                 val count = screens.size
                 click(root, "boosts")
                 screens.size shouldBe count
@@ -255,6 +257,48 @@ class JobsMenuMockBukkitTest : StringSpec({
         }
     }
 
+    "Escape follows the shared setting with a native footer and dialog navigation never closes the window" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            var back = true
+            menuHarness(paper, JobsMenuPresentation.DIALOG, escapeBack = { back }) { _, screen -> screens += screen }.use { h ->
+                val job = mockJob(h)
+                every { h.ecoJobs.jobs() } returns listOf(job)
+                h.menu.openRoot(h.player)
+                screens.last().exitButton?.id?.value shouldBe "back"
+                screens.last().buttons.none { it.id.value == "back" } shouldBe true
+                fun click(id: String) {
+                    val screen = screens.last()
+                    (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }
+                        .onClick.handle(mockk(relaxed = true))
+                    paper.performTicks(1)
+                }
+                click("catalog")
+                click("content_0")
+                click("scale")
+                click("next")
+                click("info_content_0")
+                screens.last().exitButton?.id?.value shouldBe "detail_back"
+                click("detail_back")
+                screens.last().buttons.any { it.id.value == "previous" } shouldBe true
+                click("back")
+                screens.last().id shouldBe "ecojobs.job"
+                click("back")
+                screens.last().id shouldBe "ecojobs.catalog"
+                verify(exactly = 0) { h.player.closeInventory() }
+                back = false
+                click("back")
+                screens.last().exitButton?.id?.value shouldBe "close"
+                screens.last().buttons.any { it.id.value == "back" } shouldBe true
+                screens.all { it.canCloseWithEscape && it.exitButton != null } shouldBe true
+                val last = screens.last()
+                click("close")
+                last.exitButton!!.onClick.handle(mockk(relaxed = true))
+                screens.last() shouldBe last
+            }
+        }
+    }
+
     "dialog join is consumed once and leaving still requires confirmation with cancellation" {
         MockBukkitTestRuntime.open().use { paper ->
             val screens = mutableListOf<PaperDialogScreen>()
@@ -267,7 +311,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 every { h.ecoJobs.join(h.player, job) } answers { active = true; true }
                 every { h.ecoJobs.leave(h.player, job) } answers { active = false; true }
                 fun click(id: String, twice: Boolean = false) {
-                    val button = screens.last().buttons.single { it.id.value == id }
+                    val button = (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == id }
                     button.onClick.handle(mockk(relaxed = true))
                     if (twice) button.onClick.handle(mockk(relaxed = true))
                     paper.performTicks(1)
@@ -280,7 +324,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 verify(exactly = 1) { h.ecoJobs.join(h.player, job) }
                 click("action")
                 screens.last().id shouldBe "ecojobs.leave"
-                plain(screens.last().body.single().text).contains("Шахтёр") shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("Шахтёр") shouldBe true
                 click("cancel")
                 verify(exactly = 0) { h.ecoJobs.leave(h.player, job) }
                 click("action")
@@ -306,7 +350,7 @@ class JobsMenuMockBukkitTest : StringSpec({
             val screens = mutableListOf<PaperDialogScreen>()
             menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
                 fun click(id: String) {
-                    screens.last().buttons.single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
+                    (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
                     paper.performTicks(1)
                 }
                 val rankings = (1..10).map { index -> ru.ruscrafting.ecojobs.integration.RankingEntry(
@@ -325,7 +369,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 every { h.boosts.active(h.player) } returns listOf(boost)
                 h.menu.open(h.player, JobsView.Boosts(null, 1, JobsView.Main))
                 click("info_content_0")
-                plain(screens.last().body.single().text).contains("Все профессии") shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("Все профессии") shouldBe true
                 val project = Path.of(System.getProperty("arcecojobs.projectDir"))
                 val registry = BoosterRegistry.load(project.resolve("src/main/resources/boosters.yml").toFile(),
                     AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile()), setOf("miner"))
@@ -362,7 +406,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                     Instant.now().epochSecond / 3600, EarningsTotals(BigDecimal("1234.5"), BigDecimal("250")))),
                     ZoneId.of("Europe/Moscow"))
                 fun click(id: String) {
-                    screens.last().buttons.single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
+                    (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
                     paper.performTicks(1)
                 }
                 h.menu.open(h.player, view)
@@ -383,7 +427,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 current.complete(report)
                 paper.performTicks(1)
                 screens.last().buttons.any { it.id.value == "content_0" } shouldBe true
-                plain(screens.last().body.single().text).contains("1,234.5") shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("1,234.5") shouldBe true
                 click("content_0")
                 screens.last().id shouldBe "ecojobs.earnings-hours"
                 requests.last().complete(report)
@@ -395,7 +439,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click("back")
                 requests.last().completeExceptionally(IllegalStateException("unavailable"))
                 paper.performTicks(1)
-                plain(screens.last().body.single().text).contains("недоступ") shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("недоступ") shouldBe true
                 click("back")
                 screens.last().id shouldBe "ecojobs.main"
             }
@@ -414,7 +458,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 before.buttons.single { it.id.value == "action" }.onClick.handle(mockk(relaxed = true))
                 paper.performTicks(1)
                 (screens.last() === before) shouldBe false
-                screens.last().buttons.single { it.id.value == "back" }.onClick.handle(mockk(relaxed = true))
+                (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == "back" }.onClick.handle(mockk(relaxed = true))
                 paper.performTicks(1)
                 screens.last().id shouldBe "ecojobs.main"
                 h.player.isOp = true
@@ -473,6 +517,7 @@ private fun menuHarness(
     paper: MockBukkitTestRuntime,
     presentation: JobsMenuPresentation = JobsMenuPresentation.INVENTORY,
     earnings: EarningsService? = null,
+    escapeBack: () -> Boolean = { false },
     display: ((PlayerMock, PaperDialogScreen) -> Unit)? = null,
 ): JobsMenuHarness {
     val plugin = paper.createSimplePlugin("ArcEcoJobsMenuTest")
@@ -519,6 +564,7 @@ private fun menuHarness(
         earnings = { earnings },
         reload = { Result.success(Unit) },
         layouts = layouts,
+        escapeGoesBack = { escapeBack() },
         dialogDisplay = display?.let { sink -> object : JobsDialogDisplay {
             override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen) {
                 captureDialog(screen)
@@ -597,6 +643,11 @@ private fun captureDialog(screen: PaperDialogScreen) {
         yaml.set("buttons.${button.id.value}.text", mini.serialize(button.label))
         yaml.set("buttons.${button.id.value}.tooltip", mini.serialize(button.tooltip))
         yaml.set("buttons.${button.id.value}.width", button.width)
+    }
+    screen.exitButton?.let { button ->
+        yaml.set("exit.text", mini.serialize(button.label))
+        yaml.set("exit.tooltip", mini.serialize(button.tooltip))
+        yaml.set("exit.width", button.width)
     }
     val number = Files.list(root).use { it.count() }
     yaml.save(root.resolve("$number-${screen.id}.yml").toFile())

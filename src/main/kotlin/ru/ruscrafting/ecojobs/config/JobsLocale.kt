@@ -19,6 +19,11 @@ class JobsLocale(
     private val mini = MiniMessage.miniMessage()
     private var russian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
     private var english = loadYamlStrict(dataFolder.resolve("lang/en.yml"))
+    private val bundled = listOf("ru", "en").associateWith { language ->
+        requireNotNull(javaClass.getResourceAsStream("/lang/$language.yml")).reader(Charsets.UTF_8).use {
+            YamlConfiguration().apply { load(it) }
+        }
+    }
 
     fun reload(dataFolder: File, presets: Collection<BoosterPreset> = emptyList()) {
         val candidateRussian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
@@ -45,6 +50,7 @@ class JobsLocale(
         val fallback = fallback()
         val strings = listValue(selected, path)
             ?: listValue(fallback, path)
+            ?: listValue(bundled.getValue(if (usesRussian(audience)) "ru" else "en"), path)
             ?: error("Locale list is missing: $path")
         return strings.flatMap { raw ->
             blocks.entries.firstOrNull { (name) -> raw == "<$name>" }?.value
@@ -79,6 +85,7 @@ class JobsLocale(
         val selected = select(audience)
         return selected.getString(path)?.takeIf(String::isNotBlank)
             ?: fallback().getString(path)?.takeIf(String::isNotBlank)
+            ?: bundled.getValue(if (usesRussian(audience)) "ru" else "en").getString(path)?.takeIf(String::isNotBlank)
             ?: error("Locale entry is missing: $path")
     }
 

@@ -19,7 +19,7 @@ boosts:
   require-money-placeholder: true
 
 # Booster sales are opt-in per server. Prices live beside each preset in boosters.yml.
-# ArcEcoJobs currently accepts currency: MONEY, backed by the active Vault provider.
+# Booster prices accept MONEY through Vault or TOKENS through named RedisEconomy currency "tokens".
 shop:
   enabled: false
 

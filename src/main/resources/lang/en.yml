@@ -117,7 +117,7 @@ menu:
       - '<#92bed8>Click to open'
     shop-name: '<#92bed8>Booster shop'
     shop-lore:
-      - '<#e6fff3>Buy active boosts with coins'
+      - '<#e6fff3>Buy boosts with coins or premium tokens'
       - '<#92bed8>Click to open'
     help-name: '<#92bed8>How jobs work'
     help-lore:
@@ -134,14 +134,17 @@ menu:
 
   shop:
     title: '<#20252b>Booster shop'
-    price: '<#d8a657>Price: <price> coins'
+    currency-money: 'coins'
+    currency-tokens: 'premium tokens'
+    price: '<#d8a657>Price: <price> <currency>'
     confirm-title: '<#20252b>Confirm purchase'
-    confirm-name: '<#79c99e>Buy boost for <price> coins'
+    confirm-name: '<#79c99e>Buy boost for <price> <currency>'
     cancel-name: '<#92bed8>Cancel'
     cancel-lore: '<#8c8c8c>Return to the shop without buying'
     confirm-lore:
       - '<#e6fff3>Effect: <benefit>'
       - '<#e6fff3><type> <multiplier> · <duration>'
+      - '<#8c8c8c>Duration starts on activation and runs while offline'
       - '<#8c8c8c>The voucher will be delivered after confirmation'
       - '<#92bed8>Click to confirm'
   catalog:
@@ -403,6 +406,24 @@ menu:
     preset-action-disabled: '<#8c8c8c>Issuing is disabled in configuration'
 
 booster:
+  premium-all-3d:
+    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+  premium-all-7d:
+    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+  premium-all-14d:
+    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+  premium-xp-3d:
+    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+  premium-xp-7d:
+    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+  premium-xp-14d:
+    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+  premium-money-3d:
+    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
+  premium-money-7d:
+    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
+  premium-money-14d:
+    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
   brief-shift:
     name: '<#79c99e><b>Short-shift shard</b>'
   workday:
@@ -429,6 +450,7 @@ booster:
       - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
       - '<#e6fff3>Duration: <#92bed8><duration>'
       - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - '<#8c8c8c>Duration starts on activation and runs while offline'
       - ''
       - '<#8c8c8c>Matching effects add their duration'
       - '<#8c8c8c>Another type can start after this one ends'
@@ -437,7 +459,7 @@ booster:
 
 dialog:
   shop:
-    description: 'Choose a booster. Buy with coins and activate by right-clicking the voucher.'
+    description: 'Choose a booster. The offer shows its currency and duration; right-click the voucher to activate it.'
   shop-confirm:
     description: 'Review the effect, duration and price before buying.'
   close-tooltip: '<#969696>Return to the game. Escape follows the shared ARC menu setting.'

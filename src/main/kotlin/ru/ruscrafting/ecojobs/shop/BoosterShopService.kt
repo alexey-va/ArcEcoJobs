@@ -6,6 +6,7 @@ import ru.arc.persistence.AtomicFileStore
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.BoosterPrice
+import ru.ruscrafting.ecojobs.config.ShopCurrency
 import java.math.BigDecimal
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -13,7 +14,14 @@ import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 
-interface ShopPaymentGateway { fun has(playerId: UUID, amount: BigDecimal): Boolean; fun charge(playerId: UUID, amount: BigDecimal): PaymentOutcome }
+interface ShopPaymentGateway {
+    fun has(playerId: UUID, amount: BigDecimal): Boolean
+    fun charge(playerId: UUID, amount: BigDecimal): PaymentOutcome
+
+    /** Currency routing is explicit so a token purchase can never fall back to Vault. */
+    fun forCurrency(currency: ShopCurrency): ShopPaymentGateway? =
+        takeIf { currency == ShopCurrency.MONEY }
+}
 enum class PaymentOutcome { ACCEPTED, REJECTED, UNKNOWN }
 interface ShopDeliveryGateway { fun hasRoom(playerId: UUID): Boolean; fun contains(playerId: UUID, voucherId: UUID): Boolean; fun deliver(playerId: UUID, itemBytes: ByteArray): DeliveryOutcome; fun save(playerId: UUID): Boolean }
 enum class DeliveryOutcome { DELIVERED, FULL, FAILED }
@@ -40,14 +48,15 @@ sealed interface PurchaseResult { data class Delivered(val purchase: ShopPurchas
 class BoosterShopService(private val enabled: () -> Boolean, private val store: ShopPurchaseStore, private val payment: ShopPaymentGateway, private val voucherFactory: (UUID, UUID, BoosterPreset) -> ByteArray) {
     fun buy(playerId: UUID, preset: BoosterPreset, delivery: ShopDeliveryGateway): PurchaseResult {
         if (!enabled()) return PurchaseResult.ShopDisabled
-        val price = preset.price ?: return PurchaseResult.Unavailable
-        if (!preset.enabled) return PurchaseResult.Unavailable
         store.findOpen(playerId, preset.id)?.let { return recover(playerId, it, delivery) }
+        val price = preset.price ?: return PurchaseResult.Unavailable
+        if (!preset.enabled || !preset.shopVisible) return PurchaseResult.Unavailable
+        val currencyPayment = payment.forCurrency(price.currency) ?: return PurchaseResult.Unavailable
         if (!delivery.hasRoom(playerId)) return PurchaseResult.InventoryFull
         val id = UUID.randomUUID(); val purchase = store.create(ShopPurchase(UUID.randomUUID(), playerId, preset.id, id, price, Instant.now(), Base64.getEncoder().encodeToString(voucherFactory(playerId, id, preset)), PurchaseState.RESERVED))
-        if (!runCatching { payment.has(playerId, price.amount) }.getOrDefault(false)) { transition(purchase, PurchaseState.FAILED); return PurchaseResult.InsufficientFunds }
+        if (!runCatching { currencyPayment.has(playerId, price.amount) }.getOrDefault(false)) { transition(purchase, PurchaseState.FAILED); return PurchaseResult.InsufficientFunds }
         val charging = transition(purchase, PurchaseState.CHARGING)
-        return when (runCatching { payment.charge(playerId, price.amount) }.getOrDefault(PaymentOutcome.UNKNOWN)) { PaymentOutcome.UNKNOWN -> PurchaseResult.PaymentPending; PaymentOutcome.REJECTED -> { transition(charging, PurchaseState.FAILED); PurchaseResult.PaymentFailed }; PaymentOutcome.ACCEPTED -> deliver(playerId, transition(charging, PurchaseState.CHARGED), delivery) }
+        return when (runCatching { currencyPayment.charge(playerId, price.amount) }.getOrDefault(PaymentOutcome.UNKNOWN)) { PaymentOutcome.UNKNOWN -> PurchaseResult.PaymentPending; PaymentOutcome.REJECTED -> { transition(charging, PurchaseState.FAILED); PurchaseResult.PaymentFailed }; PaymentOutcome.ACCEPTED -> deliver(playerId, transition(charging, PurchaseState.CHARGED), delivery) }
     }
     private fun recover(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): PurchaseResult = when (purchase.state) { PurchaseState.CHARGING -> PurchaseResult.PaymentPending; PurchaseState.CHARGED, PurchaseState.DELIVERING -> deliver(playerId, purchase, delivery); PurchaseState.RESERVED -> { transition(purchase, PurchaseState.FAILED); PurchaseResult.PaymentFailed }; PurchaseState.DELIVERED -> PurchaseResult.Recovered(purchase); PurchaseState.FAILED -> PurchaseResult.Unavailable }
     private fun deliver(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): PurchaseResult {

@@ -4,6 +4,8 @@ import com.willfp.eco.core.integrations.economy.EconomyIntegration
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.OfflinePlayer
 import ru.ruscrafting.ecojobs.earnings.MoneyAttribution
+import ru.ruscrafting.ecojobs.config.ShopCurrency
+import ru.ruscrafting.ecojobs.shop.ShopPaymentGateway
 import java.math.BigDecimal
 
 /**
@@ -59,4 +61,18 @@ class VaultShopPaymentGateway(private val economy: VaultEconomyIntegration) : ru
     } catch (_: Throwable) {
         ru.ruscrafting.ecojobs.shop.PaymentOutcome.UNKNOWN
     }
+}
+
+class RoutedShopPaymentGateway(
+    private val money: ShopPaymentGateway,
+    private val tokens: ShopPaymentGateway?,
+) : ShopPaymentGateway {
+    override fun forCurrency(currency: ShopCurrency): ShopPaymentGateway? = when (currency) {
+        ShopCurrency.MONEY -> money
+        ShopCurrency.TOKENS -> tokens
+    }
+
+    override fun has(playerId: java.util.UUID, amount: BigDecimal): Boolean = error("Currency must be selected before payment")
+    override fun charge(playerId: java.util.UUID, amount: BigDecimal): ru.ruscrafting.ecojobs.shop.PaymentOutcome =
+        error("Currency must be selected before payment")
 }

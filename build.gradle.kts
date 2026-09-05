@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.17"
+version = "0.1.18"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -16,7 +16,9 @@ val integrationTestSourceSet = sourceSets.create("integrationTest") {
 
 repositories {
     mavenCentral()
-    maven("https://repo.rus-crafting.ru/grocermc/") { content { includeGroup("ru.ruscrafting.arc") } }
+    maven("https://repo.rus-crafting.ru/grocermc/") {
+        content { includeGroupByRegex("ru\\.ruscrafting\\.(arc|thirdparty)") }
+    }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.auxilor.io/repository/maven-public/")
     maven("https://repo.extendedclip.com/releases/")
@@ -40,6 +42,7 @@ dependencies {
     compileOnly("com.willfp:libreforge-loader:2026.33")
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     compileOnly("net.luckperms:api:5.5")
+    compileOnly("ru.ruscrafting.thirdparty:rediseconomy:4.5.12")
     compileOnly("me.clip:placeholderapi:2.12.3")
 
     testImplementation("io.kotest:kotest-runner-junit5:6.0.7")
@@ -52,6 +55,7 @@ dependencies {
     testImplementation("com.willfp:libreforge-loader:2026.33") { isTransitive = false }
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") { isTransitive = false }
     testImplementation("net.luckperms:api:5.5")
+    testImplementation("ru.ruscrafting.thirdparty:rediseconomy:4.5.12")
     testImplementation("me.clip:placeholderapi:2.12.3")
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.5.0")
     testImplementation("org.yaml:snakeyaml:2.5")

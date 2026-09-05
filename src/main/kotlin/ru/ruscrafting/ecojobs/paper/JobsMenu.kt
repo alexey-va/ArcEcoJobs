@@ -29,6 +29,7 @@ import ru.ruscrafting.ecojobs.config.BoosterRegistry
 import ru.ruscrafting.ecojobs.config.GuiItemDefinition
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.config.JobsMenuPresentation
+import ru.ruscrafting.ecojobs.config.ShopCurrency
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.Multipliers
@@ -723,7 +724,7 @@ class JobsMenu(
     }
 
     private fun openShop(player: Player, view: JobsView.Shop) {
-        val offers = boosters().values().filter { it.enabled && it.price != null }
+        val offers = boosters().values().filter { it.enabled && it.shopVisible && it.price != null }
         val content = content(view, player)
         val pages = pageCount(offers.size, content.size)
         val current = view.copy(page = view.page.coerceIn(1, pages))
@@ -732,7 +733,10 @@ class JobsMenu(
             val stack = vouchers.create(preset, player).apply {
                 editMeta { meta ->
                     val lore = meta.lore().orEmpty().toMutableList()
-                    lore += locale.render("menu.shop.price", player, mapOf("price" to locale.text(preset.price!!.amount.toPlainString())))
+                    lore += locale.render("menu.shop.price", player, mapOf(
+                        "price" to locale.text(preset.price!!.amount.toPlainString()),
+                        "currency" to shopCurrency(player, preset.price.currency),
+                    ))
                     meta.lore(lore)
                 }
             }
@@ -743,7 +747,7 @@ class JobsMenu(
     }
 
     private fun clickShop(player: Player, view: JobsView.Shop, slot: Int) {
-        val offers = boosters().values().filter { it.enabled && it.price != null }
+        val offers = boosters().values().filter { it.enabled && it.shopVisible && it.price != null }
         val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) {
@@ -762,6 +766,7 @@ class JobsMenu(
         val frame = inventory(player, view, "menu.shop.confirm-title")
         frame.setItem(element(view, "confirm"), item(settings().guiItems.confirm, player, "menu.shop.confirm-name", "menu.shop.confirm-lore", mapOf(
             "price" to locale.text(view.preset.price!!.amount.toPlainString()),
+            "currency" to shopCurrency(player, view.preset.price.currency),
             "benefit" to locale.render(preset.item.nameKey, player),
             "type" to locale.type(preset.type, player),
             "multiplier" to locale.text(Multipliers.format(preset.multiplierBasisPoints)),
@@ -770,6 +775,9 @@ class JobsMenu(
         frame.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.shop.cancel-name", "menu.shop.cancel-lore"))
         show(player, view, frame)
     }
+
+    private fun shopCurrency(player: Player, currency: ShopCurrency): Component =
+        locale.render("menu.shop.currency-${currency.name.lowercase()}", player)
 
     private fun clickShopConfirm(player: Player, view: JobsView.ShopConfirm, slot: Int) {
         if (slot == element(view, "cancel")) return open(player, view.back)

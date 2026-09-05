@@ -1,6 +1,7 @@
 boosters:
   brief-shift:
     enabled: true
+    shop-visible: false
     price: "1500"
     currency: MONEY
     type: ALL
@@ -21,6 +22,7 @@ boosters:
 
   workday:
     enabled: true
+    shop-visible: false
     price: "5000"
     currency: MONEY
     type: ALL
@@ -41,6 +43,7 @@ boosters:
 
   long-shift:
     enabled: true
+    shop-visible: false
     price: "12000"
     currency: MONEY
     type: ALL
@@ -61,6 +64,7 @@ boosters:
 
   focused-xp:
     enabled: true
+    shop-visible: false
     price: "2000"
     currency: MONEY
     type: XP
@@ -81,6 +85,7 @@ boosters:
 
   mastery-shift:
     enabled: true
+    shop-visible: false
     price: "6500"
     currency: MONEY
     type: XP
@@ -101,6 +106,7 @@ boosters:
 
   mastery-marathon:
     enabled: true
+    shop-visible: false
     price: "11000"
     currency: MONEY
     type: XP
@@ -121,6 +127,7 @@ boosters:
 
   quick-profit:
     enabled: true
+    shop-visible: false
     price: "1000"
     currency: MONEY
     type: MONEY
@@ -141,6 +148,7 @@ boosters:
 
   profit-shift:
     enabled: true
+    shop-visible: false
     price: "3500"
     currency: MONEY
     type: MONEY
@@ -161,6 +169,7 @@ boosters:
 
   profit-marathon:
     enabled: true
+    shop-visible: false
     price: "6500"
     currency: MONEY
     type: MONEY
@@ -178,3 +187,102 @@ boosters:
       flags: [HIDE_ENCHANTS, HIDE_ATTRIBUTES, HIDE_UNBREAKABLE]
       persistent-data:
         ruscrafting:source: arcjobs
+
+  all-15-3d:
+    enabled: true
+    shop-visible: true
+    price: "90"
+    currency: TOKENS
+    type: ALL
+    multiplier: 1.5
+    duration: 3d
+    jobs: [all]
+    item: {material: AMETHYST_SHARD, name-key: booster.premium-all-3d.name, lore-key: booster.common.lore, glint: true}
+
+  all-15-7d:
+    enabled: true
+    shop-visible: true
+    price: "180"
+    currency: TOKENS
+    type: ALL
+    multiplier: 1.5
+    duration: 7d
+    jobs: [all]
+    item: {material: CLOCK, name-key: booster.premium-all-7d.name, lore-key: booster.common.lore, glint: true}
+
+  all-15-14d:
+    enabled: true
+    shop-visible: true
+    price: "320"
+    currency: TOKENS
+    type: ALL
+    multiplier: 1.5
+    duration: 14d
+    jobs: [all]
+    item: {material: ECHO_SHARD, name-key: booster.premium-all-14d.name, lore-key: booster.common.lore, glint: true}
+
+  xp-20-3d:
+    enabled: true
+    shop-visible: true
+    price: "130"
+    currency: TOKENS
+    type: XP
+    multiplier: 2.0
+    duration: 3d
+    jobs: [all]
+    item: {material: LAPIS_LAZULI, name-key: booster.premium-xp-3d.name, lore-key: booster.common.lore, glint: true}
+
+  xp-20-7d:
+    enabled: true
+    shop-visible: true
+    price: "260"
+    currency: TOKENS
+    type: XP
+    multiplier: 2.0
+    duration: 7d
+    jobs: [all]
+    item: {material: ENCHANTED_BOOK, name-key: booster.premium-xp-7d.name, lore-key: booster.common.lore, glint: true}
+
+  xp-20-14d:
+    enabled: true
+    shop-visible: true
+    price: "480"
+    currency: TOKENS
+    type: XP
+    multiplier: 2.0
+    duration: 14d
+    jobs: [all]
+    item: {material: PRISMARINE_CRYSTALS, name-key: booster.premium-xp-14d.name, lore-key: booster.common.lore, glint: true}
+
+  money-20-3d:
+    enabled: true
+    shop-visible: true
+    price: "110"
+    currency: TOKENS
+    type: MONEY
+    multiplier: 2.0
+    duration: 3d
+    jobs: [all]
+    item: {material: GOLD_NUGGET, name-key: booster.premium-money-3d.name, lore-key: booster.common.lore, glint: true}
+
+  money-20-7d:
+    enabled: true
+    shop-visible: true
+    price: "220"
+    currency: TOKENS
+    type: MONEY
+    multiplier: 2.0
+    duration: 7d
+    jobs: [all]
+    item: {material: EMERALD, name-key: booster.premium-money-7d.name, lore-key: booster.common.lore, glint: true}
+
+  money-20-14d:
+    enabled: true
+    shop-visible: true
+    price: "400"
+    currency: TOKENS
+    type: MONEY
+    multiplier: 2.0
+    duration: 14d
+    jobs: [all]
+    item: {material: NAUTILUS_SHELL, name-key: booster.premium-money-14d.name, lore-key: booster.common.lore, glint: true}

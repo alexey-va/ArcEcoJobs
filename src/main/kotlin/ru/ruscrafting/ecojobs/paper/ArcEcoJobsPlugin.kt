@@ -31,6 +31,8 @@ import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import ru.ruscrafting.ecojobs.integration.ReflectiveArcAuditBridge
 import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
 import ru.ruscrafting.ecojobs.integration.VaultShopPaymentGateway
+import ru.ruscrafting.ecojobs.integration.RedisTokenShopPaymentGateway
+import ru.ruscrafting.ecojobs.integration.RoutedShopPaymentGateway
 import ru.ruscrafting.ecojobs.shop.AtomicShopPurchaseStore
 import ru.ruscrafting.ecojobs.shop.BoosterShopService
 import java.util.concurrent.TimeUnit
@@ -187,7 +189,10 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         shop = BoosterShopService(
             enabled = { settings.shop.enabled && settings.redemptionStorage.enabled },
             store = AtomicShopPurchaseStore(dataFolder.toPath()),
-            payment = VaultShopPaymentGateway(moneyIntegration),
+            payment = RoutedShopPaymentGateway(
+                money = VaultShopPaymentGateway(moneyIntegration),
+                tokens = if (server.pluginManager.isPluginEnabled("RedisEconomy")) RedisTokenShopPaymentGateway() else null,
+            ),
             voucherFactory = { playerId, voucherId, preset ->
                 vouchers.create(preset, requireNotNull(server.getPlayer(playerId)), voucherId, java.time.Instant.now().epochSecond).serializeAsBytes()
             },

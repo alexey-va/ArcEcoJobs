@@ -117,7 +117,7 @@ menu:
       - '<#92bed8>Нажмите, чтобы открыть'
     shop-name: '<#92bed8>Магазин усилителей'
     shop-lore:
-      - '<#e6fff3>Купите действующие усиления за монеты'
+      - '<#e6fff3>Купите усиление за монеты или премиум-жетоны'
       - '<#92bed8>Нажмите, чтобы открыть'
     help-name: '<#92bed8>Как работают профессии'
     help-lore:
@@ -134,14 +134,17 @@ menu:
 
   shop:
     title: '<#20252b>Магазин усилителей'
-    price: '<#d8a657>Цена: <price> монет'
+    currency-money: 'монет'
+    currency-tokens: 'премиум-жетонов'
+    price: '<#d8a657>Цена: <price> <currency>'
     confirm-title: '<#20252b>Подтвердите покупку'
-    confirm-name: '<#79c99e>Купить усиление за <price> монет'
+    confirm-name: '<#79c99e>Купить усиление за <price> <currency>'
     cancel-name: '<#92bed8>Отмена'
     cancel-lore: '<#8c8c8c>Вернуться в магазин без покупки'
     confirm-lore:
       - '<#e6fff3>Эффект: <benefit>'
       - '<#e6fff3><type> <multiplier> · <duration>'
+      - '<#8c8c8c>Срок идёт с активации, даже когда вы офлайн'
       - '<#8c8c8c>После подтверждения талон будет выдан в инвентарь'
       - '<#92bed8>Нажмите, чтобы подтвердить'
   catalog:
@@ -403,6 +406,24 @@ menu:
     preset-action-disabled: '<#8c8c8c>Выдача отключена в конфигурации'
 
 booster:
+  premium-all-3d:
+    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+  premium-all-7d:
+    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+  premium-all-14d:
+    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+  premium-xp-3d:
+    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+  premium-xp-7d:
+    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+  premium-xp-14d:
+    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+  premium-money-3d:
+    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
+  premium-money-7d:
+    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
+  premium-money-14d:
+    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
   brief-shift:
     name: '<#79c99e><b>Осколок короткой смены</b>'
   workday:
@@ -429,6 +450,7 @@ booster:
       - '<#e6fff3>Множитель: <#92bed8><multiplier>'
       - '<#e6fff3>Срок: <#92bed8><duration>'
       - '<#e6fff3>Профессии: <#92bed8><jobs>'
+      - '<#8c8c8c>Срок начинается при активации и идёт офлайн'
       - ''
       - '<#8c8c8c>Одинаковые эффекты складывают время'
       - '<#8c8c8c>Другой тип — только после окончания текущего'
@@ -437,7 +459,7 @@ booster:
 
 dialog:
   shop:
-    description: 'Выберите усиление. Покупка — за монеты, активация — ПКМ по талону.'
+    description: 'Выберите усиление. Стоимость указана в предложении; активация — ПКМ по талону.'
   shop-confirm:
     description: 'Проверьте эффект, время действия и стоимость перед покупкой.'
   close-tooltip: '<#969696>Вернуться в игру. Настройка Escape общая с меню ARC.'

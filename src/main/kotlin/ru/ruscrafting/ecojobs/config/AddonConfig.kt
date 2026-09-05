@@ -117,10 +117,10 @@ data class AddonSettings(
     }
 }
 
-enum class ShopCurrency { MONEY;
+enum class ShopCurrency { MONEY, TOKENS;
     companion object {
         fun parse(raw: String?): ShopCurrency = entries.firstOrNull { it.name.equals(raw, true) }
-            ?: error("shop currency must be MONEY; no other ArcEcoJobs wallet is available")
+            ?: error("unknown shop currency: $raw")
     }
 }
 
@@ -399,6 +399,7 @@ data class BoosterPreset(
     val jobs: Set<String>,
     val item: BoosterItemDefinition,
     val price: BoosterPrice? = null,
+    val shopVisible: Boolean = true,
 )
 
 data class BoosterPrice(val currency: ShopCurrency, val amount: BigDecimal)
@@ -483,10 +484,12 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
                         persistentData = pdc,
                     ),
                     price = price,
+                    shopVisible = yaml.getBoolean("$path.shop-visible", true),
                 )
             }
             require(parsed.isNotEmpty()) { "No booster presets are configured" }
             return BoosterRegistry(parsed)
         }
+
     }
 }

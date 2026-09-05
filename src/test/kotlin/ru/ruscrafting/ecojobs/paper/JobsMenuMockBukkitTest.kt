@@ -542,6 +542,9 @@ class JobsMenuMockBukkitTest : StringSpec({
                 every { h.boosters.get(preset.id) } returns preset
                 every { h.boosters.values() } returns listOf(preset)
                 every { h.vouchers.create(preset, h.player, any()) } returns ItemStack(Material.PAPER)
+                h.menu.openAdminCommand(h.player, listOf("booster", "give", h.player.name, preset.id, "2", "--invalid", "1h"))
+                screens.last().body.joinToString { plain(it.text) }.contains("Неизвестная команда") shouldBe true
+                verify(exactly = 0) { h.vouchers.create(any(), any(), any()) }
                 h.menu.openAdminCommand(h.player, listOf("booster", "give", h.player.name, preset.id, "2", "--duration", "1h", "--type", "XP"))
                 click("continue", mapOf("player" to h.player.name, "preset" to preset.id, "amount" to "2"))
                 screens.last().inputs.single { it.id.value == "duration" }.initial shouldBe "1h"

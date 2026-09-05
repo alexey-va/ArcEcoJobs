@@ -45,11 +45,14 @@ internal class JobsAdminMenu(
             "reload" -> confirm(player, action, emptyMap(), listOf("reload")) { open(player) }
             "give" -> {
                 val amount = args.getOrNull(4)?.takeUnless { it.startsWith("--") }
-                val overrides = args.drop(if (amount == null) 4 else 5).chunked(2).mapNotNull { pair ->
+                val pairs = args.drop(if (amount == null) 4 else 5).chunked(2)
+                val invalid = pairs.any { it.size != 2 || it[0] !in setOf("--duration", "--multiplier", "--type", "--jobs") }
+                val overrides = pairs.mapNotNull { pair ->
                     val key = pair[0].removePrefix("--")
                     if (key in setOf("duration", "multiplier", "type", "jobs") && pair.size == 2) key to pair[1] else null
                 }.toMap()
-                form(player, action, overrides + mapOf("player" to args.getOrNull(2).orEmpty(), "preset" to args.getOrNull(3).orEmpty(), "amount" to (amount ?: "1")))
+                form(player, action, overrides + mapOf("player" to args.getOrNull(2).orEmpty(), "preset" to args.getOrNull(3).orEmpty(), "amount" to (amount ?: "1")),
+                    error = if (invalid) locale.render("message.unknown-subcommand", player) else null)
             }
             "grant" -> form(player, action, listOf("player", "duration", "multiplier", "type", "jobs").mapIndexedNotNull { i, key -> args.getOrNull(i + 2)?.let { key to it } }.toMap())
             "revoke" -> form(player, action, mapOf("player" to args.getOrNull(2).orEmpty(), "instance" to (args.getOrNull(3) ?: "all")))

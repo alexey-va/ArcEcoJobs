@@ -9,6 +9,11 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
+import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.plugin.java.JavaPlugin
@@ -16,13 +21,13 @@ import ru.arc.core.BukkitTaskScheduler
 import ru.arc.paper.menu.PaperMenuConfiguration
 import ru.arc.paper.menu.PaperMenuFrame
 import ru.arc.paper.menu.PaperMenuRuntime
-import ru.arc.paper.menu.physicalFrame
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
 import ru.ruscrafting.ecojobs.config.GuiItemDefinition
 import ru.ruscrafting.ecojobs.config.JobsLocale
+import ru.ruscrafting.ecojobs.config.JobsMenuPresentation
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.Multipliers
@@ -64,7 +69,8 @@ class JobsMenu(
     private val earnings: () -> EarningsService?,
     private val reload: () -> Result<Unit>,
     private val layouts: JobsMenuLayouts,
-) : AutoCloseable {
+    dialogDisplay: JobsDialogDisplay? = null,
+) : AutoCloseable, Listener {
     internal companion object {
         const val MAIN_MENU_COMMAND = "menu"
     }
@@ -76,8 +82,49 @@ class JobsMenu(
     private val menuRuntime by menuRuntimeDelegate
     private val activeFrames = mutableMapOf<java.util.UUID, ActiveFrame>()
 
-    private data class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame)
+    private val dialogDisplayDelegate = lazy { dialogDisplay ?: NativeJobsDialogDisplay(plugin) }
+    private val dialogs by dialogDisplayDelegate
+    private val presentations = mutableMapOf<java.util.UUID, JobsMenuPresentation>()
+    private var listening = false
+
+    private class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame, var detailSlot: Int? = null, var revision: Long = 0)
+
+    fun openRoot(player: Player, presentation: JobsMenuPresentation? = null) {
+        dismiss(player)
+        presentations[player.uniqueId] = presentation ?: settings().menuPresentation
+        open(player)
+    }
+
+    private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
+
+    private fun dismiss(player: Player) {
+        activeFrames.remove(player.uniqueId)
+        if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG) dialogs.close(player)
+        if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
+    }
+
+    @EventHandler
+    fun onQuit(event: PlayerQuitEvent) {
+        activeFrames.remove(event.player.uniqueId)
+        presentations.remove(event.player.uniqueId)
+        pendingClicks.remove(event.player.uniqueId)
+    }
+
+    @EventHandler
+    fun onInventoryClose(event: InventoryCloseEvent) {
+        // Dialog transitions close the old inventory before publishing their frame.
+        if (presentations[event.player.uniqueId] == JobsMenuPresentation.INVENTORY) {
+            activeFrames.remove(event.player.uniqueId)
+            presentations.remove(event.player.uniqueId)
+        }
+    }
+
     fun open(player: Player, view: JobsView = JobsView.Main) {
+        if (!listening) {
+            plugin.server.pluginManager.registerEvents(this, plugin)
+            listening = true
+        }
+        presentations.putIfAbsent(player.uniqueId, settings().menuPresentation)
         when (view) {
             JobsView.Main -> openMain(player)
             is JobsView.Catalog -> openCatalog(player, view)
@@ -96,16 +143,23 @@ class JobsMenu(
     }
 
     private fun dispatchClick(player: Player, view: JobsView, slot: Int) {
+        val expected = activeFrames[player.uniqueId] ?: return
         if (!pendingClicks.add(player.uniqueId)) return
         plugin.server.scheduler.runTask(plugin, Runnable {
             try {
-                if (activeFrames[player.uniqueId]?.view != view || menuRuntime.session(player) == null) return@Runnable
+                if (!player.isOnline || activeFrames[player.uniqueId] !== expected) return@Runnable
+                if (!usesDialog(player) && menuRuntime.session(player) == null) return@Runnable
+                if (!player.hasPermission("arcecojobs.use")) {
+                    dismiss(player)
+                    player.sendMessage(locale.render("message.no-permission", player))
+                    return@Runnable
+                }
                 when (view) {
                     JobsView.Main -> clickMain(player, slot)
                     is JobsView.Catalog -> clickCatalog(player, view, slot)
                     is JobsView.JobCard -> clickJobCard(player, view, slot)
                     is JobsView.LeaveConfirm -> clickLeave(player, view, slot)
-                    is JobsView.Levels -> clickPaged(player, view, slot, pageCount(ecoJobs.job(view.jobId)?.maxLevel ?: 0, content(view).size))
+                    is JobsView.Levels -> clickPaged(player, view, slot, pageCount(ecoJobs.job(view.jobId)?.maxLevel ?: 0, content(view, player).size))
                     is JobsView.Earnings -> clickEarnings(player, view, slot)
                     is JobsView.EarningsHours -> if (slot == element(view, "back")) open(player, view.back)
                     is JobsView.LeaderboardSelector -> clickLeaderboardSelector(player, view, slot)
@@ -113,28 +167,35 @@ class JobsMenu(
                         player,
                         view,
                         slot,
-                        pageCount(ecoJobs.rankings(view.jobId?.let(ecoJobs::job))?.size ?: 0, settings().leaderboardEntriesPerPage),
+                        pageCount(ecoJobs.rankings(view.jobId?.let(ecoJobs::job))?.size ?: 0, leaderboardPageSize(player)),
                     )
-                    is JobsView.Boosts -> clickPaged(player, view, slot, pageCount(applicableBoosts(player, view.jobId).size, content(view).size))
+                    is JobsView.Boosts -> clickPaged(player, view, slot, pageCount(applicableBoosts(player, view.jobId).size, content(view, player).size))
                     is JobsView.Help -> if (slot == element(view, "back")) open(player, view.back)
                     is JobsView.Admin -> clickAdmin(player, view, slot)
                     is JobsView.Presets -> clickPresets(player, view, slot)
                 }
             } finally {
                 pendingClicks.remove(player.uniqueId)
+                // Core consumes the whole registration, including rejected/no-op actions.
+                if (usesDialog(player) && activeFrames[player.uniqueId] === expected) showDialog(player, expected)
             }
         })
     }
 
     fun replaceMenus(candidate: PaperMenuConfiguration) {
         layouts.replace(candidate)
-        activeFrames.clear()
-        menuRuntime.replace(candidate)
+        activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
+        if (menuRuntimeDelegate.isInitialized()) menuRuntime.replace(candidate)
     }
 
     override fun close() {
+        activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
         activeFrames.clear()
+        presentations.clear()
+        pendingClicks.clear()
         if (menuRuntimeDelegate.isInitialized()) menuRuntime.close()
+        if (dialogDisplayDelegate.isInitialized()) dialogs.close()
+        if (listening) HandlerList.unregisterAll(this)
     }
 
     private fun openMain(player: Player) {
@@ -170,14 +231,17 @@ class JobsMenu(
             element(view, "leaderboard") -> open(player, JobsView.LeaderboardSelector(1, view))
             element(view, "boosts") -> open(player, JobsView.Boosts(null, 1, view))
             element(view, "help") -> open(player, JobsView.Help(view))
-            element(view, "back") -> player.performCommand(MAIN_MENU_COMMAND)
+            element(view, "back") -> {
+                dismiss(player)
+                player.performCommand(MAIN_MENU_COMMAND)
+            }
             element(view, "admin") -> if (player.hasPermission("arcecojobs.admin")) open(player, JobsView.Admin(view))
         }
     }
 
     private fun openCatalog(player: Player, view: JobsView.Catalog) {
         val jobs = ecoJobs.jobs().filter { !view.activeOnly || ecoJobs.active(player, it) }
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(jobs.size, content.size)
         val current = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(player, current, if (view.activeOnly) "menu.catalog.title-active" else "menu.catalog.title")
@@ -202,7 +266,7 @@ class JobsMenu(
 
     private fun clickCatalog(player: Player, view: JobsView.Catalog, slot: Int) {
         val jobs = ecoJobs.jobs().filter { !view.activeOnly || ecoJobs.active(player, it) }
-        val content = content(view)
+        val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) jobs.getOrNull((view.page - 1) * content.size + index)?.let {
             open(player, JobsView.JobCard(it.id, view))
@@ -258,7 +322,7 @@ class JobsMenu(
             element(view, "earnings") -> if (settings().earnings.enabled) open(player, JobsView.Earnings(job.id, 1, view))
             element(view, "scale") -> {
                 val levels = JobsView.Levels(job.id, 1, view)
-                open(player, levels.copy(page = levelPage(ecoJobs.level(player, job), levels)))
+                open(player, levels.copy(page = levelPage(ecoJobs.level(player, job), levels, player)))
             }
             element(view, "leaderboard") -> open(player, JobsView.Leaderboard(job.id, 1, view))
             element(view, "boosts") -> open(player, JobsView.Boosts(job.id, 1, view))
@@ -299,7 +363,7 @@ class JobsMenu(
 
     private fun openLevels(player: Player, view: JobsView.Levels) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(job.maxLevel, content.size)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(player, currentView, "menu.levels.title", mapOf("job" to titleText(ecoJobs.name(job))))
@@ -330,14 +394,14 @@ class JobsMenu(
             mapOf("job" to titleText(ecoJobs.name(job))),
         )
         inventory.setItem(element(view, "status"), earningsLoadingItem(player))
-        navigation(inventory, player, view, view.page, pageCount(settings().earnings.retentionDays, content(view).size))
+        navigation(inventory, player, view, view.page, pageCount(settings().earnings.retentionDays, content(view, player).size))
         show(player, view, inventory)
         loadEarnings(player, view) { report -> renderEarnings(player, view, report) }
     }
 
     private fun renderEarnings(player: Player, view: JobsView.Earnings, report: EarningsReport) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(settings().earnings.retentionDays, content.size)
         val current = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(
@@ -374,7 +438,7 @@ class JobsMenu(
             )
             return
         }
-        val content = content(view)
+        val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) {
             val offset = (view.page - 1) * content.size + index
@@ -420,7 +484,7 @@ class JobsMenu(
             (0..23).forEach { hour ->
                 val totals = report.forHour(view.date, hour)
                 rendered.setItem(
-                    content(view)[hour],
+                    content(view, player)[hour],
                     item(
                         settings().guiItems[if (totals.empty) "earnings-hour-empty" else "earnings-hour-active"],
                         player,
@@ -439,6 +503,7 @@ class JobsMenu(
     }
 
     private fun loadEarnings(player: Player, view: JobsView, render: (EarningsReport) -> Unit) {
+        val expected = activeFrames[player.uniqueId] ?: return
         val service = earnings()
         if (!settings().earnings.enabled || service == null) {
             updateFrame(player, view) { it.setItem(earningsSlot(view), earningsUnavailableItem(player)) }
@@ -453,7 +518,7 @@ class JobsMenu(
         service.report(player.uniqueId, jobId).whenComplete { report, failure ->
             if (!plugin.isEnabled) return@whenComplete
             plugin.server.scheduler.runTask(plugin, Runnable {
-                if (!player.isOnline || activeFrames[player.uniqueId]?.view != view) return@Runnable
+                if (!player.isOnline || activeFrames[player.uniqueId] !== expected) return@Runnable
                 if (failure == null) render(report) else {
                     updateFrame(player, view) { it.setItem(earningsSlot(view), earningsUnavailableItem(player)) }
                 }
@@ -503,7 +568,7 @@ class JobsMenu(
 
     private fun openLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector) {
         val jobs = ecoJobs.jobs()
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(jobs.size, content.size)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(player, currentView, "menu.leaderboard.selector-title")
@@ -517,7 +582,7 @@ class JobsMenu(
 
     private fun clickLeaderboardSelector(player: Player, view: JobsView.LeaderboardSelector, slot: Int) {
         if (slot == element(view, "global")) return open(player, JobsView.Leaderboard(null, 1, view))
-        val content = content(view)
+        val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) ecoJobs.jobs().getOrNull((view.page - 1) * content.size + index)?.let {
             return open(player, JobsView.Leaderboard(it.id, 1, view))
@@ -537,16 +602,17 @@ class JobsMenu(
             inventory.setItem(element(loadingView, "status"), item(settings().guiItems["leaderboard-loading"], player, "menu.leaderboard.loading-name", "menu.leaderboard.loading-lore"))
             navigation(inventory, player, loadingView, 1, 1)
             show(player, loadingView, inventory)
+            val expected = activeFrames[player.uniqueId]
             ecoJobs.prepareLeaderboards { result ->
-                if (!player.isOnline || activeFrames[player.uniqueId]?.view != loadingView) return@prepareLeaderboards
+                if (!player.isOnline || activeFrames[player.uniqueId] !== expected) return@prepareLeaderboards
                 if (result.isSuccess) open(player, loadingView) else openLeaderboardFailure(player, loadingView, titlePath, titleValues)
             }
             return
         }
-        val pageSize = settings().leaderboardEntriesPerPage
+        val pageSize = leaderboardPageSize(player)
         val pages = pageCount(rankings.size, pageSize)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
-        val content = content(currentView)
+        val content = content(currentView, player)
         require(pageSize <= content.size) { "leaderboards.entries-per-page exceeds configured leaderboard content region" }
         val inventory = inventory(player, currentView, titlePath, titleValues)
         rankings.page(currentView.page, pageSize).forEachIndexed { index, entry ->
@@ -586,7 +652,7 @@ class JobsMenu(
         val job = view.jobId?.let(ecoJobs::job)
         if (view.jobId != null && job == null) return open(player, view.back)
         val applicable = applicableBoosts(player, view.jobId)
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(applicable.size, content.size)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(
@@ -641,6 +707,7 @@ class JobsMenu(
     }
 
     private fun clickAdmin(player: Player, view: JobsView.Admin, slot: Int) {
+        if (!player.hasPermission("arcecojobs.admin")) return open(player, view.back)
         when (slot) {
             element(view, "reload") -> if (player.hasPermission("arcecojobs.admin.reload")) {
                 reload().fold(
@@ -660,7 +727,7 @@ class JobsMenu(
     private fun openPresets(player: Player, view: JobsView.Presets) {
         if (!player.hasPermission("arcecojobs.admin.booster")) return open(player, view.back)
         val presets = boosters().values()
-        val content = content(view)
+        val content = content(view, player)
         val pages = pageCount(presets.size, content.size)
         val currentView = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(player, currentView, "menu.admin.presets-title")
@@ -689,8 +756,9 @@ class JobsMenu(
     }
 
     private fun clickPresets(player: Player, view: JobsView.Presets, slot: Int) {
+        if (!player.hasPermission("arcecojobs.admin.booster")) return open(player, view.back)
         val presets = boosters().values()
-        val content = content(view)
+        val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) presets.getOrNull((view.page - 1) * content.size + index)?.let { preset ->
             if (!preset.enabled) {
@@ -762,36 +830,97 @@ class JobsMenu(
         values: Map<String, Component> = emptyMap(),
     ): PaperMenuFrame {
         val filler = styledItem(settings().guiItems.background).apply { editMeta { it.displayName(Component.empty()) } }
-        return menuRuntime.physicalFrame(
-            JobsMenuLayouts.menu(view),
+        return PaperMenuFrame.physical(
+            layouts.current().catalog.require(JobsMenuLayouts.menu(view)),
             locale.render(titlePath, player, values),
             filler,
         )
     }
 
     private fun show(player: Player, view: JobsView, frame: PaperMenuFrame) {
-        activeFrames[player.uniqueId] = ActiveFrame(view, frame)
-        menuRuntime.open(player, JobsMenuLayouts.menu(view)) {
-            val active = activeFrames[player.uniqueId].takeIf { it?.view == view } ?: ActiveFrame(view, frame)
-            active.frame.content { slot, _ -> dispatchClick(player, active.view, slot) }
+        val presentation = presentations.getValue(player.uniqueId)
+        if (presentation == JobsMenuPresentation.DIALOG) {
+            if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
+            player.closeInventory()
+            val active = ActiveFrame(view, frame)
+            activeFrames[player.uniqueId] = active
+            showDialog(player, active)
+        } else {
+            // Closing the previous inventory fires synchronously; publish ownership afterwards.
+            if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
+            player.closeInventory()
+            presentations[player.uniqueId] = presentation
+            activeFrames[player.uniqueId] = ActiveFrame(view, frame)
+            menuRuntime.open(player, JobsMenuLayouts.menu(view)) {
+                val active = activeFrames[player.uniqueId] ?: ActiveFrame(view, frame)
+                active.frame.content { slot, _ -> dispatchClick(player, active.view, slot) }
+            }
+        }
+    }
+
+    private fun showDialog(player: Player, active: ActiveFrame) {
+        val revision = ++active.revision
+        fun current() = player.isOnline && activeFrames[player.uniqueId] === active &&
+            active.revision == revision && player.uniqueId !in pendingClicks
+        val screen = JobsDialogScreens.screen(
+            player, active.view, active.frame, layouts, locale, active.detailSlot,
+            actionable = { id, index -> dialogActionable(player, active.view, id, index) },
+            click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
+            detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
+            close = { if (current()) dismiss(player) },
+        )
+        dialogs.show(player, screen)
+    }
+
+    private fun dialogActionable(player: Player, view: JobsView, id: String, index: Int?): Boolean {
+        if (index != null) return when (view) {
+            is JobsView.Catalog, is JobsView.LeaderboardSelector, is JobsView.Earnings -> true
+            is JobsView.Presets -> player.hasPermission("arcecojobs.admin.booster") &&
+                boosters().values().getOrNull((view.page - 1) * content(view, player).size + index)?.enabled == true
+            else -> false
+        }
+        if (id in setOf("back", "cancel", "previous", "next")) return true
+        return when (view) {
+            JobsView.Main -> id != "profile"
+            is JobsView.JobCard -> when (id) {
+                "action" -> ecoJobs.job(view.jobId)?.let { ecoJobs.active(player, it) || ecoJobs.canJoin(player, it) } == true
+                "earnings" -> settings().earnings.enabled && earnings() != null
+                else -> id in setOf("scale", "leaderboard", "boosts")
+            }
+            is JobsView.LeaveConfirm -> id == "confirm"
+            is JobsView.Earnings -> id == "summary"
+            is JobsView.LeaderboardSelector -> id == "global"
+            is JobsView.Admin -> when (id) {
+                "reload" -> player.hasPermission("arcecojobs.admin.reload")
+                "presets" -> player.hasPermission("arcecojobs.admin.booster")
+                "help" -> true
+                else -> false
+            }
+            else -> false
         }
     }
 
     private fun replaceFrame(player: Player, expected: JobsView, next: JobsView, frame: PaperMenuFrame) {
         if (activeFrames[player.uniqueId]?.view != expected) return
-        activeFrames[player.uniqueId] = ActiveFrame(next, frame)
-        menuRuntime.session(player)?.refresh()
+        val active = ActiveFrame(next, frame)
+        activeFrames[player.uniqueId] = active
+        if (usesDialog(player)) showDialog(player, active) else menuRuntime.session(player)?.refresh()
     }
 
     private fun updateFrame(player: Player, expected: JobsView, update: (PaperMenuFrame) -> Unit) {
         val active = activeFrames[player.uniqueId].takeIf { it?.view == expected } ?: return
         update(active.frame)
-        menuRuntime.session(player)?.requestRefresh()
+        if (usesDialog(player)) showDialog(player, active) else menuRuntime.session(player)?.requestRefresh()
     }
 
     private fun element(view: JobsView, id: String): Int = layouts.slot(view, id)
 
-    private fun content(view: JobsView): List<Int> = layouts.region(view, "content")
+    private fun content(view: JobsView, player: Player): List<Int> = layouts.region(view, "content").let {
+        if (usesDialog(player) && view !is JobsView.EarningsHours) it.take(8) else it
+    }
+
+    private fun leaderboardPageSize(player: Player): Int =
+        if (usesDialog(player)) minOf(8, settings().leaderboardEntriesPerPage) else settings().leaderboardEntriesPerPage
 
     private fun earningsSlot(view: JobsView): Int = when (view) {
         is JobsView.JobCard -> element(view, "earnings")
@@ -911,8 +1040,8 @@ class JobsMenu(
         else -> NamedTextColor.DARK_GRAY
     })
 
-    private fun levelPage(level: Int, view: JobsView.Levels): Int =
-        ((level.coerceAtLeast(1) - 1) / content(view).size) + 1
+    private fun levelPage(level: Int, view: JobsView.Levels, player: Player): Int =
+        ((level.coerceAtLeast(1) - 1) / content(view, player).size) + 1
     private fun pageCount(size: Int, pageSize: Int): Int = ceil(size.coerceAtLeast(1) / pageSize.toDouble()).toInt().coerceAtLeast(1)
     private fun <T> List<T>.page(page: Int, pageSize: Int): List<T> = drop((page - 1) * pageSize).take(pageSize)
 }

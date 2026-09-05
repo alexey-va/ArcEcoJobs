@@ -29,6 +29,8 @@ private fun customModelData(yaml: YamlConfiguration, path: String, label: String
     }
 }
 
+enum class JobsMenuPresentation { DIALOG, INVENTORY }
+
 data class AddonSettings(
     val defaultLocale: String,
     val useClientLocale: Boolean,
@@ -45,6 +47,7 @@ data class AddonSettings(
     val exploration: ExplorationSettings = ExplorationSettings.disabled(),
     val guiItems: GuiItems,
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
+    val menuPresentation: JobsMenuPresentation = JobsMenuPresentation.DIALOG,
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -87,6 +90,9 @@ data class AddonSettings(
                 "exploration requires redemptions.mysql.enabled because discoveries use the shared ArcEcoJobs database"
             }
             return AddonSettings(
+                menuPresentation = JobsMenuPresentation.entries.firstOrNull {
+                    it.name.equals(yaml.getString("gui.presentation", "dialog"), true)
+                } ?: error("gui.presentation must be dialog or inventory"),
                 defaultLocale = defaultLocale,
                 useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
                 interceptEcoJobsRoot = yaml.getBoolean("commands.intercept-ecojobs-root", true),

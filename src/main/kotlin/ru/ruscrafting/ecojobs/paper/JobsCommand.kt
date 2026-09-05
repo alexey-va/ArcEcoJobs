@@ -16,6 +16,7 @@ import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.BoosterRegistry
+import ru.ruscrafting.ecojobs.config.JobsMenuPresentation
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.domain.BoostInstance
 import ru.ruscrafting.ecojobs.domain.BoostType
@@ -37,6 +38,8 @@ class JobsCommand(
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (args.isEmpty()) return open(sender)
         return when (args[0].lowercase()) {
+            "inventory" -> open(sender, JobsMenuPresentation.INVENTORY)
+            "dialog" -> open(sender, JobsMenuPresentation.DIALOG)
             "help" -> help(sender)
             "reload" -> reload(sender)
             "boosters" -> boosterList(sender)
@@ -47,10 +50,10 @@ class JobsCommand(
         }
     }
 
-    private fun open(sender: CommandSender): Boolean {
+    private fun open(sender: CommandSender, presentation: JobsMenuPresentation = settings().menuPresentation): Boolean {
         if (sender !is Player) return message(sender, "message.player-only")
         if (!sender.hasPermission("arcecojobs.use")) return message(sender, "message.no-permission")
-        menu.open(sender)
+        menu.openRoot(sender, presentation)
         return true
     }
 
@@ -303,7 +306,7 @@ class JobsCommand(
         val canManageBoosts = sender.hasPermission("arcecojobs.admin.boost")
         val options = when (args.size) {
             1 -> buildList {
-                addAll(listOf("help", "boost"))
+                addAll(listOf("help", "boost", "dialog", "inventory"))
                 if (sender.hasPermission("arcecojobs.admin.reload")) add("reload")
                 if (canManageBoosters) addAll(listOf("boosters", "booster"))
                 if (sender.hasPermission("arcecojobs.admin.diagnose")) add("diagnose")

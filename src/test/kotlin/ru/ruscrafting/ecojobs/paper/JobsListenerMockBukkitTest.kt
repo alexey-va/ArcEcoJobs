@@ -115,14 +115,14 @@ class JobsListenerMockBukkitTest : StringSpec({
 
                 paper.callEvent(PlayerCommandPreprocessEvent(allowed, "  /JoBs  ")).isCancelled shouldBe true
                 paper.callEvent(PlayerCommandPreprocessEvent(allowed, "/job")).isCancelled shouldBe true
-                verify(exactly = 2) { menu.open(allowed) }
+                verify(exactly = 2) { menu.openRoot(allowed) }
 
                 paper.callEvent(PlayerCommandPreprocessEvent(allowed, "/jobs list")).isCancelled shouldBe false
                 paper.callEvent(PlayerCommandPreprocessEvent(allowed, "/minecraft:jobs")).isCancelled shouldBe false
-                verify(exactly = 2) { menu.open(allowed) }
+                verify(exactly = 2) { menu.openRoot(allowed) }
 
                 paper.callEvent(PlayerCommandPreprocessEvent(denied, "/jobs")).isCancelled shouldBe true
-                verify(exactly = 0) { menu.open(denied) }
+                verify(exactly = 0) { menu.openRoot(denied) }
                 PlainTextComponentSerializer.plainText().serialize(requireNotNull(denied.nextComponentMessage())) shouldBe
                     "message.no-permission"
             }

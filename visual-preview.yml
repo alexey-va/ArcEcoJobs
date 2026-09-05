@@ -1,0 +1,9 @@
+schema: 1
+plugin: ArcEcoJobs
+minecraft-version: '1.21.11'
+minecraft-client-sha1: ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd
+placeholders:
+  '!italic': ''
+  br: "\n"
+limitations:
+  - Offline previews use actual PaperDialogScreen components captured by MockBukkit tests; they do not prove live client behavior.

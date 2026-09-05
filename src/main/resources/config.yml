@@ -54,6 +54,8 @@ redemptions:
       max-lifetime-ms: 1700000
 
 gui:
+  # Native Paper dialogs by default; inventory keeps the original chest menus.
+  presentation: dialog
   # Every inventory row, action and dynamic region is operator-controlled.
   # Layouts are validated atomically: missing IDs, overlaps and invalid slots reject reload.
   layouts:

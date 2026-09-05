@@ -64,6 +64,7 @@ command:
   help:
     - '<#92bed8><b>Работы RusCrafting</b>'
     - '<#666666>• <#e6fff3>/arcjobs <#8c8c8c>— открыть меню'
+    - '<#666666>• <#e6fff3>/arcjobs inventory <#8c8c8c>— запасное меню в инвентаре'
     - '<#666666>• <#e6fff3>/arcjobs boost list <#8c8c8c>— активные усиления'
     - '<#666666>• <#e6fff3>ПКМ талоном <#8c8c8c>— активировать усиление'
   admin-help:

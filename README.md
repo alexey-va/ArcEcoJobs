@@ -1,5 +1,12 @@
 # ArcEcoJobs
 
+Native Paper dialogs are the default for `/arcjobs`, `/jobs`, and `/job`.
+All existing views share the same data and actions with the original inventory menu.
+Use `/arcjobs inventory` for that fallback, `/arcjobs dialog` to open a dialog explicitly,
+or set `gui.presentation: inventory` and reload to change the server default.
+Navigation retains the selected presentation; a fresh root command uses the configured default.
+Dialogs include an explicit Close button so pending data loads cannot reopen a closed screen.
+
 ArcEcoJobs is the RusCrafting interface addon for EcoJobs 2026.33. EcoJobs
 continues to own profession progression; ArcEcoJobs adds the player and admin
 menus, global rankings, and LuckPerms-backed XP/money boosts.
@@ -10,8 +17,8 @@ Local unit/MockBukkit and package gate (no Docker required):
 ./gradlew clean test shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.14.jar`. The test suite
-uses public `arc-core 2.4.3` dependencies by default. Pass
+The production artifact is `build/libs/ArcEcoJobs-0.1.15.jar`. The test suite
+uses public `arc-core 2.5.0` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,
@@ -206,3 +213,9 @@ profile. Cache invalidation in ArcEcoJobs cannot force a fresh public Eco read.
 A fully fresh network leaderboard requires a supported bulk/fresh snapshot API
 from EcoJobs or a separately designed event-fed aggregate; do not bypass this
 boundary with reflection or direct reads from EcoJobs storage.
+
+Offline previews of composed dialog states (after running the tests):
+
+```bash
+python3 -B scripts/render-dialog-preview --ops-root /path/to/ruscrafting-ops
+```

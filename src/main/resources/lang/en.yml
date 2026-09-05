@@ -64,6 +64,7 @@ command:
   help:
     - '<#92bed8><b>RusCrafting Jobs</b>'
     - '<#666666>• <#e6fff3>/arcjobs <#8c8c8c>— open the menu'
+    - '<#666666>• <#e6fff3>/arcjobs inventory <#8c8c8c>— fallback inventory menu'
     - '<#666666>• <#e6fff3>/arcjobs boost list <#8c8c8c>— active boosts'
     - '<#666666>• <#e6fff3>Right-click a voucher <#8c8c8c>— activate a boost'
   admin-help:

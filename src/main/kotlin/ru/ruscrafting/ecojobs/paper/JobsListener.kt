@@ -98,7 +98,7 @@ class JobsListener(
         val command = event.message.trim().lowercase()
         if (command != "/jobs" && command != "/job") return
         event.isCancelled = true
-        if (event.player.hasPermission("arcecojobs.use")) menu.open(event.player)
+        if (event.player.hasPermission("arcecojobs.use")) menu.openRoot(event.player)
         else event.player.sendMessage(locale.render("message.no-permission", event.player))
     }
 

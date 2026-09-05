@@ -54,6 +54,12 @@ class AddonConfigTest : StringSpec({
         path.toFile().deleteOnExit()
     }.toFile()
 
+    "native dialogs are default for old configs and inventory remains selectable" {
+        AddonSettings.load(yaml("{}")).menuPresentation shouldBe JobsMenuPresentation.DIALOG
+        AddonSettings.load(yaml("gui:\n  presentation: inventory")).menuPresentation shouldBe JobsMenuPresentation.INVENTORY
+        shouldThrow<IllegalStateException> { AddonSettings.load(yaml("gui:\n  presentation: typo")) }
+    }
+
     "ALL is the default booster type" {
         BoosterRegistry.load(yaml(booster()), settings, setOf("miner")).get("sample")!!.type shouldBe BoostType.ALL
     }

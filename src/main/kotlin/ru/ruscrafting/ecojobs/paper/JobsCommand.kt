@@ -24,6 +24,7 @@ import ru.ruscrafting.ecojobs.domain.DurationParser
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import java.time.Duration
+import ru.ruscrafting.ecojobs.shop.BoosterShopService
 
 class JobsCommand(
     private val settings: () -> AddonSettings,
@@ -34,6 +35,7 @@ class JobsCommand(
     private val vouchers: VoucherService,
     private val menu: JobsMenu,
     private val reload: () -> Result<Unit>,
+    private val shop: BoosterShopService? = null,
 ) : CommandExecutor, TabCompleter {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (sender is Player && menu.openAdminCommand(sender, args.toList())) return true
@@ -71,6 +73,7 @@ class JobsCommand(
             return when (args[0].lowercase()) {
                 "inventory" -> open(sender, JobsMenuPresentation.INVENTORY)
                 "dialog" -> open(sender, JobsMenuPresentation.DIALOG)
+                "shop" -> openShop(sender)
                 "help" -> help(sender)
                 "reload" -> reload(sender)
                 "boosters" -> boosterList(sender)
@@ -79,6 +82,14 @@ class JobsCommand(
                 "diagnose" -> diagnose(sender)
                 else -> message(sender, "message.unknown-subcommand")
             }
+        }
+
+        private fun openShop(sender: CommandSender): Boolean {
+            if (sender !is Player) return message(sender, "message.player-only")
+            if (!sender.hasPermission("arcecojobs.use")) return message(sender, "message.no-permission")
+            if (shop == null || !settings().shop.enabled) return message(sender, "message.shop-disabled")
+            menu.openShop(sender)
+            return true
         }
 
         private fun open(sender: CommandSender, presentation: JobsMenuPresentation = settings().menuPresentation): Boolean {
@@ -347,6 +358,7 @@ class JobsCommand(
             1 -> buildList {
                 addAll(listOf("help", "boost", "dialog", "inventory"))
                 if (JobsAdminMenu.canOpen(sender)) add("admin")
+                if (shop != null && settings().shop.enabled) add("shop")
                 if (sender.hasPermission("arcecojobs.admin.reload")) add("reload")
                 if (canManageBoosters) addAll(listOf("boosters", "booster"))
                 if (sender.hasPermission("arcecojobs.admin.diagnose")) add("diagnose")

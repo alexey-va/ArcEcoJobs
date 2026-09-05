@@ -71,6 +71,8 @@ internal object JobsDialogScreens {
         )
 
         val description = when (view) {
+            is JobsView.Shop -> "shop"
+            is JobsView.ShopConfirm -> "shop-confirm"
             is JobsView.Catalog -> if (view.activeOnly) "active" else "catalog"
             else -> JobsMenuLayouts.menu(view).value
         }

@@ -48,7 +48,7 @@ class JobsMenuLayouts(dataRoot: Path) {
         private fun regions(vararg values: String) = values.mapTo(linkedSetOf(), MenuRegionId::of)
 
         val CONTRACTS_BY_MENU = linkedMapOf(
-            MAIN to MenuContract(requiredElements = elements("profile", "catalog", "active", "leaderboard", "boosts", "help", "back", "admin")),
+            MAIN to MenuContract(requiredElements = elements("profile", "catalog", "active", "leaderboard", "boosts", "shop", "help", "back", "admin")),
             CATALOG to pageable(elements("empty")),
             JOB to MenuContract(requiredElements = elements("overview", "earnings", "scale", "leaderboard", "boosts", "action", "back")),
             LEAVE to MenuContract(requiredElements = elements("confirm", "cancel")),
@@ -77,6 +77,8 @@ class JobsMenuLayouts(dataRoot: Path) {
             is JobsView.Help -> HELP
             is JobsView.Admin -> ADMIN
             is JobsView.Presets -> PRESETS
+            is JobsView.Shop -> BOOSTS
+            is JobsView.ShopConfirm -> LEAVE
         }
 
         fun loadConfiguration(dataRoot: Path): MenuCatalog =

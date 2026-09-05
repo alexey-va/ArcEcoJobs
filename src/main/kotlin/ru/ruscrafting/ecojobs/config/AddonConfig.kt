@@ -10,6 +10,7 @@ import ru.ruscrafting.ecojobs.domain.Multipliers
 import java.io.File
 import java.time.Duration
 import java.time.ZoneId
+import java.math.BigDecimal
 
 internal fun loadYamlStrict(file: File): YamlConfiguration = YamlConfiguration().apply { load(file) }
 
@@ -48,6 +49,7 @@ data class AddonSettings(
     val guiItems: GuiItems,
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
     val menuPresentation: JobsMenuPresentation = JobsMenuPresentation.DIALOG,
+    val shop: ShopSettings = ShopSettings.disabled(),
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -83,6 +85,7 @@ data class AddonSettings(
             val redemptionStorage = RedemptionStorageSettings.load(yaml)
             val earnings = EarningsSettings.load(yaml)
             val exploration = ExplorationSettings.load(yaml)
+            val shop = ShopSettings.load(yaml)
             require(!earnings.enabled || redemptionStorage.enabled) {
                 "earnings requires redemptions.mysql.enabled because hourly aggregates use the shared ArcEcoJobs database"
             }
@@ -108,8 +111,23 @@ data class AddonSettings(
                 exploration = exploration,
                 guiItems = GuiItems.load(yaml),
                 redemptionStorage = redemptionStorage,
+                shop = shop,
             )
         }
+    }
+}
+
+enum class ShopCurrency { MONEY;
+    companion object {
+        fun parse(raw: String?): ShopCurrency = entries.firstOrNull { it.name.equals(raw, true) }
+            ?: error("shop currency must be MONEY; no other ArcEcoJobs wallet is available")
+    }
+}
+
+data class ShopSettings(val enabled: Boolean) {
+    companion object {
+        fun disabled() = ShopSettings(false)
+        fun load(yaml: YamlConfiguration) = ShopSettings(yaml.getBoolean("shop.enabled", false))
     }
 }
 
@@ -273,6 +291,7 @@ data class GuiItems(
                 "main-active" to Material.WRITABLE_BOOK,
                 "main-leaderboard" to Material.GOLDEN_HELMET,
                 "main-boosts" to Material.EXPERIENCE_BOTTLE,
+                "main-shop" to Material.GOLD_INGOT,
                 "main-help" to Material.KNOWLEDGE_BOOK,
                 "main-admin" to Material.COMMAND_BLOCK,
                 "empty" to Material.GRAY_DYE,
@@ -379,7 +398,10 @@ data class BoosterPreset(
     val duration: Duration,
     val jobs: Set<String>,
     val item: BoosterItemDefinition,
+    val price: BoosterPrice? = null,
 )
+
+data class BoosterPrice(val currency: ShopCurrency, val amount: BigDecimal)
 
 class BoosterRegistry private constructor(private val presets: Map<String, BoosterPreset>) {
     fun values(): List<BoosterPreset> = presets.values.sortedBy(BoosterPreset::id)
@@ -409,6 +431,15 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
                 require(jobs.isNotEmpty()) { "Booster $id has no jobs" }
                 require("all" in jobs || jobs.all { it in validJobIds }) { "Booster $id references an unknown job" }
                 require("all" !in jobs || jobs.size == 1) { "Booster $id cannot combine all with job IDs" }
+                val pricePath = "$path.price"
+                val price = if (yaml.contains(pricePath)) {
+                    val amount = yaml.getString(pricePath)?.toBigDecimalOrNull()
+                        ?: error("Price for booster $id must be a decimal string")
+                    require(amount.signum() > 0 && amount.scale() <= 2) {
+                        "Price for booster $id must be positive with at most two decimals"
+                    }
+                    BoosterPrice(ShopCurrency.parse(yaml.getString("$path.currency", "MONEY")), amount)
+                } else null
                 val material = Material.matchMaterial(yaml.getString("$path.item.material") ?: "")
                     ?: error("Invalid material for booster $id")
                 val modelData = customModelData(
@@ -451,6 +482,7 @@ class BoosterRegistry private constructor(private val presets: Map<String, Boost
                         flags = flags,
                         persistentData = pdc,
                     ),
+                    price = price,
                 )
             }
             require(parsed.isNotEmpty()) { "No booster presets are configured" }

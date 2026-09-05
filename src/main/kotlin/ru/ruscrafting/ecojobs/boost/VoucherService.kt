@@ -61,6 +61,24 @@ class VoucherService(
             jobs = overrides.jobs ?: preset.jobs,
             issuedAtEpochSecond = Instant.now().epochSecond,
         )
+        return create(preset, audience, payload)
+    }
+
+    fun create(preset: BoosterPreset, audience: Player, voucherId: UUID, issuedAtEpochSecond: Long): ItemStack = create(
+        preset,
+        audience,
+        VoucherPayload(
+            presetId = preset.id,
+            voucherId = voucherId,
+            type = preset.type,
+            multiplierBasisPoints = preset.multiplierBasisPoints,
+            durationSeconds = preset.duration.seconds,
+            jobs = preset.jobs,
+            issuedAtEpochSecond = issuedAtEpochSecond,
+        ),
+    )
+
+    private fun create(preset: BoosterPreset, audience: Player, payload: VoucherPayload): ItemStack {
         validatePayload(payload)
         val values = displayValues(payload, audience)
         return ItemStack(preset.item.material).apply {

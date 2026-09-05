@@ -30,6 +30,9 @@ import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
 import ru.ruscrafting.ecojobs.integration.ReflectiveArcAuditBridge
 import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
+import ru.ruscrafting.ecojobs.integration.VaultShopPaymentGateway
+import ru.ruscrafting.ecojobs.shop.AtomicShopPurchaseStore
+import ru.ruscrafting.ecojobs.shop.BoosterShopService
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
@@ -42,6 +45,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var ecoJobs: EcoJobsBridge
     private lateinit var boosts: BoostService
     private lateinit var vouchers: VoucherService
+    private lateinit var shop: BoosterShopService
+    private lateinit var moneyIntegration: VaultEconomyIntegration
     private var voucherLedger: OneTimeUseLedger = UnavailableOneTimeUseLedger
     private var discoveryLedger: DiscoveryLedger = UnavailableDiscoveryLedger
     private var earnings: EarningsService? = null
@@ -179,15 +184,23 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         bindEconomyIntegration()
         val jobIds = validatedJobIds()
         boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
+        shop = BoosterShopService(
+            enabled = { settings.shop.enabled && settings.redemptionStorage.enabled },
+            store = AtomicShopPurchaseStore(dataFolder.toPath()),
+            payment = VaultShopPaymentGateway(moneyIntegration),
+            voucherFactory = { playerId, voucherId, preset ->
+                vouchers.create(preset, requireNotNull(server.getPlayer(playerId)), voucherId, java.time.Instant.now().epochSecond).serializeAsBytes()
+            },
+        )
         locale.validate(boosterRegistry.values())
         enforceMoneyIntegration()
         enforceExplorationIntegration()
         jobsMenu = JobsMenu(
-            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin, menuLayouts,
+            this, { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, { earnings }, ::reloadPlugin, menuLayouts, shop = shop,
         )
         requireNotNull(pluginRuntime).own(jobsMenu)
         val command = JobsCommand(
-            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin,
+            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin, shop,
         )
         jobsMenu.installAdminActions(command::executeAdmin)
         requireNotNull(getCommand("arcjobs")).apply {
@@ -258,16 +271,15 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         val economy = requireNotNull(server.servicesManager.load(Economy::class.java)) {
             "A Vault economy provider must be registered before ArcEcoJobs initializes"
         }
-        EconomyManager.register(
-            VaultEconomyIntegration(
+        moneyIntegration = VaultEconomyIntegration(
                 economy = economy,
                 moneyAttribution = moneyAttribution,
                 recordEarnings = { player, jobId, amount ->
                     earnings?.recordMoney(player.uniqueId, jobId, amount)
                 },
                 auditBridge = ReflectiveArcAuditBridge.discover(),
-            ),
-        )
+            )
+        EconomyManager.register(moneyIntegration)
         check(EconomyManager.hasRegistrations()) { "eco did not accept the Vault economy integration" }
         logger.info("EcoJobs money effects bound to Vault provider ${economy.name}")
     }

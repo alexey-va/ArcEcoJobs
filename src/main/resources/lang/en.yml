@@ -41,6 +41,12 @@ message:
   booster-disabled: '<prefix><#e36d6d>Booster preset <id> is disabled.'
   booster-given: '<prefix><#79c99e>Gave <amount> × <id> to <player>.'
   booster-received: '<prefix><#e6fff3>You received <amount> × <item><#e6fff3>.'
+  shop-purchased: '<prefix><#79c99e>The booster was delivered to your inventory.'
+  shop-disabled: '<prefix><#e36d6d>The booster shop is closed right now.'
+  shop-insufficient: '<prefix><#e36d6d>You do not have enough coins.'
+  shop-failed: '<prefix><#e36d6d>The purchase did not finish. Try again later.'
+  shop-pending: '<prefix><#d8a657>This operation is pending reconciliation. No second charge will be attempted.'
+  shop-unavailable: '<prefix><#e36d6d>This booster is currently unavailable.'
   inventory-full: '<prefix><#e36d6d>The player does not have enough inventory space.'
   player-not-found: '<prefix><#e36d6d>Player <player> was not found.'
   invalid-number: '<prefix><#e36d6d>Invalid number: <value>.'
@@ -109,6 +115,10 @@ menu:
       - '<#8c8c8c>Money, XP, jobs, and time remaining'
       - ''
       - '<#92bed8>Click to open'
+    shop-name: '<#92bed8>Booster shop'
+    shop-lore:
+      - '<#e6fff3>Buy active boosts with coins'
+      - '<#92bed8>Click to open'
     help-name: '<#92bed8>How jobs work'
     help-lore:
       - '<#e6fff3>Levels, rewards, and boosters'
@@ -122,6 +132,16 @@ menu:
       - ''
       - '<#d8a657>Click to open'
 
+  shop:
+    title: '<#20252b>Booster shop'
+    price: '<#d8a657>Price: <price> coins'
+    confirm-title: '<#20252b>Confirm purchase'
+    confirm-name: '<#79c99e>Buy boost for <price> coins'
+    confirm-lore:
+      - '<#e6fff3>Effect: <benefit>'
+      - '<#e6fff3><type> ×<multiplier> · <duration>'
+      - '<#8c8c8c>The voucher will be delivered after confirmation'
+      - '<#92bed8>Click to confirm'
   catalog:
     title: '<#20252b>Job catalog'
     title-active: '<#20252b>My jobs'
@@ -414,6 +434,10 @@ booster:
       - '<#92bed8>Right-click to activate'
 
 dialog:
+  shop:
+    description: 'Choose a booster. Buy with coins and activate by right-clicking the voucher.'
+  shop-confirm:
+    description: 'Review the effect, duration and price before buying.'
   close-tooltip: '<#969696>Return to the game. Escape follows the shared ARC menu setting.'
   main:
     back: '<#969696>Main menu'

@@ -36,11 +36,15 @@ import ru.ruscrafting.ecojobs.earnings.EarningsReport
 import ru.ruscrafting.ecojobs.earnings.EarningsService
 import ru.ruscrafting.ecojobs.earnings.EarningsTotals
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
+import ru.ruscrafting.ecojobs.shop.BoosterShopService
+import ru.ruscrafting.ecojobs.shop.PurchaseResult
+import ru.ruscrafting.ecojobs.shop.PlayerShopDeliveryGateway
 import java.text.DecimalFormat
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import ru.ruscrafting.ecojobs.config.BoosterPreset
 import kotlin.math.ceil
 
 sealed interface JobsView {
@@ -57,6 +61,8 @@ sealed interface JobsView {
     data class Help(val back: JobsView) : JobsView
     data class Admin(val back: JobsView) : JobsView
     data class Presets(val page: Int, val back: JobsView) : JobsView
+    data class Shop(val page: Int, val back: JobsView) : JobsView
+    data class ShopConfirm(val preset: BoosterPreset, val back: JobsView) : JobsView
 }
 
 class JobsMenu(
@@ -75,6 +81,7 @@ class JobsMenu(
         plugin.server.servicesManager.load(LuckPerms::class.java)?.userManager
             ?.getUser(player.uniqueId)?.cachedData?.metaData?.getMetaValue("arc-menu-escape") == "back"
     },
+    private val shop: BoosterShopService? = null,
 ) : AutoCloseable, Listener {
     internal companion object {
         const val MAIN_MENU_COMMAND = "menu"
@@ -120,6 +127,8 @@ class JobsMenu(
         presentations[player.uniqueId] = next
         open(player)
     }
+
+    fun openShop(player: Player) = openRoot(player).also { open(player, JobsView.Shop(1, JobsView.Main)) }
 
     private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
 
@@ -168,6 +177,8 @@ class JobsMenu(
             is JobsView.Help -> openHelp(player, view)
             is JobsView.Admin -> openAdmin(player, view)
             is JobsView.Presets -> openPresets(player, view)
+            is JobsView.Shop -> openShop(player, view)
+            is JobsView.ShopConfirm -> openShopConfirm(player, view)
         }
     }
 
@@ -202,6 +213,8 @@ class JobsMenu(
                     is JobsView.Help -> if (slot == element(view, "back")) open(player, view.back)
                     is JobsView.Admin -> clickAdmin(player, view, slot)
                     is JobsView.Presets -> clickPresets(player, view, slot)
+                    is JobsView.Shop -> clickShop(player, view, slot)
+                    is JobsView.ShopConfirm -> clickShopConfirm(player, view, slot)
                 }
             } finally {
                 pendingClicks.remove(player.uniqueId)
@@ -245,6 +258,7 @@ class JobsMenu(
         inventory.setItem(element(view, "boosts"), item(settings().guiItems["main-boosts"], player, "menu.main.boosts-name", "menu.main.boosts-lore", mapOf(
             "count" to text(boosts.active(player).size),
         )))
+        if (settings().shop.enabled) inventory.setItem(element(view, "shop"), item(settings().guiItems["main-shop"], player, "menu.main.shop-name", "menu.main.shop-lore"))
         inventory.setItem(element(view, "help"), item(settings().guiItems["main-help"], player, "menu.main.help-name", "menu.main.help-lore"))
         inventory.setItem(element(view, "back"), backItem(player))
         if (JobsAdminMenu.canOpen(player)) {
@@ -260,6 +274,7 @@ class JobsMenu(
             element(view, "active") -> open(player, JobsView.Catalog(true, 1, view))
             element(view, "leaderboard") -> open(player, JobsView.LeaderboardSelector(1, view))
             element(view, "boosts") -> open(player, JobsView.Boosts(null, 1, view))
+            element(view, "shop") -> open(player, JobsView.Shop(1, view))
             element(view, "help") -> open(player, JobsView.Help(view))
             element(view, "back") -> {
                 // The ARC root replaces the current dialog directly; closing first resets the mouse.
@@ -707,6 +722,72 @@ class JobsMenu(
         show(player, currentView, inventory)
     }
 
+    private fun openShop(player: Player, view: JobsView.Shop) {
+        val offers = boosters().values().filter { it.enabled && it.price != null }
+        val content = content(view, player)
+        val pages = pageCount(offers.size, content.size)
+        val current = view.copy(page = view.page.coerceIn(1, pages))
+        val inventory = inventory(player, current, "menu.shop.title")
+        offers.page(current.page, content.size).forEachIndexed { index, preset ->
+            val stack = vouchers.create(preset, player).apply {
+                editMeta { meta ->
+                    val lore = meta.lore().orEmpty().toMutableList()
+                    lore += locale.render("menu.shop.price", player, mapOf("price" to locale.text(preset.price!!.amount.toPlainString())))
+                    meta.lore(lore)
+                }
+            }
+            inventory.setItem(content[index], stack)
+        }
+        navigation(inventory, player, current, current.page, pages)
+        show(player, current, inventory)
+    }
+
+    private fun clickShop(player: Player, view: JobsView.Shop, slot: Int) {
+        val offers = boosters().values().filter { it.enabled && it.price != null }
+        val content = content(view, player)
+        val index = content.indexOf(slot)
+        if (index >= 0) {
+            val preset = offers.page(view.page, content.size).getOrNull(index) ?: return
+            open(player, JobsView.ShopConfirm(preset, view))
+            return
+        }
+        if (slot == element(view, "back")) open(player, view.back)
+        else if (slot == element(view, "previous") && view.page > 1) open(player, view.copy(page = view.page - 1))
+        else if (slot == element(view, "next") && view.page < pageCount(offers.size, content.size)) open(player, view.copy(page = view.page + 1))
+    }
+
+    private fun openShopConfirm(player: Player, view: JobsView.ShopConfirm) {
+        val preset = boosters().get(view.preset.id)
+        if (preset == null || preset != view.preset) return open(player, view.back)
+        val frame = inventory(player, view, "menu.shop.confirm-title")
+        frame.setItem(element(view, "confirm"), item(settings().guiItems.confirm, player, "menu.shop.confirm-name", "menu.shop.confirm-lore", mapOf(
+            "price" to locale.text(view.preset.price!!.amount.toPlainString()),
+            "benefit" to locale.render(preset.item.nameKey, player),
+            "type" to locale.type(preset.type, player),
+            "multiplier" to locale.text(Multipliers.format(preset.multiplierBasisPoints)),
+            "duration" to locale.text(locale.duration(preset.duration, player)),
+        )))
+        frame.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
+        show(player, view, frame)
+    }
+
+    private fun clickShopConfirm(player: Player, view: JobsView.ShopConfirm, slot: Int) {
+        if (slot == element(view, "cancel")) return open(player, view.back)
+        if (slot != element(view, "confirm")) return
+        val preset = boosters().get(view.preset.id)
+        if (preset != view.preset) return player.sendMessage(locale.render("message.shop-unavailable", player))
+        when (shop?.buy(player.uniqueId, preset, PlayerShopDeliveryGateway(player, vouchers)) ?: PurchaseResult.ShopDisabled) {
+                is PurchaseResult.Delivered, is PurchaseResult.Recovered -> player.sendMessage(locale.render("message.shop-purchased", player))
+                PurchaseResult.ShopDisabled -> player.sendMessage(locale.render("message.shop-disabled", player))
+                PurchaseResult.InsufficientFunds -> player.sendMessage(locale.render("message.shop-insufficient", player))
+                PurchaseResult.InventoryFull -> player.sendMessage(locale.render("message.inventory-full", player))
+                PurchaseResult.PaymentPending -> player.sendMessage(locale.render("message.shop-pending", player))
+                PurchaseResult.PaymentFailed, PurchaseResult.DeliveryFailed -> player.sendMessage(locale.render("message.shop-failed", player))
+                PurchaseResult.Unavailable -> player.sendMessage(locale.render("message.shop-unavailable", player))
+            }
+        open(player, view.back)
+    }
+
     private fun openHelp(player: Player, view: JobsView.Help) {
         val inventory = inventory(player, view, "menu.help.title")
         inventory.setItem(element(view, "jobs"), item(settings().guiItems.catalog, player, "menu.help.jobs-name", "menu.help.jobs-lore"))
@@ -909,20 +990,21 @@ class JobsMenu(
 
     private fun dialogActionable(player: Player, view: JobsView, id: String, index: Int?): Boolean {
         if (index != null) return when (view) {
-            is JobsView.Catalog, is JobsView.LeaderboardSelector, is JobsView.Earnings -> true
+            is JobsView.Catalog, is JobsView.LeaderboardSelector, is JobsView.Earnings, is JobsView.Shop -> true
             is JobsView.Presets -> player.hasPermission("arcecojobs.admin.booster") &&
                 boosters().values().getOrNull((view.page - 1) * content(view, player).size + index)?.enabled == true
             else -> false
         }
         if (id in setOf("back", "cancel", "previous", "next")) return true
         return when (view) {
-            JobsView.Main -> id != "profile"
+            JobsView.Main -> id != "profile" && (id != "shop" || settings().shop.enabled)
             is JobsView.JobCard -> when (id) {
                 "action" -> ecoJobs.job(view.jobId)?.let { ecoJobs.active(player, it) || ecoJobs.canJoin(player, it) } == true
                 "earnings" -> settings().earnings.enabled && earnings() != null
                 else -> id in setOf("scale", "leaderboard", "boosts")
             }
             is JobsView.LeaveConfirm -> id == "confirm"
+            is JobsView.ShopConfirm -> id == "confirm" || id == "cancel"
             is JobsView.Earnings -> id == "summary"
             is JobsView.LeaderboardSelector -> id == "global"
             is JobsView.Admin -> when (id) {
@@ -1064,7 +1146,7 @@ class JobsMenu(
     private fun jobsLabel(jobs: Set<String>, player: Player): Component =
         if ("all" in jobs) locale.allJobs(player) else ecoJobs.names(jobs)
 
-    private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "common.back-name", "common.back-lore")
+    private fun backItem(player: Player): ItemStack = item(settings().guiItems.back, player, "menu.leave.cancel-name", "menu.leave.cancel-lore")
     private fun text(value: Any?): Component = locale.text(value)
     private fun titleText(value: Component): Component = Component.text(plain.serialize(value))
     private fun formatMultiplier(multiplier: Double): String = Multipliers.format(Multipliers.toBasisPoints(multiplier))

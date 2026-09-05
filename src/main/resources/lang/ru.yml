@@ -41,6 +41,12 @@ message:
   booster-disabled: '<prefix><#e36d6d>Набор усилителей <id> отключён.'
   booster-given: '<prefix><#79c99e>Выдано <amount> × <id> игроку <player>.'
   booster-received: '<prefix><#e6fff3>Вы получили <amount> × <item><#e6fff3>.'
+  shop-purchased: '<prefix><#79c99e>Усилитель доставлен в инвентарь.'
+  shop-disabled: '<prefix><#e36d6d>Магазин усилителей сейчас закрыт.'
+  shop-insufficient: '<prefix><#e36d6d>Недостаточно монет.'
+  shop-failed: '<prefix><#e36d6d>Покупка не завершена. Повторите попытку позже.'
+  shop-pending: '<prefix><#d8a657>Операция отправлена на сверку. Повторная оплата не выполняется.'
+  shop-unavailable: '<prefix><#e36d6d>Этот усилитель сейчас недоступен.'
   inventory-full: '<prefix><#e36d6d>В инвентаре игрока недостаточно места.'
   player-not-found: '<prefix><#e36d6d>Игрок <player> не найден.'
   invalid-number: '<prefix><#e36d6d>Некорректное число: <value>.'
@@ -109,6 +115,10 @@ menu:
       - '<#8c8c8c>Деньги, опыт, профессии и остаток времени'
       - ''
       - '<#92bed8>Нажмите, чтобы открыть'
+    shop-name: '<#92bed8>Магазин усилителей'
+    shop-lore:
+      - '<#e6fff3>Купите действующие усиления за монеты'
+      - '<#92bed8>Нажмите, чтобы открыть'
     help-name: '<#92bed8>Как работают профессии'
     help-lore:
       - '<#e6fff3>Уровни, награды и усилители'
@@ -122,6 +132,16 @@ menu:
       - ''
       - '<#d8a657>Нажмите, чтобы открыть'
 
+  shop:
+    title: '<#20252b>Магазин усилителей'
+    price: '<#d8a657>Цена: <price> монет'
+    confirm-title: '<#20252b>Подтвердите покупку'
+    confirm-name: '<#79c99e>Купить усиление за <price> монет'
+    confirm-lore:
+      - '<#e6fff3>Эффект: <benefit>'
+      - '<#e6fff3><type> ×<multiplier> · <duration>'
+      - '<#8c8c8c>После подтверждения талон будет выдан в инвентарь'
+      - '<#92bed8>Нажмите, чтобы подтвердить'
   catalog:
     title: '<#20252b>Каталог профессий'
     title-active: '<#20252b>Мои профессии'
@@ -414,6 +434,10 @@ booster:
       - '<#92bed8>Нажмите ПКМ, чтобы активировать'
 
 dialog:
+  shop:
+    description: 'Выберите усиление. Покупка — за монеты, активация — ПКМ по талону.'
+  shop-confirm:
+    description: 'Проверьте эффект, время действия и стоимость перед покупкой.'
   close-tooltip: '<#969696>Вернуться в игру. Настройка Escape общая с меню ARC.'
   main:
     back: '<#969696>Главное меню'

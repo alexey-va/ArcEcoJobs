@@ -18,6 +18,11 @@ boosts:
   maximum-stacked-duration: 365d
   require-money-placeholder: true
 
+# Booster sales are opt-in per server. Prices live beside each preset in boosters.yml.
+# ArcEcoJobs currently accepts currency: MONEY, backed by the active Vault provider.
+shop:
+  enabled: false
+
 # Personal per-job earnings history. Events are aggregated in memory by hour,
 # flushed to MySQL in batches, and deleted after the bounded retention window.
 earnings:
@@ -68,6 +73,7 @@ gui:
         active: {slot: 22}
         leaderboard: {slot: 24}
         boosts: {slot: 30}
+        shop: {slot: 34}
         help: {slot: 32}
         back: {slot: 45}
         admin: {slot: 49}
@@ -202,6 +208,7 @@ gui:
     main-active: {material: WRITABLE_BOOK}
     main-leaderboard: {material: GOLDEN_HELMET}
     main-boosts: {material: EXPERIENCE_BOTTLE}
+    main-shop: {material: GOLD_INGOT}
     main-help: {material: KNOWLEDGE_BOOK}
     main-admin: {material: COMMAND_BLOCK}
     empty: {material: GRAY_DYE}

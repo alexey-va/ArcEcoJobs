@@ -50,3 +50,13 @@ class VaultEconomyIntegration(
     override fun getExactBalance(player: OfflinePlayer): BigDecimal =
         BigDecimal.valueOf(economy.getBalance(player))
 }
+
+class VaultShopPaymentGateway(private val economy: VaultEconomyIntegration) : ru.ruscrafting.ecojobs.shop.ShopPaymentGateway {
+    override fun has(playerId: java.util.UUID, amount: BigDecimal): Boolean = economy.hasAmount(org.bukkit.Bukkit.getOfflinePlayer(playerId), amount)
+    override fun charge(playerId: java.util.UUID, amount: BigDecimal): ru.ruscrafting.ecojobs.shop.PaymentOutcome = try {
+        if (economy.removeMoney(org.bukkit.Bukkit.getOfflinePlayer(playerId), amount)) ru.ruscrafting.ecojobs.shop.PaymentOutcome.ACCEPTED
+        else ru.ruscrafting.ecojobs.shop.PaymentOutcome.REJECTED
+    } catch (_: Throwable) {
+        ru.ruscrafting.ecojobs.shop.PaymentOutcome.UNKNOWN
+    }
+}

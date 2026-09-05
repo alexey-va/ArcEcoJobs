@@ -1,6 +1,8 @@
 boosters:
   brief-shift:
     enabled: true
+    price: "1500"
+    currency: MONEY
     type: ALL
     multiplier: 1.5
     duration: 15m
@@ -19,6 +21,8 @@ boosters:
 
   workday:
     enabled: true
+    price: "5000"
+    currency: MONEY
     type: ALL
     multiplier: 1.5
     duration: 1h
@@ -37,6 +41,8 @@ boosters:
 
   long-shift:
     enabled: true
+    price: "12000"
+    currency: MONEY
     type: ALL
     multiplier: 1.5
     duration: 3h
@@ -55,6 +61,8 @@ boosters:
 
   focused-xp:
     enabled: true
+    price: "2000"
+    currency: MONEY
     type: XP
     multiplier: 2.0
     duration: 30m
@@ -73,6 +81,8 @@ boosters:
 
   mastery-shift:
     enabled: true
+    price: "6500"
+    currency: MONEY
     type: XP
     multiplier: 2.0
     duration: 2h
@@ -91,6 +101,8 @@ boosters:
 
   mastery-marathon:
     enabled: true
+    price: "11000"
+    currency: MONEY
     type: XP
     multiplier: 2.0
     duration: 4h
@@ -109,6 +121,8 @@ boosters:
 
   quick-profit:
     enabled: true
+    price: "1000"
+    currency: MONEY
     type: MONEY
     multiplier: 1.5
     duration: 30m
@@ -127,6 +141,8 @@ boosters:
 
   profit-shift:
     enabled: true
+    price: "3500"
+    currency: MONEY
     type: MONEY
     multiplier: 1.5
     duration: 2h
@@ -145,6 +161,8 @@ boosters:
 
   profit-marathon:
     enabled: true
+    price: "6500"
+    currency: MONEY
     type: MONEY
     multiplier: 1.5
     duration: 4h

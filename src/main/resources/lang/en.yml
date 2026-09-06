@@ -133,20 +133,38 @@ menu:
       - '<#d8a657>Click to open'
 
   shop:
+    action: <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>Left-click <#b8b8b8>— review purchase
     title: '<#20252b>Booster shop'
-    currency-money: 'coins'
-    currency-tokens: 'premium tokens'
-    price: '<#d8a657>Price: <price> <currency>'
+    currency-money: <white>💰</white>
+
+    currency-tokens: <#c5a2f2>premium tokens
+
+    price: '<#8c8c8c>• <#b8b8b8>Price: <#edbf70><price> <currency>'
+
     confirm-title: '<#20252b>Confirm purchase'
-    confirm-name: '<#79c99e>Buy boost for <price> <currency>'
-    cancel-name: '<#92bed8>Cancel'
-    cancel-lore: '<#8c8c8c>Return to the shop without buying'
+    confirm-name: <#8ed6aa>Buy voucher
+
+    cancel-name: <#b8b8b8>Back
+
+    cancel-lore:
+    - ''
+    - <#b8b8b8>Return to the shop without buying.
+    - ''
+    - <#8c8c8c>[<#8ec8f4>▶<#8c8c8c>] <#8ec8f4>Left-click <#b8b8b8>— go back
+
     confirm-lore:
-      - '<#e6fff3>Effect: <benefit>'
-      - '<#e6fff3><type> <multiplier> · <duration>'
-      - '<#8c8c8c>Duration starts on activation and runs while offline'
-      - '<#8c8c8c>The voucher will be delivered after confirmation'
-      - '<#92bed8>Click to confirm'
+    - ''
+    - <#b8b8b8>Payment delivers a voucher to your inventory.
+    - ''
+    - <#edbf70><b>Information:</b>
+    - '<#8c8c8c>• <#b8b8b8>Effect: <#8ec8f4><type> <#8ed6aa><multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Duration: <#edbf70><duration>'
+    - '<#8c8c8c>• <#b8b8b8>Price: <#edbf70><price> <currency>'
+    - ''
+    - <#b8b8b8>Use <#8ed6aa>right-click<#b8b8b8> on the voucher when ready.
+    - ''
+    - <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>Left-click <#b8b8b8>— buy
+
   catalog:
     title: '<#20252b>Job catalog'
     title-active: '<#20252b>My jobs'
@@ -317,20 +335,32 @@ menu:
   boosts:
     title: '<#20252b>Active boosts'
     title-job: '<#20252b>Boosts · <job>'
-    summary-name: '<#e6fff3>Combined effect'
+    summary-name: <#edbf70>Combined effect
+
     summary-lore:
-      - '<#e6fff3>XP: <#92bed8><xp_multiplier>'
-      - '<#e6fff3>Money: <#92bed8><money_multiplier>'
-      - '<#8c8c8c>Matching boosts do not multiply together'
-    entry-name: '<#92bed8><multiplier> · <type>'
+    - ''
+    - '<#8c8c8c>• <#b8b8b8>Experience: <#8ec8f4><xp_multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Money: <#edbf70><money_multiplier>'
+    - ''
+    - <#b8b8b8>Matching boosts do not multiply each other.
+
+    entry-name: <#8ed6aa><multiplier> <#8c8c8c>· <#8ec8f4><type>
+
     entry-lore:
-      - '<#e6fff3>Jobs: <#92bed8><jobs>'
-      - '<#e6fff3>Remaining: <#92bed8><duration>'
-      - '<#8c8c8c>ID: <instance>'
+    - ''
+    - <#b8b8b8>This boost is active.
+    - ''
+    - <#edbf70><b>Information:</b>
+    - '<#8c8c8c>• <#b8b8b8>Jobs: <#8ec8f4><jobs>'
+    - '<#8c8c8c>• <#b8b8b8>Remaining: <#edbf70><duration>'
+    - ''
+    - <#b8b8b8>Time continues while you are offline.
+
     empty-name: '<#8c8c8c>No active boosts'
     empty-lore:
-      - '<#e6fff3>Use a signed RusCrafting voucher.'
-      - '<#8c8c8c>You can transfer a voucher to another player.'
+    - ''
+    - <#b8b8b8>Use <#8ed6aa>right-click<#b8b8b8> to activate a job voucher.
+    - <#b8b8b8>You can trade it before activation.
 
   help:
     title: '<#20252b>Jobs help'
@@ -406,8 +436,11 @@ menu:
     preset-action-disabled: '<#8c8c8c>Issuing is disabled in configuration'
 
 booster:
-  money-badge: '<#c8a477>¤ REGULAR COINS'
-  premium-badge: '<#ffd27a>✦ PREMIUM · payment: tokens'
+  activate-action: <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>Right-click <#b8b8b8>— activate
+  money-badge: <#b8b8b8>Standard voucher
+
+  premium-badge: <#c5a2f2>✦ Premium voucher
+
   premium-all-3d:
     name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 3d</b>'
   premium-all-7d:
@@ -421,11 +454,11 @@ booster:
   premium-xp-14d:
     name: '<#f4b860><b>Job boost · ✦ XP ×2 · 14d</b>'
   premium-money-3d:
-    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 3d</b>'
+    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 3d</b>'
   premium-money-7d:
-    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 7d</b>'
+    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 7d</b>'
   premium-money-14d:
-    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 14d</b>'
+    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 14d</b>'
   brief-shift:
     name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 15m</b>'
   workday:
@@ -439,25 +472,31 @@ booster:
   mastery-marathon:
     name: '<#92bed8><b>Job boost · ✦ XP ×2 · 4h</b>'
   quick-profit:
-    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 30m</b>'
+    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 30m</b>'
   profit-shift:
-    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 2h</b>'
+    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 2h</b>'
   profit-marathon:
-    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 4h</b>'
+    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 4h</b>'
   common:
     lore:
-      - '<#f4b860>◆ Transferable job booster voucher'
-      - ''
-      - '<#c8a477>Effect: <#fff0d6><type>'
-      - '<#c8a477>Multiplier: <#fff0d6><multiplier>'
-      - '<#c8a477>Duration: <#fff0d6><duration>'
-      - '<#c8a477>Jobs: <#fff0d6><jobs>'
-      - '<#8c8c8c>Duration starts on activation and runs while offline'
-      - ''
-      - '<#c8a477>Matching effects add their duration'
-      - '<#c8a477>Another type can start after this one ends'
-      - ''
-      - '<#ffd27a>Right-click to activate'
+    - ''
+    - <#b8b8b8>Boosts <#8ec8f4><type><#b8b8b8> earned from jobs.
+    - <#b8b8b8>You can trade the voucher with other players.
+    - <tier>
+    - ''
+    - <#edbf70><b>Information:</b>
+    - '<#8c8c8c>• <#b8b8b8>Multiplier: <#8ed6aa><multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Duration: <#edbf70><duration>'
+    - '<#8c8c8c>• <#b8b8b8>Jobs: <#8ec8f4><jobs>'
+    - <price>
+    - ''
+    - <#b8b8b8>Time starts <#edbf70>on activation<#b8b8b8>,
+    - <#b8b8b8>including while you are offline.
+    - ''
+    - <#b8b8b8>Matching effects <#8ed6aa>extend the duration<#b8b8b8>.
+    - <#b8b8b8>A different effect must wait for this one to end.
+    - ''
+    - <action>
 
 dialog:
   shop:

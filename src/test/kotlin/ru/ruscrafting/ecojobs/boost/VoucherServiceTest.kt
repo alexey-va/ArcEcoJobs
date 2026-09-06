@@ -125,8 +125,36 @@ class VoucherServiceTest : StringSpec({
             .itemMeta.lore.orEmpty()
         val tokenLore = service.create(preset.copy(price = ru.ruscrafting.ecojobs.config.BoosterPrice(ShopCurrency.TOKENS, java.math.BigDecimal("90"))), player)
             .itemMeta.lore.orEmpty()
-        moneyLore.any { it.contains("ОБЫЧНЫЕ МОНЕТЫ") } shouldBe true
-        tokenLore.any { it.contains("ПРЕМИУМ") && it.contains("жетоны") } shouldBe true
+        moneyLore.any { it.contains("Обычный талон") } shouldBe true
+        tokenLore.any { it.contains("Премиум-талон") } shouldBe true
+    }
+
+    "shop and owned vouchers keep structured lore and distinct final actions" {
+        val player = paper.server.getPlayer("VoucherQA")!!
+        val plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+        for (currency in ShopCurrency.entries) {
+            val priced = preset.copy(price = ru.ruscrafting.ecojobs.config.BoosterPrice(currency, java.math.BigDecimal("1500")))
+            for (shopPreview in listOf(false, true)) {
+                val item = service.create(priced, player, shopPreview = shopPreview)
+                service.inspect(item).shouldBeInstanceOf<VoucherInspection.Valid>()
+                val lore = item.itemMeta.lore().orEmpty()
+                val lines = lore.map(plain::serialize)
+                lines.first() shouldBe ""
+                lines[lines.lastIndex - 1] shouldBe ""
+                lines.last().contains(if (shopPreview) "ЛКМ" else "ПКМ") shouldBe true
+                lines.any { it.contains("Цена:") } shouldBe shopPreview
+                lines.any { it.contains("1500 💰") } shouldBe (shopPreview && currency == ShopCurrency.MONEY)
+                lines.none { it.contains("<tier>") || it.contains("<action>") || it.contains("<price>") } shouldBe true
+                lore.forEach { it.decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC) shouldBe net.kyori.adventure.text.format.TextDecoration.State.FALSE }
+                val output = project.resolve("build/boost-lore-snapshots")
+                Files.createDirectories(output)
+                val mini = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                val yaml = org.bukkit.configuration.file.YamlConfiguration()
+                yaml.set("name", mini.serialize(item.itemMeta.displayName()!!))
+                yaml.set("lore", lore.map(mini::serialize))
+                yaml.save(output.resolve("${currency.name.lowercase()}-${if (shopPreview) "shop" else "owned"}.yml").toFile())
+            }
+        }
     }
 
     "changing a signed field makes a voucher invalid" {

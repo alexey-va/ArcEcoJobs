@@ -318,7 +318,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val offers = List(29) { preset }
                 every { h.boosters.values() } returns offers
                 every { h.boosters.get(preset.id) } returns preset
-                every { h.vouchers.create(any(), h.player) } returns ItemStack(Material.PAPER)
+                every { h.vouchers.create(any(), h.player, shopPreview = true) } returns ItemStack(Material.PAPER)
 
                 h.menu.openShop(h.player)
                 h.menu.open(h.player, JobsView.Shop(2, JobsView.Main))

@@ -133,20 +133,38 @@ menu:
       - '<#d8a657>Нажмите, чтобы открыть'
 
   shop:
+    action: <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>ЛКМ <#b8b8b8>— к покупке
     title: '<#20252b>Магазин усилителей'
-    currency-money: 'монет'
-    currency-tokens: 'премиум-жетонов'
-    price: '<#d8a657>Цена: <price> <currency>'
+    currency-money: <white>💰</white>
+
+    currency-tokens: <#c5a2f2>премиум-жетонов
+
+    price: '<#8c8c8c>• <#b8b8b8>Цена: <#edbf70><price> <currency>'
+
     confirm-title: '<#20252b>Подтвердите покупку'
-    confirm-name: '<#79c99e>Купить усиление за <price> <currency>'
-    cancel-name: '<#92bed8>Отмена'
-    cancel-lore: '<#8c8c8c>Вернуться в магазин без покупки'
+    confirm-name: <#8ed6aa>Купить талон
+
+    cancel-name: <#b8b8b8>Назад
+
+    cancel-lore:
+    - ''
+    - <#b8b8b8>Вернуться в магазин без покупки.
+    - ''
+    - <#8c8c8c>[<#8ec8f4>▶<#8c8c8c>] <#8ec8f4>ЛКМ <#b8b8b8>— вернуться
+
     confirm-lore:
-      - '<#e6fff3>Эффект: <benefit>'
-      - '<#e6fff3><type> <multiplier> · <duration>'
-      - '<#8c8c8c>Срок идёт с активации, даже когда вы офлайн'
-      - '<#8c8c8c>После подтверждения талон будет выдан в инвентарь'
-      - '<#92bed8>Нажмите, чтобы подтвердить'
+    - ''
+    - <#b8b8b8>После оплаты талон появится в инвентаре.
+    - ''
+    - <#edbf70><b>Информация:</b>
+    - '<#8c8c8c>• <#b8b8b8>Эффект: <#8ec8f4><type> <#8ed6aa><multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Длительность: <#edbf70><duration>'
+    - '<#8c8c8c>• <#b8b8b8>Цена: <#edbf70><price> <currency>'
+    - ''
+    - <#b8b8b8>Активируйте талон <#8ed6aa>ПКМ<#b8b8b8>, когда будете готовы.
+    - ''
+    - <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>ЛКМ <#b8b8b8>— купить
+
   catalog:
     title: '<#20252b>Каталог профессий'
     title-active: '<#20252b>Мои профессии'
@@ -317,20 +335,32 @@ menu:
   boosts:
     title: '<#20252b>Активные усиления'
     title-job: '<#20252b>Усиления · <job>'
-    summary-name: '<#e6fff3>Итоговый эффект'
+    summary-name: <#edbf70>Итоговый эффект
+
     summary-lore:
-      - '<#e6fff3>Опыт: <#92bed8><xp_multiplier>'
-      - '<#e6fff3>Деньги: <#92bed8><money_multiplier>'
-      - '<#8c8c8c>Совпадающие усиления не перемножаются'
-    entry-name: '<#92bed8><multiplier> · <type>'
+    - ''
+    - '<#8c8c8c>• <#b8b8b8>Опыт: <#8ec8f4><xp_multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Деньги: <#edbf70><money_multiplier>'
+    - ''
+    - <#b8b8b8>Совпадающие усиления не перемножаются.
+
+    entry-name: <#8ed6aa><multiplier> <#8c8c8c>· <#8ec8f4><type>
+
     entry-lore:
-      - '<#e6fff3>Профессии: <#92bed8><jobs>'
-      - '<#e6fff3>Осталось: <#92bed8><duration>'
-      - '<#8c8c8c>ID: <instance>'
+    - ''
+    - <#b8b8b8>Усиление уже действует.
+    - ''
+    - <#edbf70><b>Информация:</b>
+    - '<#8c8c8c>• <#b8b8b8>Профессии: <#8ec8f4><jobs>'
+    - '<#8c8c8c>• <#b8b8b8>Осталось: <#edbf70><duration>'
+    - ''
+    - <#b8b8b8>Время действия идёт и когда вы офлайн.
+
     empty-name: '<#8c8c8c>Нет активных усилений'
     empty-lore:
-      - '<#e6fff3>Используйте подписанный талон RusCrafting.'
-      - '<#8c8c8c>Талон можно передать другому игроку.'
+    - ''
+    - <#b8b8b8>Активируйте талон работ через <#8ed6aa>ПКМ<#b8b8b8>.
+    - <#b8b8b8>До активации его можно передать.
 
   help:
     title: '<#20252b>Справка по работам'
@@ -406,8 +436,11 @@ menu:
     preset-action-disabled: '<#8c8c8c>Выдача отключена в конфигурации'
 
 booster:
-  money-badge: '<#c8a477>¤ ОБЫЧНЫЕ МОНЕТЫ'
-  premium-badge: '<#ffd27a>✦ ПРЕМИУМ · оплата: жетоны'
+  activate-action: <#8c8c8c>[<#8ed6aa>▶<#8c8c8c>] <#8ed6aa>ПКМ <#b8b8b8>— активировать
+  money-badge: <#b8b8b8>Обычный талон
+
+  premium-badge: <#c5a2f2>✦ Премиум-талон
+
   premium-all-3d:
     name: '<#ffd27a><b>Буст работ · ◆ всё ×1.5 · 3д</b>'
   premium-all-7d:
@@ -421,11 +454,11 @@ booster:
   premium-xp-14d:
     name: '<#f4b860><b>Буст работ · ✦ опыт ×2 · 14д</b>'
   premium-money-3d:
-    name: '<#ffd27a><b>Буст работ · ¤ деньги ×2 · 3д</b>'
+    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 3д</b>'
   premium-money-7d:
-    name: '<#ffd27a><b>Буст работ · ¤ деньги ×2 · 7д</b>'
+    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 7д</b>'
   premium-money-14d:
-    name: '<#ffd27a><b>Буст работ · ¤ деньги ×2 · 14д</b>'
+    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 14д</b>'
   brief-shift:
     name: '<#79c99e><b>Буст работ · ◆ всё ×1.5 · 15 мин</b>'
   workday:
@@ -439,25 +472,31 @@ booster:
   mastery-marathon:
     name: '<#92bed8><b>Буст работ · ✦ опыт ×2 · 4 ч</b>'
   quick-profit:
-    name: '<#d8a657><b>Буст работ · ¤ деньги ×1.5 · 30 мин</b>'
+    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 30 мин</b>'
   profit-shift:
-    name: '<#d8a657><b>Буст работ · ¤ деньги ×1.5 · 2 ч</b>'
+    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 2 ч</b>'
   profit-marathon:
-    name: '<#d8a657><b>Буст работ · ¤ деньги ×1.5 · 4 ч</b>'
+    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 4 ч</b>'
   common:
     lore:
-      - '<#f4b860>◆ Передаваемый талон усиления'
-      - ''
-      - '<#c8a477>Эффект: <#fff0d6><type>'
-      - '<#c8a477>Множитель: <#fff0d6><multiplier>'
-      - '<#c8a477>Срок: <#fff0d6><duration>'
-      - '<#c8a477>Профессии: <#fff0d6><jobs>'
-      - '<#c8a477>Срок начинается при активации и идёт офлайн'
-      - ''
-      - '<#c8a477>Одинаковые эффекты складывают время'
-      - '<#c8a477>Другой тип — только после окончания текущего'
-      - ''
-      - '<#ffd27a>Нажмите ПКМ, чтобы активировать'
+    - ''
+    - <#b8b8b8>Усиливает <#8ec8f4><type><#b8b8b8> за работу.
+    - <#b8b8b8>Талон можно передать другому игроку.
+    - <tier>
+    - ''
+    - <#edbf70><b>Информация:</b>
+    - '<#8c8c8c>• <#b8b8b8>Усиление: <#8ed6aa><multiplier>'
+    - '<#8c8c8c>• <#b8b8b8>Длительность: <#edbf70><duration>'
+    - '<#8c8c8c>• <#b8b8b8>Профессии: <#8ec8f4><jobs>'
+    - <price>
+    - ''
+    - <#b8b8b8>Время идёт <#edbf70>с активации<#b8b8b8>,
+    - <#b8b8b8>в том числе когда вы офлайн.
+    - ''
+    - <#b8b8b8>Одинаковые эффекты <#8ed6aa>продлевают срок<#b8b8b8>.
+    - <#b8b8b8>Другой эффект — после окончания текущего.
+    - ''
+    - <action>
 
 dialog:
   shop:

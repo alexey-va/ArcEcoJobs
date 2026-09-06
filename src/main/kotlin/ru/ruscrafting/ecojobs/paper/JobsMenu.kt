@@ -779,16 +779,7 @@ class JobsMenu(
         val current = view.copy(page = view.page.coerceIn(1, pages))
         val inventory = inventory(player, current, "menu.shop.title")
         offers.page(current.page, content.size).forEachIndexed { index, preset ->
-            val stack = vouchers.create(preset, player).apply {
-                editMeta { meta ->
-                    val lore = meta.lore().orEmpty().toMutableList()
-                    lore += locale.render("menu.shop.price", player, mapOf(
-                        "price" to locale.text(preset.price!!.amount.toPlainString()),
-                        "currency" to shopCurrency(player, preset.price.currency),
-                    ))
-                    meta.lore(lore)
-                }
-            }
+            val stack = vouchers.create(preset, player, shopPreview = true)
             inventory.setItem(content[index], stack)
         }
         navigation(inventory, player, current, current.page, pages)

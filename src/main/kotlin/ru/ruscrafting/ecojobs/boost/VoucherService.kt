@@ -52,7 +52,7 @@ class VoucherService(
     private val issuedAtKey = key("voucher_issued_at")
     private val signatureKey = key("voucher_signature")
 
-    fun create(preset: BoosterPreset, audience: Player, overrides: VoucherOverrides = VoucherOverrides()): ItemStack {
+    fun create(preset: BoosterPreset, audience: Player, overrides: VoucherOverrides = VoucherOverrides(), shopPreview: Boolean = false): ItemStack {
         val payload = VoucherPayload(
             presetId = preset.id,
             voucherId = UUID.randomUUID(),
@@ -62,7 +62,7 @@ class VoucherService(
             jobs = overrides.jobs ?: preset.jobs,
             issuedAtEpochSecond = Instant.now().epochSecond,
         )
-        return create(preset, audience, payload)
+        return create(preset, audience, payload, shopPreview)
     }
 
     fun create(preset: BoosterPreset, audience: Player, voucherId: UUID, issuedAtEpochSecond: Long): ItemStack = create(
@@ -79,7 +79,7 @@ class VoucherService(
         ),
     )
 
-    private fun create(preset: BoosterPreset, audience: Player, payload: VoucherPayload): ItemStack {
+    private fun create(preset: BoosterPreset, audience: Player, payload: VoucherPayload, shopPreview: Boolean = false): ItemStack {
         validatePayload(payload)
         val values = displayValues(payload, audience)
         return ItemStack(preset.item.material).apply {
@@ -90,8 +90,18 @@ class VoucherService(
                     ShopCurrency.TOKENS -> locale.render("booster.premium-badge", audience)
                     null -> null
                 }
-                meta.lore((locale.lines(preset.item.loreKey, audience, values) + listOfNotNull(tierBadge))
-                    .map { it.decoration(TextDecoration.ITALIC, false) })
+                val price = preset.price?.takeIf { shopPreview }?.let {
+                    locale.render("menu.shop.price", audience, mapOf(
+                        "price" to locale.text(it.amount.toPlainString()),
+                        "currency" to locale.render("menu.shop.currency-${it.currency.name.lowercase()}", audience),
+                    ))
+                }
+                val action = locale.render(if (shopPreview) "menu.shop.action" else "booster.activate-action", audience)
+                meta.lore(locale.lines(preset.item.loreKey, audience, values, blocks = mapOf(
+                    "tier" to listOfNotNull(tierBadge),
+                    "price" to listOfNotNull(price),
+                    "action" to listOf(action),
+                )).map { it.decoration(TextDecoration.ITALIC, false) })
                 preset.item.customModelData?.let(meta::setCustomModelData)
                 preset.item.itemModel?.let { raw ->
                     meta.setItemModel(NamespacedKey.fromString(raw) ?: error("Invalid item-model for ${preset.id}: $raw"))

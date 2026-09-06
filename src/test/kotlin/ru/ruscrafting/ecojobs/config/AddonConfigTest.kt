@@ -288,16 +288,16 @@ class AddonConfigTest : StringSpec({
         gui.catalog.material shouldBe Material.CRAFTING_TABLE
     }
 
-    "bundled catalog keeps legacy vouchers and exposes nine token offers" {
+    "bundled catalog keeps nine money and nine token offers" {
         val registry = BoosterRegistry.load(
             project.resolve("src/main/resources/boosters.yml").toFile(),
             settings,
             setOf("miner"),
         )
         registry.values().size shouldBe 18
-        registry.values().count { it.shopVisible } shouldBe 9
-        registry.values().filter { it.shopVisible }.all { it.price?.currency == ShopCurrency.TOKENS } shouldBe true
-        registry.values().filterNot { it.shopVisible }.all { it.price?.currency == ShopCurrency.MONEY } shouldBe true
+        registry.values().count { it.shopVisible } shouldBe 18
+        registry.values().count { it.shopVisible && it.price?.currency == ShopCurrency.MONEY } shouldBe 9
+        registry.values().count { it.shopVisible && it.price?.currency == ShopCurrency.TOKENS } shouldBe 9
         registry.values().map { it.item.material }.none {
             it in setOf(Material.EXPERIENCE_BOTTLE, Material.HONEY_BOTTLE, Material.POTION, Material.SPLASH_POTION)
         } shouldBe true

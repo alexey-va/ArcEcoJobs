@@ -14,6 +14,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.inventory.InventoryType
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
@@ -94,6 +95,10 @@ class JobsMenu(
     private val menuRuntimeDelegate = lazy { PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), layouts.current()) }
     private val menuRuntime by menuRuntimeDelegate
     private val activeFrames = mutableMapOf<java.util.UUID, ActiveFrame>()
+    /** Direct NPC/command entry closes on Escape; nested screens still return to their real parent. */
+    private val directEntryViews = mutableMapOf<java.util.UUID, JobsView>()
+    private val inventoryTransitions = mutableSetOf<java.util.UUID>()
+    private val pendingInventoryReturns = mutableMapOf<java.util.UUID, ActiveFrame>()
 
     private val dialogDisplayDelegate = lazy { dialogDisplay ?: NativeJobsDialogDisplay(plugin) }
     private val dialogs by dialogDisplayDelegate
@@ -125,11 +130,15 @@ class JobsMenu(
     fun openRoot(player: Player, presentation: JobsMenuPresentation? = null) {
         val next = presentation ?: settings().menuPresentation
         dismiss(player, closeDialog = next != JobsMenuPresentation.DIALOG)
+        directEntryViews[player.uniqueId] = JobsView.Main
         presentations[player.uniqueId] = next
         open(player)
     }
 
-    fun openShop(player: Player) = openRoot(player).also { open(player, JobsView.Shop(1, JobsView.Main)) }
+    fun openShop(player: Player) = openRoot(player).also {
+        directEntryViews[player.uniqueId] = JobsView.Shop(1, JobsView.Main)
+        open(player, JobsView.Shop(1, JobsView.Main))
+    }
 
     private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
 
@@ -137,6 +146,8 @@ class JobsMenu(
         adminMenu?.invalidate(player)
         activeFrames.remove(player.uniqueId)
         if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG && closeDialog) dialogs.close(player)
+        directEntryViews.remove(player.uniqueId)
+        pendingInventoryReturns.remove(player.uniqueId)
         if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
     }
 
@@ -145,19 +156,51 @@ class JobsMenu(
         adminMenu?.invalidate(event.player)
         activeFrames.remove(event.player.uniqueId)
         presentations.remove(event.player.uniqueId)
+        directEntryViews.remove(event.player.uniqueId)
+        pendingInventoryReturns.remove(event.player.uniqueId)
         pendingClicks.remove(event.player.uniqueId)
     }
 
     @EventHandler
     fun onInventoryClose(event: InventoryCloseEvent) {
-        // Dialog transitions close the old inventory before publishing their frame.
+        // Inventory transitions close the old inventory before publishing their frame.
         if (presentations[event.player.uniqueId] == JobsMenuPresentation.INVENTORY) {
-            activeFrames.remove(event.player.uniqueId)
+            val playerId = event.player.uniqueId
+            val active = activeFrames.remove(playerId)
             presentations.remove(event.player.uniqueId)
+            if (playerId in inventoryTransitions) {
+                pendingInventoryReturns.remove(playerId)
+                return
+            }
+            if (event.reason != InventoryCloseEvent.Reason.PLAYER || active == null) {
+                directEntryViews.remove(playerId)
+                pendingInventoryReturns.remove(playerId)
+                return
+            }
+            val player = event.player as? Player ?: return
+            val parent = parentView(active.view)
+            if (escapeGoesBack(player) && parent != null && !isDirectEntry(playerId, active.view)) {
+                pendingInventoryReturns[playerId] = active
+                plugin.server.scheduler.runTask(plugin, Runnable {
+                    if (pendingInventoryReturns[playerId] !== active || !player.isOnline) return@Runnable
+                    val topType = runCatching { player.openInventory.topInventory.type }.getOrNull()
+                    if (topType != null && topType != InventoryType.CRAFTING) {
+                        pendingInventoryReturns.remove(playerId)
+                        return@Runnable
+                    }
+                    pendingInventoryReturns.remove(playerId)
+                    presentations[playerId] = JobsMenuPresentation.INVENTORY
+                    open(player, parent)
+                })
+            } else {
+                directEntryViews.remove(playerId)
+            }
         }
     }
 
     fun open(player: Player, view: JobsView = JobsView.Main) {
+        // A new screen supersedes any deferred Escape return scheduled by the prior screen.
+        pendingInventoryReturns.remove(player.uniqueId)
         adminMenu?.invalidate(player)
         if (!listening) {
             plugin.server.pluginManager.registerEvents(this, plugin)
@@ -236,6 +279,8 @@ class JobsMenu(
         adminMenu?.clear()
         activeFrames.clear()
         presentations.clear()
+        directEntryViews.clear()
+        pendingInventoryReturns.clear()
         pendingClicks.clear()
         if (menuRuntimeDelegate.isInitialized()) menuRuntime.close()
         if (dialogDisplayDelegate.isInitialized()) dialogs.close()
@@ -723,8 +768,12 @@ class JobsMenu(
         show(player, currentView, inventory)
     }
 
+    private fun shopOffers(): List<BoosterPreset> = boosters().values()
+        .filter { it.enabled && it.shopVisible && it.price != null }
+        .sortedWith(compareBy({ it.price!!.currency != ShopCurrency.MONEY }, { it.price!!.amount }, { it.id }))
+
     private fun openShop(player: Player, view: JobsView.Shop) {
-        val offers = boosters().values().filter { it.enabled && it.shopVisible && it.price != null }
+        val offers = shopOffers()
         val content = content(view, player)
         val pages = pageCount(offers.size, content.size)
         val current = view.copy(page = view.page.coerceIn(1, pages))
@@ -747,7 +796,7 @@ class JobsMenu(
     }
 
     private fun clickShop(player: Player, view: JobsView.Shop, slot: Int) {
-        val offers = boosters().values().filter { it.enabled && it.shopVisible && it.price != null }
+        val offers = shopOffers()
         val content = content(view, player)
         val index = content.indexOf(slot)
         if (index >= 0) {
@@ -971,8 +1020,13 @@ class JobsMenu(
             showDialog(player, active)
         } else {
             // Closing the previous inventory fires synchronously; publish ownership afterwards.
-            if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
-            player.closeInventory()
+            inventoryTransitions += player.uniqueId
+            try {
+                if (menuRuntimeDelegate.isInitialized()) menuRuntime.session(player)?.close()
+                player.closeInventory()
+            } finally {
+                inventoryTransitions -= player.uniqueId
+            }
             presentations[player.uniqueId] = presentation
             activeFrames[player.uniqueId] = ActiveFrame(view, frame)
             menuRuntime.open(player, JobsMenuLayouts.menu(view)) {
@@ -987,13 +1041,41 @@ class JobsMenu(
         fun current() = player.isOnline && activeFrames[player.uniqueId] === active &&
             active.revision == revision && player.uniqueId !in pendingClicks
         val screen = JobsDialogScreens.screen(
-            player, active.view, active.frame, layouts, locale, active.detailSlot, escapeGoesBack(player),
+            player, active.view, active.frame, layouts, locale, active.detailSlot,
+            escapeGoesBack(player) && !isDirectEntry(player.uniqueId, active.view),
             actionable = { id, index -> dialogActionable(player, active.view, id, index) },
             click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
             detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
             close = { if (current()) dismiss(player) },
         )
         dialogs.show(player, screen)
+    }
+
+    private fun parentView(view: JobsView): JobsView? = when (view) {
+        JobsView.Main -> null
+        is JobsView.Catalog -> view.back
+        is JobsView.JobCard -> view.back
+        is JobsView.LeaveConfirm -> view.back
+        is JobsView.Levels -> view.back
+        is JobsView.Earnings -> view.back
+        is JobsView.EarningsHours -> view.back
+        is JobsView.LeaderboardSelector -> view.back
+        is JobsView.Leaderboard -> view.back
+        is JobsView.Boosts -> view.back
+        is JobsView.Help -> view.back
+        is JobsView.Admin -> view.back
+        is JobsView.Presets -> view.back
+        is JobsView.Shop -> view.back
+        is JobsView.ShopConfirm -> view.back
+    }
+
+    private fun isDirectEntry(playerId: java.util.UUID, view: JobsView): Boolean {
+        val entry = directEntryViews[playerId] ?: return false
+        return when {
+            entry is JobsView.Main && view is JobsView.Main -> true
+            entry is JobsView.Shop && view is JobsView.Shop -> true
+            else -> entry == view
+        }
     }
 
     private fun dialogActionable(player: Player, view: JobsView, id: String, index: Int?): Boolean {

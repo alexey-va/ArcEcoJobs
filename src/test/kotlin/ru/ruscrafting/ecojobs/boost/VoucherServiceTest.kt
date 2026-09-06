@@ -13,6 +13,7 @@ import ru.ruscrafting.ecojobs.config.BoosterItemDefinition
 import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.GuiItems
 import ru.ruscrafting.ecojobs.config.JobsLocale
+import ru.ruscrafting.ecojobs.config.ShopCurrency
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
 import ru.ruscrafting.ecojobs.domain.VoucherSigner
@@ -116,6 +117,16 @@ class VoucherServiceTest : StringSpec({
         valid.payload.multiplierBasisPoints shouldBe 150
         valid.payload.durationSeconds shouldBe 3_600
         valid.payload.jobs shouldBe setOf("miner")
+    }
+
+    "priced vouchers expose a separate currency tier badge" {
+        val player = paper.server.getPlayer("VoucherQA")!!
+        val moneyLore = service.create(preset.copy(price = ru.ruscrafting.ecojobs.config.BoosterPrice(ShopCurrency.MONEY, java.math.BigDecimal("1500"))), player)
+            .itemMeta.lore.orEmpty()
+        val tokenLore = service.create(preset.copy(price = ru.ruscrafting.ecojobs.config.BoosterPrice(ShopCurrency.TOKENS, java.math.BigDecimal("90"))), player)
+            .itemMeta.lore.orEmpty()
+        moneyLore.any { it.contains("ОБЫЧНЫЕ МОНЕТЫ") } shouldBe true
+        tokenLore.any { it.contains("ПРЕМИУМ") && it.contains("жетоны") } shouldBe true
     }
 
     "changing a signed field makes a voucher invalid" {

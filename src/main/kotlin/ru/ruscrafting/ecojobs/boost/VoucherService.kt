@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.BoosterPreset
 import ru.ruscrafting.ecojobs.config.JobsLocale
+import ru.ruscrafting.ecojobs.config.ShopCurrency
 import ru.ruscrafting.ecojobs.domain.BoostType
 import ru.ruscrafting.ecojobs.domain.Multipliers
 import ru.ruscrafting.ecojobs.domain.VoucherPayload
@@ -84,7 +85,13 @@ class VoucherService(
         return ItemStack(preset.item.material).apply {
             editMeta { meta ->
                 meta.displayName(locale.render(preset.item.nameKey, audience, values).decoration(TextDecoration.ITALIC, false))
-                meta.lore(locale.lines(preset.item.loreKey, audience, values).map { it.decoration(TextDecoration.ITALIC, false) })
+                val tierBadge = when (preset.price?.currency) {
+                    ShopCurrency.MONEY -> locale.render("booster.money-badge", audience)
+                    ShopCurrency.TOKENS -> locale.render("booster.premium-badge", audience)
+                    null -> null
+                }
+                meta.lore((locale.lines(preset.item.loreKey, audience, values) + listOfNotNull(tierBadge))
+                    .map { it.decoration(TextDecoration.ITALIC, false) })
                 preset.item.customModelData?.let(meta::setCustomModelData)
                 preset.item.itemModel?.let { raw ->
                     meta.setItemModel(NamespacedKey.fromString(raw) ?: error("Invalid item-model for ${preset.id}: $raw"))

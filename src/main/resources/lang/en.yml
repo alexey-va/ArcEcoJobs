@@ -406,56 +406,58 @@ menu:
     preset-action-disabled: '<#8c8c8c>Issuing is disabled in configuration'
 
 booster:
+  money-badge: '<#c8a477>¤ REGULAR COINS'
+  premium-badge: '<#ffd27a>✦ PREMIUM · payment: tokens'
   premium-all-3d:
-    name: '<#79c99e><b>Premium: all ×1.5 · 3d</b>'
+    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 3d</b>'
   premium-all-7d:
-    name: '<#79c99e><b>Premium: all ×1.5 · 7d</b>'
+    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 7d</b>'
   premium-all-14d:
-    name: '<#79c99e><b>Premium: all ×1.5 · 14d</b>'
+    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 14d</b>'
   premium-xp-3d:
-    name: '<#92bed8><b>Premium: XP ×2 · 3d</b>'
+    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 3d</b>'
   premium-xp-7d:
-    name: '<#92bed8><b>Premium: XP ×2 · 7d</b>'
+    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 7d</b>'
   premium-xp-14d:
-    name: '<#92bed8><b>Premium: XP ×2 · 14d</b>'
+    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 14d</b>'
   premium-money-3d:
-    name: '<#d8a657><b>Premium: money ×2 · 3d</b>'
+    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 3d</b>'
   premium-money-7d:
-    name: '<#d8a657><b>Premium: money ×2 · 7d</b>'
+    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 7d</b>'
   premium-money-14d:
-    name: '<#d8a657><b>Premium: money ×2 · 14d</b>'
+    name: '<#ffd27a><b>Job boost · ¤ money ×2 · 14d</b>'
   brief-shift:
-    name: '<#79c99e><b>Short-shift shard</b>'
+    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 15m</b>'
   workday:
-    name: '<#79c99e><b>Work-shift clock</b>'
+    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 1h</b>'
   long-shift:
-    name: '<#79c99e><b>Long-shift echo</b>'
+    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 3h</b>'
   focused-xp:
-    name: '<#92bed8><b>Mastery lapis</b>'
+    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 30m</b>'
   mastery-shift:
-    name: '<#92bed8><b>Mastery book</b>'
+    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 2h</b>'
   mastery-marathon:
-    name: '<#92bed8><b>Mentor seal</b>'
+    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 4h</b>'
   quick-profit:
-    name: '<#d8a657><b>Golden receipt</b>'
+    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 30m</b>'
   profit-shift:
-    name: '<#d8a657><b>Emerald contract</b>'
+    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 2h</b>'
   profit-marathon:
-    name: '<#d8a657><b>Treasurer seal</b>'
+    name: '<#d8a657><b>Job boost · ¤ money ×1.5 · 4h</b>'
   common:
     lore:
-      - '<#8c8c8c>Transferable job booster voucher'
+      - '<#f4b860>◆ Transferable job booster voucher'
       - ''
-      - '<#e6fff3>Effect: <#92bed8><type>'
-      - '<#e6fff3>Multiplier: <#92bed8><multiplier>'
-      - '<#e6fff3>Duration: <#92bed8><duration>'
-      - '<#e6fff3>Jobs: <#92bed8><jobs>'
+      - '<#c8a477>Effect: <#fff0d6><type>'
+      - '<#c8a477>Multiplier: <#fff0d6><multiplier>'
+      - '<#c8a477>Duration: <#fff0d6><duration>'
+      - '<#c8a477>Jobs: <#fff0d6><jobs>'
       - '<#8c8c8c>Duration starts on activation and runs while offline'
       - ''
-      - '<#8c8c8c>Matching effects add their duration'
-      - '<#8c8c8c>Another type can start after this one ends'
+      - '<#c8a477>Matching effects add their duration'
+      - '<#c8a477>Another type can start after this one ends'
       - ''
-      - '<#92bed8>Right-click to activate'
+      - '<#ffd27a>Right-click to activate'
 
 dialog:
   shop:

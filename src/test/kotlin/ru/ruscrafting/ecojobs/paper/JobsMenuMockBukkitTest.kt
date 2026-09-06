@@ -31,6 +31,7 @@ import org.bukkit.Material
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryAction
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.inventory.InventoryType
 import org.bukkit.inventory.Inventory
@@ -265,8 +266,9 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val job = mockJob(h)
                 every { h.ecoJobs.jobs() } returns listOf(job)
                 h.menu.openRoot(h.player)
-                screens.last().exitButton?.id?.value shouldBe "back"
-                screens.last().buttons.none { it.id.value == "back" } shouldBe true
+                // Direct NPC/command entry has no synthetic parent: Escape closes it.
+                screens.last().exitButton?.id?.value shouldBe "close"
+                screens.last().buttons.any { it.id.value == "back" } shouldBe true
                 fun click(id: String) {
                     val screen = screens.last()
                     (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }
@@ -299,6 +301,52 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click("close")
                 last.exitButton!!.onClick.handle(mockk(relaxed = true))
                 screens.last() shouldBe last
+            }
+        }
+    }
+
+    "inventory Escape closes direct shop entry and returns nested shop history including page" {
+        MockBukkitTestRuntime.open().use { paper ->
+            menuHarness(paper, JobsMenuPresentation.INVENTORY, escapeBack = { true }).use { h ->
+                val project = Path.of(System.getProperty("arcecojobs.projectDir"))
+                val registry = BoosterRegistry.load(
+                    project.resolve("src/main/resources/boosters.yml").toFile(),
+                    AddonSettings.load(project.resolve("src/main/resources/config.yml").toFile()),
+                    setOf("miner"),
+                )
+                val preset = registry.values().first()
+                val offers = List(29) { preset }
+                every { h.boosters.values() } returns offers
+                every { h.boosters.get(preset.id) } returns preset
+                every { h.vouchers.create(any(), h.player) } returns ItemStack(Material.PAPER)
+
+                h.menu.openShop(h.player)
+                h.menu.open(h.player, JobsView.Shop(2, JobsView.Main))
+                h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
+                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                paper.performTicks(1)
+                h.player.openInventory.topInventory.getItem(h.layouts.slot(JobsView.Shop(2, JobsView.Main), "previous")) shouldNotBe null
+                plain(h.player.openInventory.title()) shouldBe "Магазин усилителей"
+                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                paper.performTicks(1)
+                runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Работы"
+
+                // A new screen opened before the deferred return runs owns the next tick.
+                h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
+                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                h.menu.open(h.player, JobsView.Main)
+                paper.performTicks(1)
+                plain(h.player.openInventory.title()) shouldBe "Работы"
+
+                h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
+                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLUGIN))
+                paper.performTicks(1)
+                runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Магазин усилителей"
+
+                h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
+                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.DISCONNECT))
+                paper.performTicks(1)
+                runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Магазин усилителей"
             }
         }
     }

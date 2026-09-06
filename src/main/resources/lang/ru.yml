@@ -442,41 +442,41 @@ booster:
   premium-badge: <#c5a2f2>✦ Премиум-талон
 
   premium-all-3d:
-    name: '<#ffd27a><b>Буст работ · ◆ всё ×1.5 · 3д</b>'
+    name: '<#ffd27a><b>Буст работ ◆ всё ×1.5 · 3д</b>'
   premium-all-7d:
-    name: '<#ffd27a><b>Буст работ · ◆ всё ×1.5 · 7д</b>'
+    name: '<#ffd27a><b>Буст работ ◆ всё ×1.5 · 7д</b>'
   premium-all-14d:
-    name: '<#ffd27a><b>Буст работ · ◆ всё ×1.5 · 14д</b>'
+    name: '<#ffd27a><b>Буст работ ◆ всё ×1.5 · 14д</b>'
   premium-xp-3d:
-    name: '<#f4b860><b>Буст работ · ✦ опыт ×2 · 3д</b>'
+    name: '<#f4b860><b>Буст работ ✦ опыт ×2 · 3д</b>'
   premium-xp-7d:
-    name: '<#f4b860><b>Буст работ · ✦ опыт ×2 · 7д</b>'
+    name: '<#f4b860><b>Буст работ ✦ опыт ×2 · 7д</b>'
   premium-xp-14d:
-    name: '<#f4b860><b>Буст работ · ✦ опыт ×2 · 14д</b>'
+    name: '<#f4b860><b>Буст работ ✦ опыт ×2 · 14д</b>'
   premium-money-3d:
-    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 3д</b>'
+    name: '<#ffd27a><b>Буст работ <white>💰</white> деньги ×2 · 3д</b>'
   premium-money-7d:
-    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 7д</b>'
+    name: '<#ffd27a><b>Буст работ <white>💰</white> деньги ×2 · 7д</b>'
   premium-money-14d:
-    name: '<#ffd27a><b>Буст работ · <white>💰</white> деньги ×2 · 14д</b>'
+    name: '<#ffd27a><b>Буст работ <white>💰</white> деньги ×2 · 14д</b>'
   brief-shift:
-    name: '<#79c99e><b>Буст работ · ◆ всё ×1.5 · 15 мин</b>'
+    name: '<#79c99e><b>Буст работ ◆ всё ×1.5 · 15 мин</b>'
   workday:
-    name: '<#79c99e><b>Буст работ · ◆ всё ×1.5 · 1 ч</b>'
+    name: '<#79c99e><b>Буст работ ◆ всё ×1.5 · 1 ч</b>'
   long-shift:
-    name: '<#79c99e><b>Буст работ · ◆ всё ×1.5 · 3 ч</b>'
+    name: '<#79c99e><b>Буст работ ◆ всё ×1.5 · 3 ч</b>'
   focused-xp:
-    name: '<#92bed8><b>Буст работ · ✦ опыт ×2 · 30 мин</b>'
+    name: '<#92bed8><b>Буст работ ✦ опыт ×2 · 30 мин</b>'
   mastery-shift:
-    name: '<#92bed8><b>Буст работ · ✦ опыт ×2 · 2 ч</b>'
+    name: '<#92bed8><b>Буст работ ✦ опыт ×2 · 2 ч</b>'
   mastery-marathon:
-    name: '<#92bed8><b>Буст работ · ✦ опыт ×2 · 4 ч</b>'
+    name: '<#92bed8><b>Буст работ ✦ опыт ×2 · 4 ч</b>'
   quick-profit:
-    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 30 мин</b>'
+    name: '<#d8a657><b>Буст работ <white>💰</white> деньги ×1.5 · 30 мин</b>'
   profit-shift:
-    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 2 ч</b>'
+    name: '<#d8a657><b>Буст работ <white>💰</white> деньги ×1.5 · 2 ч</b>'
   profit-marathon:
-    name: '<#d8a657><b>Буст работ · <white>💰</white> деньги ×1.5 · 4 ч</b>'
+    name: '<#d8a657><b>Буст работ <white>💰</white> деньги ×1.5 · 4 ч</b>'
   common:
     lore:
     - ''

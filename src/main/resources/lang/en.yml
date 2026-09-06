@@ -442,41 +442,41 @@ booster:
   premium-badge: <#c5a2f2>✦ Premium voucher
 
   premium-all-3d:
-    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 3d</b>'
+    name: '<#ffd27a><b>Job boost ◆ all ×1.5 · 3d</b>'
   premium-all-7d:
-    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 7d</b>'
+    name: '<#ffd27a><b>Job boost ◆ all ×1.5 · 7d</b>'
   premium-all-14d:
-    name: '<#ffd27a><b>Job boost · ◆ all ×1.5 · 14d</b>'
+    name: '<#ffd27a><b>Job boost ◆ all ×1.5 · 14d</b>'
   premium-xp-3d:
-    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 3d</b>'
+    name: '<#f4b860><b>Job boost ✦ XP ×2 · 3d</b>'
   premium-xp-7d:
-    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 7d</b>'
+    name: '<#f4b860><b>Job boost ✦ XP ×2 · 7d</b>'
   premium-xp-14d:
-    name: '<#f4b860><b>Job boost · ✦ XP ×2 · 14d</b>'
+    name: '<#f4b860><b>Job boost ✦ XP ×2 · 14d</b>'
   premium-money-3d:
-    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 3d</b>'
+    name: '<#ffd27a><b>Job boost <white>💰</white> money ×2 · 3d</b>'
   premium-money-7d:
-    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 7d</b>'
+    name: '<#ffd27a><b>Job boost <white>💰</white> money ×2 · 7d</b>'
   premium-money-14d:
-    name: '<#ffd27a><b>Job boost · <white>💰</white> money ×2 · 14d</b>'
+    name: '<#ffd27a><b>Job boost <white>💰</white> money ×2 · 14d</b>'
   brief-shift:
-    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 15m</b>'
+    name: '<#79c99e><b>Job boost ◆ all ×1.5 · 15m</b>'
   workday:
-    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 1h</b>'
+    name: '<#79c99e><b>Job boost ◆ all ×1.5 · 1h</b>'
   long-shift:
-    name: '<#79c99e><b>Job boost · ◆ all ×1.5 · 3h</b>'
+    name: '<#79c99e><b>Job boost ◆ all ×1.5 · 3h</b>'
   focused-xp:
-    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 30m</b>'
+    name: '<#92bed8><b>Job boost ✦ XP ×2 · 30m</b>'
   mastery-shift:
-    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 2h</b>'
+    name: '<#92bed8><b>Job boost ✦ XP ×2 · 2h</b>'
   mastery-marathon:
-    name: '<#92bed8><b>Job boost · ✦ XP ×2 · 4h</b>'
+    name: '<#92bed8><b>Job boost ✦ XP ×2 · 4h</b>'
   quick-profit:
-    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 30m</b>'
+    name: '<#d8a657><b>Job boost <white>💰</white> money ×1.5 · 30m</b>'
   profit-shift:
-    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 2h</b>'
+    name: '<#d8a657><b>Job boost <white>💰</white> money ×1.5 · 2h</b>'
   profit-marathon:
-    name: '<#d8a657><b>Job boost · <white>💰</white> money ×1.5 · 4h</b>'
+    name: '<#d8a657><b>Job boost <white>💰</white> money ×1.5 · 4h</b>'
   common:
     lore:
     - ''

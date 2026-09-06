@@ -407,23 +407,23 @@ menu:
 
 booster:
   premium-all-3d:
-    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Премиум: все ×1.5 · 3д</b>'
   premium-all-7d:
-    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Премиум: все ×1.5 · 7д</b>'
   premium-all-14d:
-    name: '<#79c99e><b>Премиум: все ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Премиум: все ×1.5 · 14д</b>'
   premium-xp-3d:
-    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+    name: '<#92bed8><b>Премиум: опыт ×2 · 3д</b>'
   premium-xp-7d:
-    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+    name: '<#92bed8><b>Премиум: опыт ×2 · 7д</b>'
   premium-xp-14d:
-    name: '<#92bed8><b>Премиум: опыт ×2 · <duration></b>'
+    name: '<#92bed8><b>Премиум: опыт ×2 · 14д</b>'
   premium-money-3d:
-    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
+    name: '<#d8a657><b>Премиум: деньги ×2 · 3д</b>'
   premium-money-7d:
-    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
+    name: '<#d8a657><b>Премиум: деньги ×2 · 7д</b>'
   premium-money-14d:
-    name: '<#d8a657><b>Премиум: деньги ×2 · <duration></b>'
+    name: '<#d8a657><b>Премиум: деньги ×2 · 14д</b>'
   brief-shift:
     name: '<#79c99e><b>Осколок короткой смены</b>'
   workday:

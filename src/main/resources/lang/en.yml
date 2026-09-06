@@ -407,23 +407,23 @@ menu:
 
 booster:
   premium-all-3d:
-    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Premium: all ×1.5 · 3d</b>'
   premium-all-7d:
-    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Premium: all ×1.5 · 7d</b>'
   premium-all-14d:
-    name: '<#79c99e><b>Premium: all ×1.5 · <duration></b>'
+    name: '<#79c99e><b>Premium: all ×1.5 · 14d</b>'
   premium-xp-3d:
-    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+    name: '<#92bed8><b>Premium: XP ×2 · 3d</b>'
   premium-xp-7d:
-    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+    name: '<#92bed8><b>Premium: XP ×2 · 7d</b>'
   premium-xp-14d:
-    name: '<#92bed8><b>Premium: XP ×2 · <duration></b>'
+    name: '<#92bed8><b>Premium: XP ×2 · 14d</b>'
   premium-money-3d:
-    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
+    name: '<#d8a657><b>Premium: money ×2 · 3d</b>'
   premium-money-7d:
-    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
+    name: '<#d8a657><b>Premium: money ×2 · 7d</b>'
   premium-money-14d:
-    name: '<#d8a657><b>Premium: money ×2 · <duration></b>'
+    name: '<#d8a657><b>Premium: money ×2 · 14d</b>'
   brief-shift:
     name: '<#79c99e><b>Short-shift shard</b>'
   workday:

@@ -15,7 +15,7 @@ internal class JobsAdminMenu(
     private val locale: JobsLocale,
     private val boosters: () -> BoosterRegistry,
     private val execute: (Player, List<String>, (List<Component>) -> Unit) -> Unit,
-    private val display: (Player, PaperDialogScreen) -> Unit,
+    private val display: JobsDialogDisplay,
     private val closeDialog: (Player) -> Unit,
     private val returnToJobs: (Player) -> Unit,
     private val escapeBack: (Player) -> Boolean,
@@ -77,7 +77,7 @@ internal class JobsAdminMenu(
             if (allowed(player, "diagnose")) add(button(player, "diagnose") { run(player, "diagnose", listOf("diagnose")) { open(player) } })
             if (allowed(player, "reload")) add(button(player, "reload") { confirm(player, "reload", emptyMap(), listOf("reload")) { open(player) } })
         }
-        show(player, "root", text(player, "title"), listOf(text(player, "description")), buttons, back = { returnToJobs(player) })
+        show(player, "root", text(player, "title"), listOf(text(player, "description")), buttons, reopen = { open(player) }, back = { returnToJobs(player) })
     }
 
     private fun presets(player: Player, page: Int = 0) {
@@ -86,7 +86,7 @@ internal class JobsAdminMenu(
         val current = page.coerceIn(0, ((entries.size - 1) / 6).coerceAtLeast(0))
         val buttons = entries.drop(current * 6).take(6).mapIndexed { i, preset ->
             PaperDialogButton(PaperDialogActionId.of("preset_$i"), locale.render(preset.item.nameKey, player),
-                tooltip = Component.text(preset.id), width = 210, onClick = {
+                tooltip = Component.text(preset.id), width = 230, onClick = {
                     run(player, "presets", listOf("booster", "inspect", preset.id),
                         extra = if (preset.enabled) listOf(button(player, "give") { form(player, "give", mapOf("preset" to preset.id)) }) else emptyList(),
                     ) { presets(player, current) }
@@ -94,7 +94,7 @@ internal class JobsAdminMenu(
         }.toMutableList()
         if (current > 0) buttons += navigation(player, "previous") { presets(player, current - 1) }
         if ((current + 1) * 6 < entries.size) buttons += navigation(player, "next") { presets(player, current + 1) }
-        show(player, "presets", text(player, "action.presets"), listOf(text(player, "presets-description")), buttons, back = { open(player) })
+        show(player, "presets", text(player, "action.presets"), listOf(text(player, "presets-description")), buttons, reopen = { presets(player, current) }, back = { open(player) })
     }
 
     private data class Field(val id: String, val default: String = "", val max: Int = 64)
@@ -111,7 +111,7 @@ internal class JobsAdminMenu(
         val fields = fields(action, player)
         val inputs = fields.map { field -> PaperDialogTextInput(
             PaperDialogInputId.of(field.id), text(player, "field.${field.id}"),
-            initial = (values[field.id] ?: field.default).take(field.max), width = 420, maxLength = field.max,
+            initial = (values[field.id] ?: field.default).take(field.max), width = 468, maxLength = field.max,
         ) }
         val submit = button(player, if (action in setOf("give", "give_options")) "continue" else if (action == "list") "show" else "review") { context ->
             val submitted = values + fields.associate { field -> field.id to context.text(PaperDialogInputId.of(field.id)).orEmpty().trim() }
@@ -145,12 +145,12 @@ internal class JobsAdminMenu(
             "field" to text(player, "field.$key"), "value" to (if (value.isBlank()) text(player, "preset-default") else Component.text(value)),
         )) }
         show(player, "confirm", text(player, "action.$action"), listOf(text(player, "confirm"), Component.join(JoinConfiguration.newlines(), summary)),
-            listOf(button(player, "confirm") { run(player, action, args, back = back) }), back = back)
+            listOf(button(player, "confirm") { run(player, action, args, back = back) }), reopen = { confirm(player, action, values, args, back) }, back = back)
     }
 
     private fun run(player: Player, action: String, args: List<String>, extra: List<PaperDialogButton> = emptyList(), back: () -> Unit) {
         if (!allowed(player, action)) return denied(player)
-        val visit = show(player, "loading", text(player, "action.$action"), listOf(text(player, "loading")), emptyList(), back = back)
+        val visit = show(player, "result.$action", text(player, "action.$action"), listOf(text(player, "loading")), emptyList(), back = back)
         execute(player, args) { messages ->
             if (visits[player.uniqueId] !== visit || !player.isOnline) return@execute
             if (!allowed(player, action)) return@execute denied(player)
@@ -163,42 +163,42 @@ internal class JobsAdminMenu(
         val buttons = extra.toMutableList()
         if (page > 0) buttons += navigation(player, "previous") { result(player, action, messages, page - 1, extra, back) }
         if ((page + 1) * 5 < messages.size) buttons += navigation(player, "next") { result(player, action, messages, page + 1, extra, back) }
-        show(player, "result", text(player, "action.$action"), listOf(text(player, "result")) + messages.drop(page * 5).take(5), buttons, back = back)
+        show(player, "result.$action", text(player, "action.$action"), listOf(text(player, "result")) + messages.drop(page * 5).take(5), buttons, reopen = { result(player, action, messages, page, extra, back) }, back = back)
     }
 
     private fun denied(player: Player) {
         show(player, "denied", text(player, "title"), listOf(locale.render("message.no-permission", player)), emptyList(), back = { returnToJobs(player) })
     }
 
-    private fun show(player: Player, id: String, title: Component, body: List<Component>, actions: List<PaperDialogButton>, inputs: List<PaperDialogTextInput> = emptyList(), back: () -> Unit): Any {
+    private fun show(player: Player, id: String, title: Component, body: List<Component>, actions: List<PaperDialogButton>, inputs: List<PaperDialogTextInput> = emptyList(), reopen: (() -> Unit)? = null, back: () -> Unit): Any {
         val visit = Any()
         visits[player.uniqueId] = visit
         val backButton = navigation(player, "back") { back() }
-        val closeButton = navigation(player, "close") { closeDialog(player) }
+        val closeButton = navigation(player, "close") { invalidate(player); closeDialog(player) }
         val goesBack = escapeBack(player)
         fun guard(button: PaperDialogButton) = button.copy(onClick = { context ->
-            if (visits[player.uniqueId] === visit && player.isOnline) {
+            if (player.isOnline && (inputs.isNotEmpty() || visits[player.uniqueId] === visit)) {
                 visits.remove(player.uniqueId)
                 button.onClick.handle(context)
             }
         })
-        display(player, PaperDialogScreen(
-            id = "ecojobs.admin.$id", title = title.decoration(TextDecoration.ITALIC, false),
-            body = body.map { PaperDialogBody(it.decoration(TextDecoration.ITALIC, false), 440) }, inputs = inputs,
-            buttons = (actions + if (goesBack) closeButton else backButton).map(::guard),
+        display.show(player, PaperDialogScreen(
+            id = "ecojobs.admin.$id", title = title.color(net.kyori.adventure.text.format.TextColor.color(0xf4bd6a)).decoration(TextDecoration.ITALIC, false),
+            body = body.map { PaperDialogBody(JobsDialogStyle.text(it), 468) }, inputs = inputs,
+            buttons = actions.map { guard(it.copy(label = JobsDialogStyle.text(it.label), tooltip = JobsDialogStyle.text(it.tooltip))) },
             exitButton = guard((if (goesBack) backButton else closeButton).copy(width = 200)), columns = 2,
-        ))
+        ), reopen = reopen, onDismiss = { if (visits[player.uniqueId] === visit) invalidate(player) }, closeOnEscape = !goesBack)
         return visit
     }
 
     private fun button(player: Player, action: String, handler: (PaperDialogClickContext) -> Unit) = PaperDialogButton(
-        PaperDialogActionId.of(action), text(player, "action.$action"), width = 210, onClick = { handler(it) },
+        PaperDialogActionId.of(action), text(player, "action.$action"), width = 230, onClick = { handler(it) },
     )
     private fun navigation(player: Player, action: String, handler: () -> Unit) = PaperDialogButton(
-        PaperDialogActionId.of(action), locale.render("common.$action-name", player).decoration(TextDecoration.ITALIC, false), width = 210, onClick = { handler() },
+        PaperDialogActionId.of(action), locale.render("common.$action-name", player).decoration(TextDecoration.ITALIC, false), width = 230, onClick = { handler() },
     )
     private fun text(player: Player, key: String, values: Map<String, Component> = emptyMap()) =
-        locale.render("admin-dialog.$key", player, values).decoration(TextDecoration.ITALIC, false)
+        JobsDialogStyle.text(locale.render("admin-dialog.$key", player, values))
 
     private fun allowed(player: Player, action: String) = player.hasPermission("arcecojobs.admin.${when (action) {
         "presets", "hand", "give", "give_options" -> "booster"

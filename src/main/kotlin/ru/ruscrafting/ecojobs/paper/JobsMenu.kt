@@ -111,7 +111,7 @@ class JobsMenu(
             plugin.server.pluginManager.registerEvents(this, plugin)
             listening = true
         }
-        adminMenu = JobsAdminMenu(locale, boosters, execute, { player, screen -> dialogs.show(player, screen) },
+        adminMenu = JobsAdminMenu(locale, boosters, execute, dialogs,
             { player -> dialogs.close(player) }, { player -> openRoot(player, JobsMenuPresentation.DIALOG) }, escapeGoesBack)
     }
 
@@ -120,6 +120,7 @@ class JobsMenu(
         if (command !in setOf("admin", "help", "reload", "boosters", "booster", "boost", "diagnose")) return false
         if (command != "admin" && !JobsAdminMenu.canOpen(player)) return false
         val admin = adminMenu ?: return false
+        dialogs.beginFlow(player)
         dismiss(player, closeDialog = false)
         admin.route(player, args)
         return true
@@ -129,6 +130,7 @@ class JobsMenu(
 
     fun openRoot(player: Player, presentation: JobsMenuPresentation? = null) {
         val next = presentation ?: settings().menuPresentation
+        if (next == JobsMenuPresentation.DIALOG) dialogs.beginFlow(player)
         dismiss(player, closeDialog = next != JobsMenuPresentation.DIALOG)
         directEntryViews[player.uniqueId] = JobsView.Main
         presentations[player.uniqueId] = next
@@ -229,7 +231,7 @@ class JobsMenu(
     private fun dispatchClick(player: Player, view: JobsView, slot: Int) {
         val expected = activeFrames[player.uniqueId] ?: return
         if (!pendingClicks.add(player.uniqueId)) return
-        plugin.server.scheduler.runTask(plugin, Runnable {
+        val action = Runnable {
             try {
                 if (!player.isOnline || activeFrames[player.uniqueId] !== expected) return@Runnable
                 if (!usesDialog(player) && menuRuntime.session(player) == null) return@Runnable
@@ -265,7 +267,10 @@ class JobsMenu(
                 // Core consumes the whole registration, including rejected/no-op actions.
                 if (usesDialog(player) && activeFrames[player.uniqueId] === expected) showDialog(player, expected)
             }
-        })
+        }
+        // Native callbacks must open their child before Core's dispatch scope ends.
+        // Inventory events still defer mutations until the event has completed.
+        if (usesDialog(player)) action.run() else plugin.server.scheduler.runTask(plugin, action)
     }
 
     fun replaceMenus(candidate: PaperMenuConfiguration) {
@@ -1033,13 +1038,23 @@ class JobsMenu(
             active.revision == revision && player.uniqueId !in pendingClicks
         val screen = JobsDialogScreens.screen(
             player, active.view, active.frame, layouts, locale, active.detailSlot,
-            escapeGoesBack(player) && !isDirectEntry(player.uniqueId, active.view),
+            escapeGoesBack(player),
             actionable = { id, index -> dialogActionable(player, active.view, id, index) },
             click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
             detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
             close = { if (current()) dismiss(player) },
         )
-        dialogs.show(player, screen)
+        dialogs.show(player, screen,
+            reopen = if (active.detailSlot != null) null else ({
+                presentations[player.uniqueId] = JobsMenuPresentation.DIALOG
+                open(player, active.view)
+            }),
+            onDismiss = {
+                if (activeFrames[player.uniqueId] === active) activeFrames.remove(player.uniqueId)
+                active.revision++
+            },
+            closeOnEscape = !escapeGoesBack(player),
+        )
     }
 
     private fun parentView(view: JobsView): JobsView? = when (view) {

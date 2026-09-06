@@ -1,13 +1,13 @@
 prefix: '<#92bed8>Работы <#666666>• '
 
 common:
-  back-name: '<#92bed8>Назад'
+  back-name: '<#aaa49a>‹ Назад'
   back-lore: '<#8c8c8c>Вернуться на предыдущий экран'
   previous-name: '<#92bed8>Предыдущая страница'
   previous-lore: '<#8c8c8c>Страница <page> из <pages>'
   next-name: '<#92bed8>Следующая страница'
   next-lore: '<#8c8c8c>Страница <page> из <pages>'
-  close-name: '<#92bed8>Закрыть'
+  close-name: '<#aaa49a>Закрыть'
   loading: '<#8c8c8c>Данные загружаются…'
   none: '<#8c8c8c>Нет'
   all-jobs: 'Все профессии'

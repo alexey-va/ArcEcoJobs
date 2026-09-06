@@ -214,8 +214,8 @@ class JobsMenuMockBukkitTest : StringSpec({
                 root.id shouldBe "ecojobs.main"
                 plain(root.title) shouldBe "Работы"
                 root.title.color()?.value() shouldBe 0xf4bd6a
-                root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help", "back")
-                root.exitButton?.id?.value shouldBe "close"
+                root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help")
+                root.exitButton?.id?.value shouldBe "back"
                 root.canCloseWithEscape shouldBe true
                 (h.player.openInventory.topInventory?.type == InventoryType.CHEST) shouldBe false
                 root.body.joinToString { plain(it.text) }.contains("MenuQA") shouldBe true
@@ -239,7 +239,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click(screens.last(), "detail_back")
                 screens.last().id shouldBe "ecojobs.help"
                 val old = screens.last()
-                click(old, "close")
+                h.menu.onQuit(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
                 click(old, "back")
                 screens.last() shouldBe old
                 h.menu.openRoot(h.player, JobsMenuPresentation.INVENTORY)
@@ -267,9 +267,9 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val job = mockJob(h)
                 every { h.ecoJobs.jobs() } returns listOf(job)
                 h.menu.openRoot(h.player)
-                // Direct NPC/command entry has no synthetic parent: Escape closes it.
-                screens.last().exitButton?.id?.value shouldBe "close"
-                screens.last().buttons.any { it.id.value == "back" } shouldBe true
+                // Core decides whether Back has an actual parent; the model supplies the localized footer.
+                screens.last().exitButton?.id?.value shouldBe "back"
+                screens.last().buttons.any { it.id.value == "back" } shouldBe false
                 fun click(id: String) {
                     val screen = screens.last()
                     (screen.buttons + listOfNotNull(screen.exitButton)).single { it.id.value == id }
@@ -292,10 +292,10 @@ class JobsMenuMockBukkitTest : StringSpec({
                 back = false
                 click("back")
                 screens.last().exitButton?.id?.value shouldBe "close"
-                screens.last().buttons.any { it.id.value == "back" } shouldBe true
+                screens.last().buttons.any { it.id.value == "back" } shouldBe false
                 screens.all { it.canCloseWithEscape && it.exitButton != null } shouldBe true
                 screens.forEach { screen ->
-                    screen.buttons.map { it.width }.distinct().size shouldBe 1
+                    screen.buttons.map { it.width }.distinct().size.coerceAtLeast(1) shouldBe 1
                     screen.exitButton!!.width shouldBe 200
                 }
                 val last = screens.last()
@@ -464,7 +464,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 }
                 h.menu.open(h.player, view)
                 screens.last().id shouldBe "ecojobs.earnings"
-                click("close")
+                h.menu.onQuit(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
                 val closedCount = screens.size
                 requests.last().complete(report)
                 paper.performTicks(1)
@@ -558,7 +558,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 screens.last().inputs.associate { it.id.value to it.initial } shouldBe values
                 click("review", values + ("duration" to "invalid"))
                 click("confirm")
-                screens.last().id shouldBe "ecojobs.admin.result"
+                screens.last().id shouldBe "ecojobs.admin.result.grant"
                 screens.last().body.joinToString { plain(it.text) }.contains("Некорректный срок") shouldBe true
                 verify(exactly = 0) { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) }
                 click("back")
@@ -577,7 +577,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 reloads shouldBe 0
                 click("confirm")
                 reloads shouldBe 1
-                screens.last().id shouldBe "ecojobs.admin.result"
+                screens.last().id shouldBe "ecojobs.admin.result.reload"
                 h.menu.openAdminCommand(h.player, listOf("admin"))
                 click("give")
                 click("continue", mapOf("player" to h.player.name, "preset" to "workday", "amount" to "2"))
@@ -604,16 +604,56 @@ class JobsMenuMockBukkitTest : StringSpec({
                 h.player.inventory.contents.filterNotNull().filter { it.type == Material.PAPER }.sumOf { it.amount } shouldBe 2
                 verify(exactly = 2) { h.vouchers.create(preset, any(), ru.ruscrafting.ecojobs.boost.VoucherOverrides(java.time.Duration.ofHours(1), null, BoostType.XP, null)) }
                 h.menu.openAdminCommand(h.player, listOf("booster", "inspect", preset.id))
-                screens.last().id shouldBe "ecojobs.admin.result"
+                screens.last().id shouldBe "ecojobs.admin.result.presets"
                 h.menu.openAdminCommand(h.player, listOf("boost", "revoke", h.player.name, "all"))
                 click("review", mapOf("player" to h.player.name, "instance" to "all"))
                 h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", false)
                 click("confirm")
                 screens.last().id shouldBe "ecojobs.admin.denied"
                 verify(exactly = 0) { h.boosts.revoke(any(), any(), any()) }
-                screens.forEach { screen -> screen.buttons.map { it.width }.distinct().size shouldBe 1 }
+                screens.forEach { screen -> screen.buttons.map { it.width }.distinct().size.coerceAtLeast(1) shouldBe 1 }
                 verify(exactly = 0) { h.player.sendMessage(any<Component>()) }
                 verify(exactly = 0) { h.player.closeInventory() }
+            }
+        }
+    }
+
+    "native lifecycle refreshes parents and dismiss invalidates pending earnings" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            val reopeners = mutableMapOf<String, (() -> Unit)?>()
+            val dismissals = mutableMapOf<String, () -> Unit>()
+            val policies = mutableListOf<Boolean>()
+            val pending = CompletableFuture<EarningsReport>()
+            val earnings = mockk<EarningsService> { every { report(any(), any()) } returns pending }
+            var close = false
+            menuHarness(paper, JobsMenuPresentation.DIALOG, earnings, escapeBack = { !close },
+                lifecycle = { screen, reopen, dismiss, policy ->
+                    reopeners[screen.id] = reopen; dismissals[screen.id] = dismiss; policies += policy
+                }) { _, screen -> screens += screen }.use { h ->
+                h.menu.openRoot(h.player)
+                val restoreRoot = requireNotNull(reopeners["ecojobs.main"])
+                screens.last().buttons.single { it.id.value == "catalog" }.onClick.handle(mockk(relaxed = true))
+                // Navigation remains inside Core's callback: no scheduler tick is needed.
+                screens.last().id shouldBe "ecojobs.catalog"
+                dismissals.getValue("ecojobs.catalog")()
+                every { h.ecoJobs.totalLevel(h.player) } returns 47
+                restoreRoot()
+                screens.last().id shouldBe "ecojobs.main"
+                screens.last().body.joinToString { plain(it.text) }.contains("47") shouldBe true
+                mockJob(h)
+                h.menu.open(h.player, JobsView.Earnings("miner", 1, JobsView.Main))
+                dismissals.getValue("ecojobs.earnings")()
+                val count = screens.size
+                pending.complete(EarningsReport(emptyList(), ZoneId.of("Europe/Moscow")))
+                paper.performTicks(1)
+                screens.size shouldBe count
+                policies.all { !it } shouldBe true
+                close = true
+                h.menu.openRoot(h.player)
+                policies.last() shouldBe true
+                screens.last().buttons.single { it.id.value == "catalog" }.onClick.handle(mockk(relaxed = true))
+                policies.last() shouldBe true
             }
         }
     }
@@ -621,7 +661,7 @@ class JobsMenuMockBukkitTest : StringSpec({
     "admin async results cannot reopen after Escape or a player menu command" {
         MockBukkitTestRuntime.open().use { paper ->
             val screens = mutableListOf<PaperDialogScreen>()
-            menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
+            menuHarness(paper, JobsMenuPresentation.DIALOG, escapeBack = { false }) { _, screen -> screens += screen }.use { h ->
                 h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", true)
                 val settings = AddonSettings.load(h.dataFolder.resolve("config.yml").toFile())
                 val locale = JobsLocale(h.dataFolder.toFile()) { settings }
@@ -633,7 +673,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                     h.menu.openAdminCommand(h.player, listOf("boost", "list"))
                     val context = mockk<PaperDialogClickContext> { every { text(any()) } returns h.player.name }
                     screens.last().buttons.single { it.id.value == "show" }.onClick.handle(context)
-                    screens.last().id shouldBe "ecojobs.admin.loading"
+                    screens.last().id shouldBe "ecojobs.admin.result.list"
                 }
                 list()
                 screens.last().exitButton!!.id.value shouldBe "close"
@@ -700,7 +740,8 @@ private fun menuHarness(
     paper: MockBukkitTestRuntime,
     presentation: JobsMenuPresentation = JobsMenuPresentation.INVENTORY,
     earnings: EarningsService? = null,
-    escapeBack: () -> Boolean = { false },
+    escapeBack: () -> Boolean = { true },
+    lifecycle: ((PaperDialogScreen, (() -> Unit)?, () -> Unit, Boolean) -> Unit)? = null,
     display: ((PlayerMock, PaperDialogScreen) -> Unit)? = null,
 ): JobsMenuHarness {
     val plugin = paper.createSimplePlugin("ArcEcoJobsMenuTest")
@@ -752,6 +793,10 @@ private fun menuHarness(
             override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen) {
                 captureDialog(screen)
                 sink(player as PlayerMock, screen)
+            }
+            override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen, reopen: (() -> Unit)?, onDismiss: () -> Unit, closeOnEscape: Boolean) {
+                lifecycle?.invoke(screen, reopen, onDismiss, closeOnEscape)
+                show(player, screen)
             }
             override fun close(player: org.bukkit.entity.Player) = Unit
             override fun close() = Unit

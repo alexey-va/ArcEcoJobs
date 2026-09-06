@@ -26,6 +26,14 @@ for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
         continue
     seen.add(serialized)
     screen = yaml.safe_load(serialized)
+    # Core renders footer-only screens as native notice dialogs. The preview
+    # uses its equivalent centered one-button layout without adding an action.
+    if not screen.get('buttons') and screen.get('exit'):
+        screen['buttons'] = {'notice_footer': screen.pop('exit')}
+        converted = root / 'build/dialog-notice-snapshots' / path.name
+        converted.parent.mkdir(parents=True, exist_ok=True)
+        converted.write_text(yaml.safe_dump(screen, allow_unicode=True, sort_keys=False))
+        path = converted
     source = 'screen_' + path.stem.replace('.', '_').replace('-', '_')
     manifest['sources'][source] = {
         'path': str(path.relative_to(root)),

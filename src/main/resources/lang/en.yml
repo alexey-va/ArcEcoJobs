@@ -1,13 +1,13 @@
 prefix: '<#92bed8>Jobs <#666666>• '
 
 common:
-  back-name: '<#92bed8>Back'
+  back-name: '<#aaa49a>‹ Back'
   back-lore: '<#8c8c8c>Return to the previous screen'
   previous-name: '<#92bed8>Previous page'
   previous-lore: '<#8c8c8c>Page <page> of <pages>'
   next-name: '<#92bed8>Next page'
   next-lore: '<#8c8c8c>Page <page> of <pages>'
-  close-name: '<#92bed8>Close'
+  close-name: '<#aaa49a>Close'
   loading: '<#8c8c8c>Loading data…'
   none: '<#8c8c8c>None'
   all-jobs: 'All jobs'

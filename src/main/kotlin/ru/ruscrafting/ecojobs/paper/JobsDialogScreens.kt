@@ -45,8 +45,8 @@ internal object JobsDialogScreens {
         }
         fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit) =
             PaperDialogButton(
-                id = PaperDialogActionId.of(id.replace('-', '_')), label = label.decoration(TextDecoration.ITALIC, false),
-                tooltip = tooltip, width = if (view is JobsView.EarningsHours && detailSlot == null) 102 else 210, onClick = { action() },
+                id = PaperDialogActionId.of(id.replace('-', '_')), label = JobsDialogStyle.text(label),
+                tooltip = JobsDialogStyle.text(tooltip), width = if (view is JobsView.EarningsHours && detailSlot == null) 102 else 230, onClick = { action() },
             )
         val closeButton = button("close", locale.render("common.close-name", player),
             locale.render("dialog.close-tooltip", player), close)
@@ -54,17 +54,16 @@ internal object JobsDialogScreens {
             PaperDialogScreen(
                 id = "ecojobs.${JobsMenuLayouts.menu(view).value}$suffix",
                 title = recolor(title, TextColor.color(0xf4bd6a)),
-                body = body,
-                buttons = actions + if (escapeGoesBack) closeButton else back,
-                // Native exitAction is both the separate footer and the Escape action.
-                // Always handle it so late async results cannot revive a closed screen.
+                body = body.map { it.copy(text = JobsDialogStyle.text(it.text)) },
+                buttons = actions,
+                // Core substitutes this footer with the actual shared history action.
                 exitButton = if (escapeGoesBack) back.copy(width = 200) else closeButton.copy(width = 200),
                 columns = if (view is JobsView.EarningsHours && suffix.isEmpty()) 4 else if (actions.isEmpty()) 1 else 2,
             )
         val selected = rows.firstOrNull { it.slot == detailSlot }
         if (selected != null) return screen(
             name(selected.item),
-            listOf(PaperDialogBody(join(lore(selected.item)), 440)),
+            listOf(PaperDialogBody(join(lore(selected.item)), 468)),
             emptyList(),
             button("detail_back", locale.render("common.back-name", player), locale.render("common.back-lore", player)) { detail(null) },
             ".detail",
@@ -76,7 +75,7 @@ internal object JobsDialogScreens {
             is JobsView.Catalog -> if (view.activeOnly) "active" else "catalog"
             else -> JobsMenuLayouts.menu(view).value
         }
-        val body = mutableListOf(PaperDialogBody(locale.render("dialog.$description.description", player), 440))
+        val body = mutableListOf(PaperDialogBody(locale.render("dialog.$description.description", player), 468))
         val buttons = mutableListOf<PaperDialogButton>()
         val pagination = mutableListOf<PaperDialogButton>()
         var back: PaperDialogButton? = null
@@ -86,16 +85,14 @@ internal object JobsDialogScreens {
             val tooltip = join(lines)
             val inline = row.id in setOf("profile", "overview", "summary", "status", "self", "empty", "confirm") ||
                 view is JobsView.JobCard && row.id == "action" && !row.actionable
-            if (inline) body += PaperDialogBody(join(listOf(title) + lines), 440)
+            if (inline) body += PaperDialogBody(join(listOf(title) + lines), 468)
             val control = when {
                 row.actionable -> button(row.id, title, tooltip) { click(row.slot) }
                 inline -> null
                 else -> button("info_${row.id}", title, tooltip) { detail(row.slot) }
             }
             if (control != null) when (row.id) {
-                "back", "cancel" -> back = control.copy(
-                    label = if (view == JobsView.Main) locale.render("dialog.main.back", player) else control.label,
-                )
+                "back", "cancel" -> back = control.copy(label = JobsDialogStyle.text(locale.render("common.back-name", player)))
                 "previous", "next" -> pagination += control
                 else -> buttons += control
             }

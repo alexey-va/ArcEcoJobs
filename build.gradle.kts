@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.18"
+version = "0.1.19"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -30,11 +30,11 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.5.0")
-    implementation("ru.ruscrafting.arc:arc-core-menu:2.5.0")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.5.0")
-    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.5.0")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.5.0")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.4")
+    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.4")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.4")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.4")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.4")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.willfp:EcoJobs:2026.33")
     compileOnly("com.willfp:eco:2026.33")
@@ -57,11 +57,11 @@ dependencies {
     testImplementation("net.luckperms:api:5.5")
     testImplementation("ru.ruscrafting.thirdparty:rediseconomy:4.5.12")
     testImplementation("me.clip:placeholderapi:2.12.3")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.5.0")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.4")
     testImplementation("org.yaml:snakeyaml:2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.5.0")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.4")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }

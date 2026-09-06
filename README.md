@@ -23,7 +23,7 @@ Local unit/MockBukkit and package gate (no Docker required):
 ```
 
 The production artifact is `build/libs/ArcEcoJobs-0.1.15.jar`. The test suite
-uses public `arc-core 2.5.0` dependencies by default. Pass
+uses public `arc-core 2.7.4` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,
@@ -240,3 +240,10 @@ Escape follows ARC's `arc-menu-escape` preference; Back is the default and an ex
 player menus prevents late operation results from reopening the old screen.
 All operations reuse the same permission checks and validators as console
 commands. Grid buttons use the same width, including Close when Escape means Back.
+
+Native dialogs share ArcCore 2.7.4 history with the server main menu. Direct
+commands start a new flow; Back restores fresh menu data, while forms retain
+their draft. Only an explicit `arc-menu-escape=close` overrides history.
+Loading and result pages share a visit and dismissed requests cannot reopen it.
+The native layout uses a muted history footer and the shared warm palette;
+`inventory` remains an explicit fallback.

@@ -81,7 +81,7 @@ class JobsMenu(
     dialogDisplay: JobsDialogDisplay? = null,
     private val escapeGoesBack: (Player) -> Boolean = { player ->
         plugin.server.servicesManager.load(LuckPerms::class.java)?.userManager
-            ?.getUser(player.uniqueId)?.cachedData?.metaData?.getMetaValue("arc-menu-escape") == "back"
+            ?.getUser(player.uniqueId)?.cachedData?.metaData?.getMetaValue("arc-menu-escape") != "close"
     },
     private val shop: BoosterShopService? = null,
 ) : AutoCloseable, Listener {

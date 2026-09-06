@@ -258,9 +258,10 @@ class JobsMenuMockBukkitTest : StringSpec({
         }
     }
 
-    "Escape follows the shared setting with a native footer and dialog navigation never closes the window" {
+    "Escape defaults to Back and honors explicit Close with a native footer" {
         MockBukkitTestRuntime.open().use { paper ->
             val screens = mutableListOf<PaperDialogScreen>()
+            // Missing metadata and every value except explicit "close" resolve to Back.
             var back = true
             menuHarness(paper, JobsMenuPresentation.DIALOG, escapeBack = { back }) { _, screen -> screens += screen }.use { h ->
                 val job = mockJob(h)

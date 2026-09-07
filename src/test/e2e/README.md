@@ -60,3 +60,20 @@ An already built upstream distribution can be supplied with
 `-Pe2eEcoJobsJar=/absolute/path/to/runtime.jar`. Do not point fixtures at shared
 Redis or a live server. Runner output, Paper logs and crash reports are retained
 as GitHub artifacts even when tests fail.
+
+
+## Paired ARC work-time check
+
+CI builds ARC at the immutable source revision in `.github/workflows/e2e.yml`
+and stages the real plugin with `-Pe2eArcJar=/absolute/path/to/ARC.jar`.
+The generated support config marks ARC as required: missing/disabled telemetry
+fails the paired scenario. Without this property, the existing native jobs
+checks run with no ARC dependency. Runtime hash lines are retained in CI output.
+
+The paired scenario opens menus and evaluates placeholders, then makes real
+melee kills under the native EcoJobs filters. Its fixture pays money every third
+accepted kill while XP arrives on each; ARC must observe both earlier actions.
+Spawner/passive targets and AFK actions cannot increase time or observations.
+After AFK, the first observation has zero duration and the next starts adding
+time. Aggregate expectations use deltas so earlier test players cannot satisfy
+the assertions. The fixture rates are test-only; production rates are unchanged.

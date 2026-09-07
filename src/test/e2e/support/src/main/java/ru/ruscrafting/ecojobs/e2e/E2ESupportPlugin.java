@@ -18,6 +18,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -72,6 +73,7 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
                     + " placeholders=" + me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player,
                         "%arcecojobs_work_slayer_allowed%/%arcecojobs_boost_slayer_money_multiplier%"));
             }
+            case "metrics" -> player.sendMessage(jobWorkMetrics());
             case "spawn" -> {
                 EntityType type = EntityType.valueOf(args.length > 1 ? args[1].toUpperCase(Locale.ROOT) : "ZOMBIE");
                 LivingEntity entity = (LivingEntity) player.getWorld().spawnEntity(player.getLocation().add(0, 0, 2), type);
@@ -89,5 +91,33 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
             default -> { return false; }
         }
         return true;
+    }
+
+    private String jobWorkMetrics() {
+        try {
+            Class<?> type = Class.forName("ru.arc.metrics.MetricsModule");
+            Object module = type.getField("INSTANCE").get(null);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> report = (Map<String, Object>) type
+                .getMethod("productInterestReport", int.class, int.class)
+                .invoke(module, 1, 20);
+            Object jobWork = report.get("jobWork");
+            if (!(jobWork instanceof Map<?, ?> work)) return "E2E_METRICS unavailable required=" + getConfig().getBoolean("require-arc", false);
+            Object professions = work.get("professions");
+            if (!(professions instanceof Iterable<?> rows)) return "E2E_METRICS unavailable required=" + getConfig().getBoolean("require-arc", false);
+            StringBuilder message = new StringBuilder("E2E_METRICS");
+            for (Object row : rows) {
+                if (!(row instanceof Map<?, ?> values)) continue;
+                message.append(' ')
+                    .append(values.get("job"))
+                    .append("_observations=").append(values.get("observations"))
+                    .append(' ')
+                    .append(values.get("job"))
+                    .append("_observedMillis=").append(values.get("observedMillis"));
+            }
+            return message.toString();
+        } catch (ReflectiveOperationException | ClassCastException ignored) {
+            return "E2E_METRICS unavailable required=" + getConfig().getBoolean("require-arc", false);
+        }
     }
 }

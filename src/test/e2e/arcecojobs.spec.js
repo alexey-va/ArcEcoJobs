@@ -15,6 +15,26 @@ async function state(player) {
   return { xp: Number(match[1]), balance: Number(match[2]) };
 }
 
+async function metrics(player) {
+  const since = player.messageBuffer.length;
+  player.chat('/arce2e metrics');
+  let message;
+  await waitUntil(() => {
+    message = player.messageBuffer.slice(since).find(entry => /E2E_METRICS/.test(String(entry)));
+    return Boolean(message);
+  }, { timeout: 10000, message: 'E2E metrics command did not reply' });
+  const text = String(message);
+  if (text.includes('unavailable')) {
+    assert.ok(text.includes('required=false'), `Required ARC telemetry is unavailable: ${text}`);
+    return null;
+  }
+  const result = {};
+  for (const match of text.matchAll(/(\w+)_(observations|observedMillis)=([0-9]+)/g)) {
+    result[`${match[1]}_${match[2]}`] = Number(match[3]);
+  }
+  return result;
+}
+
 async function kill(player, kind = 'zombie', suffix = '') {
   player.chat(`/arce2e spawn ${kind}${suffix ? ` ${suffix}` : ''}`);
   await expect(player).toHaveReceivedMessage(/E2E_SPAWN=/, { timeout: 10000 });
@@ -64,7 +84,7 @@ test('real EcoJobs reward path blocks AFK and stationary farms but preserves val
   await kill(player);
   const afterMoving = await state(player);
   assert.equal(afterMoving.xp, beforeAfk.xp + 1, 'active valid kill must award XP');
-  assert.equal(afterMoving.balance, beforeAfk.balance + 1, 'active valid kill must award money');
+  assert.equal(afterMoving.balance, beforeAfk.balance, 'every-N payout must defer the first money reward');
 
   for (let i = 0; i < 17; i++) await kill(player);
   await kill(player, 'zombie', 'spawner');
@@ -76,7 +96,7 @@ test('real EcoJobs reward path blocks AFK and stationary farms but preserves val
   await kill(player);
   const afterFiltered = await state(player);
   assert.equal(afterFiltered.xp, afterMoving.xp + 18, 'AFK and excluded targets must not consume stationary counter');
-  assert.equal(afterFiltered.balance, afterMoving.balance + 18);
+  assert.equal(afterFiltered.balance, afterMoving.balance + 6);
   await kill(player);
   assert.deepEqual(await state(player), afterFiltered, 'the stationary threshold kill must not award XP or money');
   await kill(player);
@@ -86,5 +106,60 @@ test('real EcoJobs reward path blocks AFK and stationary farms but preserves val
   await kill(player);
   const afterMovedSite = await state(player);
   assert.equal(afterMovedSite.xp, afterFiltered.xp + 1, 'moving to a new site must keep rewards active');
+  await player.deOp();
+});
+
+test('native work reaches optional ARC independently of every-N money payouts', async ({ player }) => {
+  await player.makeOp();
+  player.chat('/arce2e setup');
+  await expect(player).toHaveReceivedMessage('E2E_SETUP');
+  await player.bot.waitForTicks(100);
+  const before = await metrics(player);
+  if (before === null) {
+    await player.deOp();
+    return; // The no-ARC configuration is explicit; required/failed ARC never reaches this branch.
+  }
+  await state(player);
+  assert.deepEqual(await metrics(player), before, 'state/placeholder access must not count as work');
+  player.chat('/arcjobs inventory');
+  await player.gui({ title: 'Jobs' });
+  assert.deepEqual(await metrics(player), before, 'opening the job menu must not count as work');
+  player.bot.closeWindow(player.bot.currentWindow);
+  await player.teleport(128.5, 65, 128.5);
+  await player.giveItem('stone_sword', 1);
+  await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'stone_sword'), 'hand');
+
+  const first = await state(player);
+  const baseCount = before.slayer_observations ?? 0;
+  const baseMillis = before.slayer_observedMillis ?? 0;
+  await kill(player);
+  await kill(player);
+  const afterTwo = await metrics(player);
+  assert.equal(afterTwo.slayer_observations, baseCount + 2, 'both native XP actions must be observed before money pays');
+  assert.ok(afterTwo.slayer_observedMillis >= baseMillis + 1000, 'ARC must connect the two accepted action samples');
+  assert.equal((await state(player)).balance, first.balance, 'every-N payout remains deferred before the third kill');
+  await kill(player, 'zombie', 'spawner');
+  await kill(player, 'cow');
+  assert.deepEqual(await metrics(player), afterTwo, 'excluded targets must not create work observations');
+
+  player.chat('/arce2e afk on');
+  await expect(player).toHaveReceivedMessage('E2E_AFK=true');
+  await kill(player);
+  const afterAfk = await metrics(player);
+  assert.deepEqual(afterAfk, afterTwo, 'AFK action must not extend or emit job work');
+  player.chat('/arce2e afk off');
+  await expect(player).toHaveReceivedMessage('E2E_AFK=false');
+  await kill(player);
+  const afterBreak = await metrics(player);
+  assert.equal(afterBreak.slayer_observations, afterAfk.slayer_observations + 1,
+    'first post-AFK work starts a fresh observation');
+  assert.equal(afterBreak.slayer_observedMillis, afterAfk.slayer_observedMillis,
+    'first post-AFK observation must not bridge the AFK interval');
+  assert.equal((await state(player)).balance, first.balance + 1, 'third accepted native action pays the every-N reward');
+  await kill(player);
+  const afterResume = await metrics(player);
+  assert.equal(afterResume.slayer_observations, afterBreak.slayer_observations + 1);
+  assert.ok(afterResume.slayer_observedMillis > afterBreak.slayer_observedMillis);
+  assert.equal((await state(player)).balance, first.balance + 1, 'later accepted actions do not duplicate the every-N payout');
   await player.deOp();
 });

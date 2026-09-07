@@ -26,6 +26,7 @@ level-up-messages:
 effects:
   - id: give_money
     args:
+      every: "3"
       amount: "1 * %arcecojobs_boost_slayer_money_multiplier% * %arcecojobs_earnings_slayer_money_marker%"
     triggers: [kill]
     filters:

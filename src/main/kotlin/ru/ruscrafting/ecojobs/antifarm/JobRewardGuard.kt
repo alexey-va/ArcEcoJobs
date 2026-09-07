@@ -12,6 +12,7 @@ import org.bukkit.event.Listener
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import ru.ruscrafting.ecojobs.config.JobsLocale
 import ru.ruscrafting.ecojobs.integration.ArcProductTelemetry
+import ru.ruscrafting.ecojobs.integration.ArcJobWorkTelemetry
 import java.util.UUID
 
 /** One eligibility decision shared by the job money placeholder, pre-deposit gate and XP listener.
@@ -62,6 +63,7 @@ class JobRewardGuard(
             else -> return true
         }
         val now = clock()
+        ArcJobWorkTelemetry.breakPlayer(player.uniqueId)
         if (now - (notices[player.uniqueId] ?: Long.MIN_VALUE / 2) >= NOTICE_MILLIS) {
             notices[player.uniqueId] = now
             if (notices.size > StationaryHuntGuard.MAX_PLAYERS) notices.remove(notices.keys.first())

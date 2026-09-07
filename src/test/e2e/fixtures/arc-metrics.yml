@@ -1,0 +1,28 @@
+enabled: true
+bind-host: "127.0.0.1"
+bind-port: 19950
+sample-interval-seconds: 30
+heavy-sample-interval-seconds: 300
+include-jvm: false
+include-system: false
+include-disk: false
+include-platform-heavy: false
+product-interest:
+  enabled: true
+  network-enabled: false
+  timezone: "Europe/Moscow"
+  retention-days: 35
+  active-window-seconds: 300
+  movement-threshold-blocks: 2.0
+  persist-interval-seconds: 1
+  max-tracked-players: 32
+  max-detail-values-per-player-day: 32
+  qa-player-names: []
+  meaningful-thresholds:
+    block-break: 64
+    block-place: 32
+    craft: 8
+    mob-kill: 5
+    chat: 3
+dungeon-interest:
+  enabled: false

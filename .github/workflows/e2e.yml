@@ -37,12 +37,27 @@ jobs:
       - name: Build the official EcoJobs runtime distribution
         working-directory: e2e-ecojobs
         run: ./gradlew --no-daemon libreforgeJar
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: alexey-va/ARC
+          ref: 65ec2606c974cfc4802b03606b8b3d69e78ae201
+          path: e2e-arc
+      - name: Build the pinned ARC runtime
+        working-directory: e2e-arc
+        run: ./gradlew --no-daemon shadowJar
+      - name: Record staged runtime hashes
+        run: |
+          sha256sum \
+            "e2e-ecojobs/bin/EcoJobs v2026.33.jar" \
+            e2e-arc/build/libs/ARC-1.4.4.jar
       - name: Run ArcEcoJobs on real Paper
         shell: bash
         run: |
           set -o pipefail
           mkdir -p build
-          ./gradlew --no-daemon plugwrightTest 2>&1 | tee build/plugwright-e2e.log
+          ./gradlew --no-daemon plugwrightTest \
+            -Pe2eArcJar="$GITHUB_WORKSPACE/e2e-arc/build/libs/ARC-1.4.4.jar" \
+            2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
       - name: Upload Paper logs
         if: always()

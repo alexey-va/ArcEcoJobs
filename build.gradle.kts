@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.19"
+version = "0.1.20"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -112,6 +112,7 @@ val e2eSupportJar by tasks.registering(Jar::class) {
 
 val ecoJobsRuntimeJar = providers.gradleProperty("e2eEcoJobsJar")
     .orElse(layout.projectDirectory.file("e2e-ecojobs/bin/EcoJobs v2026.33.jar").asFile.absolutePath)
+val arcRuntimeJar = providers.gradleProperty("e2eArcJar").map { file(it) }
 val e2eJobIds = listOf(
     "beekeeper", "builder", "enchanter", "explorer", "farmer", "fisherman",
     "lumberjack", "miner", "slayer", "smelter", "toolsmith"
@@ -163,6 +164,11 @@ plugwright {
         }
         file("plugins/ArcEcoJobsE2ESupport.jar", e2eSupportJar.get().archiveFile.get().asFile)
         file("plugins/RedisEconomy/config.yml", projectDir.resolve("src/test/e2e/fixtures/rediseconomy.yml"))
+        file("plugins/ARC/modules/metrics.yml", projectDir.resolve("src/test/e2e/fixtures/arc-metrics.yml"))
+        file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/arc-redis.yml"))
+        file("plugins/ARC/modules/ops-http.yml", projectDir.resolve("src/test/e2e/fixtures/arc-ops-http.yml"))
+        file("plugins/ArcEcoJobsE2ESupport/config.yml", "require-arc: ${arcRuntimeJar.isPresent}\n")
+        arcRuntimeJar.orNull?.let { file("plugins/ARC.jar", it) }
     }
 }
 tasks.named("plugwrightTest") { dependsOn(prepareEcoJobsRuntime, e2eSupportJar) }

@@ -247,3 +247,23 @@ their draft. Only an explicit `arc-menu-escape=close` overrides history.
 Loading and result pages share a visit and dismissed requests cannot reopen it.
 The native layout uses a muted history footer and the shared warm palette;
 `inventory` remains an explicit fallback.
+
+## Optional profession-time telemetry
+
+`ArcJobWorkObserver` forwards non-cancelled, positive finite
+`PlayerJobExpGainEvent` observations to ARC, independently of the optional
+hourly earnings store. `ArcJobWorkTelemetry` resolves the optional static API;
+missing or older ARC versions never prevent native XP or money payments.
+The observer breaks continuity on AFK, blocked rewards, world change, job leave,
+logout and shutdown. AFK status is sampled every 20 ticks through the plugin's
+existing lifecycle scope; an unavailable AFK provider suppresses observations.
+
+ARC owns the bounded interval clock, pseudonymous daily persistence, network
+transport and period reset. See its canonical
+[telemetry contract](https://github.com/alexey-va/ARC/blob/65ec2606c974cfc4802b03606b8b3d69e78ae201/docs/knowledge/arc-external-product-telemetry.md).
+The result is an accepted XP-event interval proxy, not exact human working time.
+Native counter events include actions between every-N money payments; external
+API XP grants can also produce the event. No price, multiplier, payout rule or
+player balance is changed by observation.
+
+Focused consumer check: `./gradlew test --tests '*ArcJobWorkObserverTest'`.

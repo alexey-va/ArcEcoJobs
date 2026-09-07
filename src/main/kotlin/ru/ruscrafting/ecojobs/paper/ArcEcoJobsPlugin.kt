@@ -99,6 +99,11 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 eligibleHunt = ecoJobs::payableHunt,
             )
             server.pluginManager.registerEvents(rewardGuard, this)
+            ArcJobWorkObserver().also {
+                server.pluginManager.registerEvents(it, this)
+                it.start(lifecycle.tasks)
+                lifecycle.own(it)
+            }
             if (settings.earnings.enabled) {
                 runCatching {
                     val service = EarningsService(

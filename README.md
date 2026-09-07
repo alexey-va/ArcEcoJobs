@@ -16,14 +16,18 @@ ArcEcoJobs is the RusCrafting interface addon for EcoJobs 2026.33. EcoJobs
 continues to own profession progression; ArcEcoJobs adds the player and admin
 menus, global rankings, and LuckPerms-backed XP/money boosts.
 
-Local unit/MockBukkit and package gate (no Docker required):
+Fast developer package build:
 
 ```bash
-./gradlew clean test shadowJar
+./gradlew shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.21.jar`. The test suite
-uses public `arc-core 2.7.4` dependencies by default. Pass
+For a focused change, run the relevant unit test explicitly, for example
+`./gradlew test --tests '*JobsCommandTest' shadowJar`. Full verification
+is opt-in with `./gradlew clean check shadowJar`; it includes the disposable
+MySQL `integrationTest` owned by CI. The production artifact is
+`build/libs/ArcEcoJobs-0.1.21.jar`. The test suite uses public `arc-core 2.7.4`
+dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
 against a disposable MySQL 8.0.46 service to prove concurrent redemption,

@@ -6,6 +6,8 @@ const { playerBotPath } = require('./ops-workspace.cjs')
 
 const mineflayer = require(playerBotPath('node_modules/mineflayer'))
 
+const LAB_HOST = '127.0.0.1'
+const LAB_PORT = 54295
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
 function countItem (bot, type) {
@@ -58,12 +60,13 @@ async function main () {
     throw new Error('ARC_ECOJOBS_QA_ALLOW_MUTATIONS=true is required for voucher smoke QA')
   }
   const username = process.env.ARC_ECOJOBS_QA_USERNAME || 'CodexQA_730'
-  const port = Number.parseInt(process.env.ARC_ECOJOBS_QA_PORT || '54294', 10)
-  if (port !== 54294 || !/^CodexQA_73\d$/.test(username)) {
-    throw new Error('voucher smoke is restricted to the disposable lab QA identity and port')
+  const host = process.env.ARC_ECOJOBS_QA_HOST || LAB_HOST
+  const port = Number.parseInt(process.env.ARC_ECOJOBS_QA_PORT || String(LAB_PORT), 10)
+  if (host !== LAB_HOST || port !== LAB_PORT || !/^CodexQA_73\d$/.test(username)) {
+    throw new Error('voucher smoke is restricted to the disposable lab QA identity and 127.0.0.1:54295')
   }
   const bot = mineflayer.createBot({
-    host: process.env.ARC_ECOJOBS_QA_HOST || 'mc.rus-crafting.ru',
+    host,
     port,
     username,
     version: process.env.ARC_ECOJOBS_QA_VERSION || '1.21.11',

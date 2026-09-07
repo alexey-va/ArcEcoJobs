@@ -7,8 +7,8 @@ const { Vec3 } = require(playerBotPath('node_modules/vec3'))
 const mineflayer = require(playerBotPath('node_modules/mineflayer'))
 const { pathfinder, Movements, goals } = require(playerBotPath('node_modules/mineflayer-pathfinder'))
 
-const LAB_HOST = 'mc.rus-crafting.ru'
-const LAB_PORT = 54294
+const LAB_HOST = '127.0.0.1'
+const LAB_PORT = 54295
 const LAB_VERSION = '1.21.11'
 const QA_IDENTITIES = new Set(['CodexQA_728', 'CodexQA_729', 'CodexQA_730'])
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))

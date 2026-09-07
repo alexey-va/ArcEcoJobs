@@ -7,17 +7,21 @@ const { playerBotPath } = require('./ops-workspace.cjs')
 const mineflayer = require(playerBotPath('node_modules/mineflayer'))
 const { chatComponentText } = require(playerBotPath('src/visual-observer.cjs'))
 
+const LAB_HOST = '127.0.0.1'
+const LAB_PORT = 54295
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
 function readConfig (environment = process.env) {
-  const port = Number.parseInt(environment.ARC_ECOJOBS_QA_PORT || '54294', 10)
+  const host = environment.ARC_ECOJOBS_QA_HOST || LAB_HOST
+  const port = Number.parseInt(environment.ARC_ECOJOBS_QA_PORT || String(LAB_PORT), 10)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ARC_ECOJOBS_QA_PORT must be a valid TCP port')
+  if (host !== LAB_HOST || port !== LAB_PORT) throw new Error('GUI smoke is restricted to the isolated Paper lab at 127.0.0.1:54295')
   const locale = environment.ARC_ECOJOBS_QA_LOCALE || 'ru_RU'
   const expectAdmin = (environment.ARC_ECOJOBS_QA_ROLE || 'admin').toLowerCase() === 'admin'
   const verbose = environment.ARC_ECOJOBS_QA_VERBOSE === 'true'
   const allowMutations = environment.ARC_ECOJOBS_QA_ALLOW_MUTATIONS === 'true'
   return {
-    host: environment.ARC_ECOJOBS_QA_HOST || 'mc.rus-crafting.ru',
+    host,
     port,
     username: environment.ARC_ECOJOBS_QA_USERNAME || (expectAdmin ? 'CodexQA_730' : 'CodexQA_731'),
     version: environment.ARC_ECOJOBS_QA_VERSION || '1.21.11',

@@ -55,7 +55,7 @@ for path in sorted((root / 'build/dialog-snapshots').glob('*.yml')):
         'variants': [{'id': 'default'}], 'viewport': [640, 360],
     })
 if not seen:
-    parser.error('No dialog snapshots: run ./gradlew clean test first')
+    parser.error('No dialog snapshots: run ./gradlew test first')
 generated = root / 'build/dialog-preview-manifest.yml'
 generated.write_text(yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False))
 command = [sys.executable, '-B', str(args.ops_root / '.agents/skills/design-ruscrafting-surfaces/scripts/render_plugin_surface_dump.py'),

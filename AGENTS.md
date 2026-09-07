@@ -37,6 +37,8 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
 - Runtime state (`secret.key`) belongs under `plugins/ArcEcoJobs/` and is never
   tracked or deployed as configuration. Back up the key before production
   rollout or previously issued vouchers become invalid.
-- On a local workstation without Docker, run
-  `./gradlew clean test shadowJar`. The Docker-capable CI gate
-  separately runs `integrationTest`; use `clean check` only on such a host.
+- On a developer workstation run `./gradlew shadowJar`. Run a focused unit test
+  with `./gradlew test --tests '<fully-qualified-test-pattern>' shadowJar` when
+  the change needs it. Full `clean check shadowJar` is opt-in and includes the
+  disposable MySQL `integrationTest`; the Docker-capable CI gate owns that
+  lane.

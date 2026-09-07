@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import org.bukkit.configuration.ConfigurationSection
 import org.bukkit.configuration.file.YamlConfiguration
 import org.opentest4j.TestAbortedException
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -387,7 +388,11 @@ class AddonConfigTest : StringSpec({
             opsRoot().resolve("classic_survival/plugins/EcoJobs/jobs/explorer.yml"),
             opsRoot().resolve("scripts/lab/plugin-configs/EcoJobs/jobs/explorer.yml"),
         )
-        paths.map(Files::readString).toSet().size shouldBe 1
+        // Mapping order is presentation; compare all values, including nested reward filters.
+        paths.map { path ->
+            YamlConfiguration.loadConfiguration(path.toFile()).getValues(true)
+                .filterValues { it !is ConfigurationSection }
+        }.toSet().size shouldBe 1
         val explorer = YamlConfiguration.loadConfiguration(
             paths.single { it.startsWith(opsRoot().resolve("scripts/lab")) }.toFile(),
         )

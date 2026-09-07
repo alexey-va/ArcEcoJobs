@@ -120,7 +120,6 @@ data class AddonSettings(
                     minimumKills = yaml.getInt("anti-farm.stationary-hunt.minimum-kills", 120),
                     minimumDurationMillis = yaml.getLong("anti-farm.stationary-hunt.minimum-seconds", 180) * 1000,
                     siteRadius = yaml.getDouble("anti-farm.stationary-hunt.site-radius", 12.0),
-                    hunterRadius = yaml.getDouble("anti-farm.stationary-hunt.hunter-radius", 8.0),
                     idleResetMillis = yaml.getLong("anti-farm.stationary-hunt.idle-reset-seconds", 600) * 1000,
                     cooldownMillis = yaml.getLong("anti-farm.stationary-hunt.cooldown-seconds", 1800) * 1000,
                 ),

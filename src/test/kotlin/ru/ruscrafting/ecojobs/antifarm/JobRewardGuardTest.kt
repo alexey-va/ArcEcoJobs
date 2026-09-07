@@ -19,7 +19,7 @@ import ru.ruscrafting.ecojobs.config.JobsLocale
 import java.util.UUID
 
 class JobRewardGuardTest : StringSpec({
-    "real Bukkit dispatch captures the kill before money and XP and leaves other effects untouched" {
+    "Bukkit dispatch retains fixed victim site evidence while the hunter walks and leaves other effects untouched" {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("JobGuardTest")
             val player = paper.addPlayer("Hunter")
@@ -33,10 +33,11 @@ class JobRewardGuardTest : StringSpec({
             val guard = JobRewardGuard({ config }, locale, { true }, afk = { afk }, clock = { now })
             paper.server.pluginManager.registerEvents(guard, plugin)
             val trigger = mockk<Trigger> { every { id } returns "kill" }
+            val victimSite = player.location.clone()
             fun kill(): TriggerDispatchEvent {
                 val victim = mockk<LivingEntity> {
                     every { uniqueId } returns UUID.randomUUID()
-                    every { location } returns player.location
+                    every { location } returns victimSite
                 }
                 val data = mockk<TriggerData> {
                     every { this@mockk.player } returns player
@@ -51,7 +52,9 @@ class JobRewardGuardTest : StringSpec({
             afk = true
             repeat(120) { paper.callEvent(kill()) }
             afk = false
-            repeat(120) { i ->
+            repeat(180) { i ->
+                // A 9-block step used to reset the 8-block hunter anchor on every kill.
+                player.teleport(victimSite.clone().apply { x += if (i % 2 == 0) 0.0 else 9.0 })
                 now = i * 2000L
                 val event = kill()
                 paper.callEvent(event)

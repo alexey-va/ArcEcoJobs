@@ -48,7 +48,7 @@ class JobRewardGuard(
             kills.remove(player.uniqueId)
             return
         }
-        val allowed = hunt.recordKill(player.uniqueId, player.location.position(), victim.location.position(), now)
+        val allowed = hunt.recordKill(player.uniqueId, victim.location.position(), now)
         kills[player.uniqueId] = KillDecision(victim.uniqueId, now, allowed)
         if (kills.size > StationaryHuntGuard.MAX_PLAYERS) kills.remove(kills.keys.first())
     }

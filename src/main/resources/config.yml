@@ -27,7 +27,6 @@ anti-farm:
     minimum-kills: 120
     minimum-seconds: 180
     site-radius: 12.0
-    hunter-radius: 8.0
     idle-reset-seconds: 600
     cooldown-seconds: 1800
 

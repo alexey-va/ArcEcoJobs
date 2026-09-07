@@ -197,6 +197,13 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         check(!initialized) { "ArcEcoJobs is already initialized" }
         bindEconomyIntegration()
         val jobIds = validatedJobIds()
+        runCatching(ecoJobs::prepareHuntFilters).onFailure { failure ->
+            logger.log(
+                Level.WARNING,
+                "Could not prewarm EcoJobs hunting filters; the first eligible hunt will retry",
+                failure,
+            )
+        }
         boosterRegistry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
         shop = BoosterShopService(
             enabled = { settings.shop.enabled && settings.redemptionStorage.enabled },

@@ -154,23 +154,13 @@ class EcoJobsBridge(
     /** Reuse native spawner/entity/custom-entity filters; never count targets the job rejects. */
     fun payableHunt(data: com.willfp.libreforge.triggers.TriggerData): Boolean {
         val slayer = job("slayer") ?: return false
-        if (huntFilterJob !== slayer) {
-            val context = com.willfp.libreforge.ViolationContext(
-                Bukkit.getPluginManager().getPlugin("EcoJobs") as com.willfp.eco.core.EcoPlugin,
-                "ArcEcoJobs hunting eligibility",
-            )
-            val actions = slayer.config.getSubsections("xp-gain-methods") +
-                slayer.config.getSubsections("effects").filter { it.getString("id") == "give_money" }
-            val compiled = actions.map { action ->
-                com.willfp.libreforge.filters.FilterList(
-                    com.willfp.libreforge.filters.Filters.compile(action.getSubsection("filters"), context)
-                        .filterNot { it.filter.id == "is_expression_true" },
-                )
-            }
-            huntFilters = compiled
-            huntFilterJob = slayer
-        }
+        ensureHuntFilters(slayer)
         return huntFilters.any { it.isMet(data) }
+    }
+
+    /** Compile the existing hunt filters while the delayed EcoJobs bootstrap is already on the server thread. */
+    fun prepareHuntFilters() {
+        job("slayer")?.let(::ensureHuntFilters)
     }
 
     fun rewardGuardIntegrationProblems(): List<String> = jobs().mapNotNull { job ->
@@ -223,6 +213,24 @@ class EcoJobsBridge(
     private fun rankingKey(job: Job?): String = job?.id ?: GLOBAL
     private fun participates(player: OfflinePlayer, job: Job): Boolean =
         active(player, job) || level(player, job) > 1 || xp(player, job) > 0.0
+
+    private fun ensureHuntFilters(slayer: Job) {
+        if (huntFilterJob === slayer) return
+        val context = com.willfp.libreforge.ViolationContext(
+            Bukkit.getPluginManager().getPlugin("EcoJobs") as com.willfp.eco.core.EcoPlugin,
+            "ArcEcoJobs hunting eligibility",
+        )
+        val actions = slayer.config.getSubsections("xp-gain-methods") +
+            slayer.config.getSubsections("effects").filter { it.getString("id") == "give_money" }
+        val compiled = actions.map { action ->
+            com.willfp.libreforge.filters.FilterList(
+                com.willfp.libreforge.filters.Filters.compile(action.getSubsection("filters"), context)
+                    .filterNot { it.filter.id == "is_expression_true" },
+            )
+        }
+        huntFilters = compiled
+        huntFilterJob = slayer
+    }
 
     private fun notifyCallback(callback: (Result<Unit>) -> Unit, result: Result<Unit>) {
         runCatching { callback(result) }.onFailure { failure ->

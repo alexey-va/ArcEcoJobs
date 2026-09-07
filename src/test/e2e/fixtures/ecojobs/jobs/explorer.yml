@@ -30,7 +30,7 @@ level-up-messages:
 effects:
   - id: give_money
     args:
-      amount: "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_value%) * %arcecojobs_boost_explorer_money_multiplier% * %arcecojobs_earnings_explorer_money_marker%"
+      amount: "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_trigger_value%) * %arcecojobs_boost_explorer_money_multiplier% * %arcecojobs_earnings_explorer_money_marker%"
     filters:
       is_expression_true: "%arcecojobs_work_explorer_allowed%"
     triggers:

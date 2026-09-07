@@ -1,3 +1,5 @@
 .gradle/
+src/test/e2e/node_modules/
 .kotlin/
 build/
+e2e-ecojobs/

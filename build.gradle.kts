@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "9.3.0"
+    id("io.github.drownek.plugwright") version "2.0.4"
     jacoco
 }
 
@@ -94,3 +95,49 @@ tasks {
     }
     check { dependsOn(shadowJar, "integrationTest") }
 }
+
+val ecoJobsRuntimeJar = providers.gradleProperty("e2eEcoJobsJar")
+    .orElse(layout.projectDirectory.file("e2e-ecojobs/bin/EcoJobs v2026.33.jar").asFile.absolutePath)
+val plugwrightLibreforge by configurations.creating
+dependencies {
+    add(plugwrightLibreforge.name, "com.willfp:libreforge:2026.33:shadow") { isTransitive = false }
+}
+// Match the upstream loader's nested payload name and eco Kotlin namespace.
+val prepareLibreforgeRuntime by tasks.registering(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar::class) {
+    archiveFileName.set("libreforge-2026.33-shadow.jar")
+    configurations = emptyList()
+    from({ zipTree(plugwrightLibreforge.singleFile) })
+    relocate("kotlin", "com.willfp.eco.libs.kotlin")
+    relocate("org.jetbrains.kotlin", "com.willfp.eco.libs.kotlin.jetbrains")
+}
+val prepareEcoJobsRuntime by tasks.registering(Jar::class) {
+    archiveFileName.set("EcoJobs-2026.33-e2e.jar")
+    from({ zipTree(file(ecoJobsRuntimeJar.get())) }) { exclude("libreforge-2026.33-shadow.jar") }
+    from(prepareLibreforgeRuntime)
+}
+plugwright {
+    minecraftVersion.set("26.1.2")
+    runDir.set(layout.buildDirectory.dir("plugwright"))
+    testsDir.set(layout.projectDirectory.dir("src/test/e2e"))
+    downloadNode.set(true)
+    nodeVersion.set("22.14.0")
+    acceptEula.set(true)
+    jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
+    downloadPlugins {
+        url("https://cdn.modrinth.com/data/E4spwmyA/versions/ihIOXEWh/eco-2026.33-modrinth.jar")
+        url("https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar")
+        url("https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.12.3/PlaceholderAPI-2.12.3.jar")
+        url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
+        url("https://repo.rus-crafting.ru/grocermc/ru/ruscrafting/thirdparty/rediseconomy/4.5.12/rediseconomy-4.5.12.jar")
+    }
+    writeFiles {
+        file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
+        file("plugins/ArcEcoJobs/config.yml", projectDir.resolve("src/main/resources/config.yml").readText()
+            .replaceFirst("default: ru", "default: en")
+            .replaceFirst("use-client-locale: true", "use-client-locale: false")
+            .replaceFirst("require-money-placeholder: true", "require-money-placeholder: false"))
+        file("plugins/EcoJobs-2026.33.jar", prepareEcoJobsRuntime.get().archiveFile.get().asFile)
+        file("plugins/RedisEconomy/config.yml", projectDir.resolve("src/test/e2e/fixtures/rediseconomy.yml"))
+    }
+}
+tasks.named("plugwrightTest") { dependsOn(prepareEcoJobsRuntime) }

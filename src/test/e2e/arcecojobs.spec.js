@@ -154,6 +154,8 @@ test('Builder pays new coordinates and blocks repeated coordinates for both XP a
   await player.makeOp();
   player.chat('/arce2e setup builder');
   await expect(player).toHaveReceivedMessage('E2E_SETUP');
+  // Let the native four-second money-effect holder cache refresh after joining Builder.
+  await player.bot.waitForTicks(100);
   await player.teleport(0.5, 65, 0.5);
   await player.giveItem('stone', 64);
   await player.giveItem('diamond_pickaxe', 1);

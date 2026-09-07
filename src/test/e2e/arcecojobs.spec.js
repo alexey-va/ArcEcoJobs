@@ -46,6 +46,8 @@ test('real EcoJobs reward path blocks AFK and stationary farms but preserves val
   await player.makeOp();
   player.chat('/arce2e setup');
   await expect(player).toHaveReceivedMessage('E2E_SETUP');
+  // Native libreforge 2026.33 holder cache expires after four seconds.
+  await player.bot.waitForTicks(100);
   await player.teleport(0.5, 65, 0.5);
   await player.giveItem('stone_sword', 1);
   await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'stone_sword'), 'hand');

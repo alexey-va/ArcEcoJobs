@@ -2,7 +2,7 @@ name: ArcEcoJobsE2ESupport
 version: 1.0.0
 main: ru.ruscrafting.ecojobs.e2e.E2ESupportPlugin
 api-version: '1.21'
-depend: [EcoJobs, Vault]
+depend: [EcoJobs, Vault, PlaceholderAPI]
 commands:
   arce2e:
     description: Disposable ArcEcoJobs E2E controls

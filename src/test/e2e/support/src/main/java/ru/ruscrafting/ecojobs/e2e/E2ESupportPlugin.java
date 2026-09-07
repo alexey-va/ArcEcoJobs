@@ -65,7 +65,12 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
             case "state" -> {
                 Economy economy = Bukkit.getServicesManager().load(Economy.class);
                 double balance = economy == null ? Double.NaN : economy.getBalance(player);
-                player.sendMessage("E2E_STATE xp=" + EcoJobsAPI.getJobXP(player, slayer) + " balance=" + balance);
+                player.sendMessage("E2E_STATE xp=" + EcoJobsAPI.getJobXP(player, slayer) + " balance=" + balance
+                    + " active=" + EcoJobsAPI.hasJobActive(player, slayer)
+                    + " afk=" + AFKManager.isAfk(player)
+                    + " account=" + (economy != null && economy.hasAccount(player))
+                    + " placeholders=" + me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player,
+                        "%arcecojobs_work_slayer_allowed%/%arcecojobs_boost_slayer_money_multiplier%"));
             }
             case "spawn" -> {
                 EntityType type = EntityType.valueOf(args.length > 1 ? args[1].toUpperCase(Locale.ROOT) : "ZOMBIE");

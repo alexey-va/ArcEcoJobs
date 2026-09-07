@@ -1,13 +1,14 @@
 name: Paper E2E
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
@@ -16,7 +17,7 @@ jobs:
     services:
       redis:
         image: redis:7.4
-        ports: [6385:6379]
+        ports: ["6385:6379"]
         options: >-
           --health-cmd="redis-cli ping" --health-interval=5s
           --health-timeout=3s --health-retries=20

@@ -24,6 +24,7 @@ async function placeBlock(player, x, y, z) {
   const target = player.bot.entity.position.clone().set(x, y, z);
   const reference = player.bot.blockAt(target.clone().set(x, y - 1, z));
   assert.ok(reference, `missing reference block below ${x},${y},${z}`);
+  await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'stone'), 'hand');
   await player.bot.placeBlock(reference, target.clone().set(0, 1, 0));
   await waitUntil(() => player.bot.blockAt(target)?.name !== 'air', {
     timeout: 5000, message: `block was not placed at ${x},${y},${z}`,
@@ -39,6 +40,7 @@ async function breakBlock(player, x, y, z) {
   const target = player.bot.entity.position.clone().set(x, y, z);
   const block = player.bot.blockAt(target);
   assert.ok(block && block.name !== 'air', `missing placed block at ${x},${y},${z}`);
+  await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'diamond_pickaxe'), 'hand');
   await player.bot.dig(block);
   await waitUntil(() => player.bot.blockAt(target)?.name === 'air', {
     timeout: 5000, message: `block was not broken at ${x},${y},${z}`,
@@ -154,15 +156,18 @@ test('Builder pays new coordinates and blocks repeated coordinates for both XP a
   await expect(player).toHaveReceivedMessage('E2E_SETUP');
   await player.teleport(0.5, 65, 0.5);
   await player.giveItem('stone', 64);
-  await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'stone'), 'hand');
+  await player.giveItem('diamond_pickaxe', 1);
 
   const before = await state(player, 'builder');
-  for (let x = 2; x < 14; x++) await placeBlock(player, x, 65, 0);
+  // Native ArgumentEvery starts at one and first pays every:12 on trigger 13.
+  for (let x = 2; x < 15; x++) await placeBlock(player, x, 65, 0);
   const afterNew = await waitForState(
     player,
     current => current.xp > before.xp && current.balance > before.balance,
     'new Builder coordinates did not award XP and money',
   );
+  assert.ok(Math.abs(afterNew.xp - before.xp - 13 * 1.2) < 1e-8);
+  assert.equal(afterNew.balance - before.balance, 4);
 
   const repeated = { x: 2, y: 65, z: 0 };
   const beforeRepeat = await state(player, 'builder');
@@ -173,13 +178,14 @@ test('Builder pays new coordinates and blocks repeated coordinates for both XP a
   const afterRepeat = await state(player, 'builder');
   assert.deepEqual(afterRepeat, beforeRepeat, 'repeated Builder coordinate must not award XP or money');
 
-  await breakBlock(player, repeated.x, repeated.y, repeated.z);
-  await placeBlock(player, 15, 65, 0);
-  await waitForState(
+  for (let x = 15; x < 27; x++) await placeBlock(player, x, 65, 0);
+  const afterResumed = await waitForState(
     player,
-    current => current.xp > afterRepeat.xp,
-    'a new Builder coordinate did not award XP after a blocked repeat',
+    current => current.xp > afterRepeat.xp && current.balance > afterRepeat.balance,
+    'new Builder coordinates did not award XP and money after blocked repeats',
   );
+  assert.ok(Math.abs(afterResumed.xp - afterRepeat.xp - 12 * 1.2) < 1e-8);
+  assert.equal(afterResumed.balance - afterRepeat.balance, 4);
   await player.deOp();
 });
 

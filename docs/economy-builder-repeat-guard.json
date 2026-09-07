@@ -2,9 +2,9 @@
   "version": 1,
   "title": "Builder repeated placement reward gate",
   "assumptions": [
-    "This is a decision-level before/after assessment for the CI fixture, not a player income forecast.",
+    "This is a decision-level before/after assessment of reward eligibility, not an end-to-end payout timing model or a player income forecast.",
     "Low/base/high model 12/120/1200 eligible placement observations at fixed level-1 rates, solely to exercise the gate; this is not a measured player-day or progression forecast.",
-    "The pinned Builder fixture pays 4 vault every 12 accepted placements and grants 1.2 XP per accepted placement. Money reward events below are complete batches; XP events are placements. Level progression is outside this decision-level calculation.",
+    "The pinned Builder configuration pays 4 vault per every:12 cycle and grants 1.2 XP per accepted placement at level 1. Native ArgumentEvery first pays on accepted placement 13, then every 12; the synthetic cycle amounts below exclude that one-time warm-up. The Paper CI fixture checks 13 initial and 12 resumed new coordinates with 12 blocked repeats between them. Money reward events below are completed cycles; XP events are placements. Level progression is outside this decision-level calculation.",
     "A new world+XYZ coordinate is ordinary construction and remains payable; a repeat coordinate is the same UUID and world+XYZ within 600 seconds.",
     "No prices, boosts, item rewards, or other professions are changed; BlockPlaceEvent remains uncancelled.",
     "The process-local record is keyed by UUID and survives relog; maximum 100000 active coordinates fails closed when full."

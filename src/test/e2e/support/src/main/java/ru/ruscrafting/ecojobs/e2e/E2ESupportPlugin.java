@@ -56,9 +56,10 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
                 player.getWorld().setTime(18000);
                 player.getWorld().setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
                 player.getWorld().setGameRule(org.bukkit.GameRule.DO_MOB_SPAWNING, false);
-                if (!EcoJobsAPI.hasJob(player, slayer)) EcoJobsAPI.joinJob(player, slayer);
+                if (!EcoJobsAPI.hasJobActive(player, slayer)) EcoJobsAPI.joinJob(player, slayer);
                 EcoJobsAPI.setJobLevel(player, slayer, 1);
                 EcoJobsAPI.setJobXP(player, slayer, 0.0);
+                if (!EcoJobsAPI.hasJobActive(player, slayer)) throw new IllegalStateException("Slayer job did not become active");
                 player.sendMessage("E2E_SETUP");
             }
             case "state" -> {

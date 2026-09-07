@@ -36,10 +36,10 @@ test('jobs command loads the real EcoJobs catalog and opens a profession', async
   const gui = await player.gui({ title: 'Jobs' });
   await gui.locator(item => item.getDisplayName() === 'Job catalog').click();
   const catalog = await player.gui({ title: 'Job catalog' });
-  const miner = catalog.locator(item => item.getDisplayName().includes('Miner'));
+  const miner = catalog.locator(item => item.getDisplayName().includes('Шахтер'));
   await expect(miner).toHaveLore('Level');
   await miner.click();
-  await player.gui({ title: /Miner/ });
+  await player.gui({ title: /Шахтер/ });
 });
 
 test('real EcoJobs reward path blocks AFK and stationary farms but preserves valid movement and filters', async ({ player }) => {

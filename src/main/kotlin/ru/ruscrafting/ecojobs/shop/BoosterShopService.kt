@@ -79,7 +79,11 @@ class BoosterShopService(private val enabled: () -> Boolean, private val store: 
             } else PurchaseResult.DeliveryFailed
         }
     }
-    private fun transition(purchase: ShopPurchase, state: PurchaseState) = store.update(purchase.copy(state = state))
+    private fun transition(purchase: ShopPurchase, state: PurchaseState) = store.update(purchase.copy(state = state)).also {
+        if (state == PurchaseState.DELIVERED && purchase.state != PurchaseState.DELIVERED) {
+            ru.ruscrafting.ecojobs.integration.ArcProductTelemetry.purchased(it.playerId, it.id)
+        }
+    }
 }
 
 class PlayerShopDeliveryGateway(private val player: Player, private val vouchers: VoucherService) : ShopDeliveryGateway {

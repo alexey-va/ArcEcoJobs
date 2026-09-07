@@ -152,6 +152,7 @@ class JobsListener(
             pending.remove(player.uniqueId, payload.voucherId)
             when (outcome.result) {
                 GrantResult.GRANTED -> {
+                    ru.ruscrafting.ecojobs.integration.ArcProductTelemetry.activated(player.uniqueId, payload.voucherId)
                     vouchers.remove(player, payload.voucherId)
                     val totalRemaining = requireNotNull(outcome.remaining) { "Granted voucher has no remaining duration" }
                     val values = vouchers.displayValues(payload, player) +

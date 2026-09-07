@@ -52,6 +52,8 @@ data class AddonSettings(
     val shop: ShopSettings = ShopSettings.disabled(),
     val blockAfkRewards: Boolean = true,
     val huntGuard: ru.ruscrafting.ecojobs.antifarm.HuntGuardSettings = ru.ruscrafting.ecojobs.antifarm.HuntGuardSettings(),
+    val builderPlacement: ru.ruscrafting.ecojobs.antifarm.BuilderPlacementSettings =
+        ru.ruscrafting.ecojobs.antifarm.BuilderPlacementSettings(),
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -122,6 +124,11 @@ data class AddonSettings(
                     siteRadius = yaml.getDouble("anti-farm.stationary-hunt.site-radius", 12.0),
                     idleResetMillis = yaml.getLong("anti-farm.stationary-hunt.idle-reset-seconds", 600) * 1000,
                     cooldownMillis = yaml.getLong("anti-farm.stationary-hunt.cooldown-seconds", 1800) * 1000,
+                ),
+                builderPlacement = ru.ruscrafting.ecojobs.antifarm.BuilderPlacementSettings(
+                    enabled = yaml.getBoolean("anti-farm.builder-placement.enabled", true),
+                    cooldownMillis = yaml.getLong("anti-farm.builder-placement.cooldown-seconds", 600) * 1000,
+                    maximumEntries = yaml.getInt("anti-farm.builder-placement.maximum-entries", 100_000),
                 ),
             )
         }

@@ -1,9 +1,9 @@
 import { test, expect, waitUntil } from '@drownek/plugwright';
 import assert from 'node:assert/strict';
 
-async function state(player) {
+async function state(player, jobId = 'slayer') {
   const since = player.messageBuffer.length;
-  player.chat('/arce2e state');
+  player.chat(`/arce2e state ${jobId}`);
   let message;
   await waitUntil(() => {
     message = player.messageBuffer.slice(since).find(entry => /E2E_STATE xp=/.test(String(entry)));
@@ -13,6 +13,45 @@ async function state(player) {
   const match = message.match(/xp=([0-9.]+) balance=([0-9.]+)/);
   assert.ok(match, `Unexpected state message: ${message}`);
   return { xp: Number(match[1]), balance: Number(match[2]) };
+}
+
+async function placeBlock(player, x, y, z) {
+  const nearby = player.bot.entity.position.clone().set(x + 0.5, y + 1, z + 2.5);
+  await player.teleport(nearby.x, nearby.y, nearby.z);
+  await waitUntil(() => player.bot.entity.position.distanceTo(nearby) < 0.5, {
+    timeout: 5000, message: `player did not reach placement at ${x},${y},${z}`,
+  });
+  const target = player.bot.entity.position.clone().set(x, y, z);
+  const reference = player.bot.blockAt(target.clone().set(x, y - 1, z));
+  assert.ok(reference, `missing reference block below ${x},${y},${z}`);
+  await player.bot.placeBlock(reference, target.clone().set(0, 1, 0));
+  await waitUntil(() => player.bot.blockAt(target)?.name !== 'air', {
+    timeout: 5000, message: `block was not placed at ${x},${y},${z}`,
+  });
+}
+
+async function breakBlock(player, x, y, z) {
+  const nearby = player.bot.entity.position.clone().set(x + 0.5, y + 1, z + 2.5);
+  await player.teleport(nearby.x, nearby.y, nearby.z);
+  await waitUntil(() => player.bot.entity.position.distanceTo(nearby) < 0.5, {
+    timeout: 5000, message: `player did not reach break at ${x},${y},${z}`,
+  });
+  const target = player.bot.entity.position.clone().set(x, y, z);
+  const block = player.bot.blockAt(target);
+  assert.ok(block && block.name !== 'air', `missing placed block at ${x},${y},${z}`);
+  await player.bot.dig(block);
+  await waitUntil(() => player.bot.blockAt(target)?.name === 'air', {
+    timeout: 5000, message: `block was not broken at ${x},${y},${z}`,
+  });
+}
+
+async function waitForState(player, predicate, message, jobId = 'builder') {
+  let current;
+  await waitUntil(async () => {
+    current = await state(player, jobId);
+    return predicate(current);
+  }, { timeout: 10000, message });
+  return current;
 }
 
 async function metrics(player) {
@@ -106,6 +145,41 @@ test('real EcoJobs reward path blocks AFK and stationary farms but preserves val
   await kill(player);
   const afterMovedSite = await state(player);
   assert.equal(afterMovedSite.xp, afterFiltered.xp + 1, 'moving to a new site must keep rewards active');
+  await player.deOp();
+});
+
+test('Builder pays new coordinates and blocks repeated coordinates for both XP and money', async ({ player }) => {
+  await player.makeOp();
+  player.chat('/arce2e setup builder');
+  await expect(player).toHaveReceivedMessage('E2E_SETUP');
+  await player.teleport(0.5, 65, 0.5);
+  await player.giveItem('stone', 64);
+  await player.bot.equip(player.bot.inventory.items().find(item => item.name === 'stone'), 'hand');
+
+  const before = await state(player, 'builder');
+  for (let x = 2; x < 14; x++) await placeBlock(player, x, 65, 0);
+  const afterNew = await waitForState(
+    player,
+    current => current.xp > before.xp && current.balance > before.balance,
+    'new Builder coordinates did not award XP and money',
+  );
+
+  const repeated = { x: 2, y: 65, z: 0 };
+  const beforeRepeat = await state(player, 'builder');
+  for (let i = 0; i < 12; i++) {
+    await breakBlock(player, repeated.x, repeated.y, repeated.z);
+    await placeBlock(player, repeated.x, repeated.y, repeated.z);
+  }
+  const afterRepeat = await state(player, 'builder');
+  assert.deepEqual(afterRepeat, beforeRepeat, 'repeated Builder coordinate must not award XP or money');
+
+  await breakBlock(player, repeated.x, repeated.y, repeated.z);
+  await placeBlock(player, 15, 65, 0);
+  await waitForState(
+    player,
+    current => current.xp > afterRepeat.xp,
+    'a new Builder coordinate did not award XP after a blocked repeat',
+  );
   await player.deOp();
 });
 

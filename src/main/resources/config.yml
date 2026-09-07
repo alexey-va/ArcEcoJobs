@@ -29,6 +29,10 @@ anti-farm:
     site-radius: 12.0
     idle-reset-seconds: 600
     cooldown-seconds: 1800
+  builder-placement:
+    enabled: true
+    cooldown-seconds: 600
+    maximum-entries: 100000
 
 # Booster sales are opt-in per server. Prices live beside each preset in boosters.yml.
 # Booster prices accept MONEY through Vault or TOKENS through named RedisEconomy currency "tokens".

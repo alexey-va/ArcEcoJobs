@@ -73,7 +73,7 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
                     + " afk=" + AFKManager.isAfk(player)
                     + " account=" + (economy != null && economy.hasAccount(player))
                     + " placeholders=" + me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player,
-                        "%arcecojobs_work_slayer_allowed%/%arcecojobs_boost_slayer_money_multiplier%"));
+                        "%arcecojobs_work_" + job.id + "_allowed%/%arcecojobs_boost_" + job.id + "_money_multiplier%"));
             }
             case "metrics" -> player.sendMessage(jobWorkMetrics());
             case "spawn" -> {

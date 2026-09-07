@@ -87,6 +87,26 @@ class AddonConfigTest : StringSpec({
         }
     }
 
+    "builder placement guard has a bounded default and configurable cooldown" {
+        val loaded = AddonSettings.load(yaml("""
+            anti-farm:
+              builder-placement:
+                enabled: true
+                cooldown-seconds: 600
+                maximum-entries: 100000
+        """.trimIndent())).builderPlacement
+
+        loaded.enabled shouldBe true
+        loaded.cooldownMillis shouldBe 600_000
+        loaded.maximumEntries shouldBe 100_000
+        shouldThrow<IllegalArgumentException> {
+            AddonSettings.load(yaml("anti-farm:\n  builder-placement:\n    cooldown-seconds: 59"))
+        }
+        shouldThrow<IllegalArgumentException> {
+            AddonSettings.load(yaml("anti-farm:\n  builder-placement:\n    maximum-entries: 100001"))
+        }
+    }
+
     "stacked duration cannot be shorter than one voucher duration" {
         val config = yaml("""
             boosts:

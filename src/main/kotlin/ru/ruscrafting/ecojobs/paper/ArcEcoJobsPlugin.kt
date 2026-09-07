@@ -96,6 +96,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             moneyAttribution = MoneyAttribution()
             rewardGuard = ru.ruscrafting.ecojobs.antifarm.JobRewardGuard({ settings }, locale,
                 isSlayerActive = { player -> ecoJobs.job("slayer")?.let { ecoJobs.active(player, it) } == true },
+                isBuilderActive = { player -> ecoJobs.job("builder")?.let { ecoJobs.active(player, it) } == true },
                 eligibleHunt = ecoJobs::payableHunt,
             )
             server.pluginManager.registerEvents(rewardGuard, this)
@@ -336,7 +337,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     }
 
     private fun enforceMoneyIntegration(candidate: AddonSettings = settings) {
-        if (candidate.blockAfkRewards || candidate.huntGuard.enabled) {
+        if (candidate.blockAfkRewards || candidate.huntGuard.enabled || candidate.builderPlacement.enabled) {
             val unguarded = ecoJobs.rewardGuardIntegrationProblems()
             require(unguarded.isEmpty()) { "Missing pre-action reward guard filters in EcoJobs jobs: ${unguarded.joinToString()}. Deploy matching job configs before activation." }
         }

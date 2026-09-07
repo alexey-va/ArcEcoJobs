@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "title": "Builder repeated placement reward gate",
+  "assumptions": [
+    "This is a decision-level before/after assessment for the CI fixture, not a player income forecast.",
+    "Low/base/high model 12/120/1200 eligible placement observations at fixed level-1 rates, solely to exercise the gate; this is not a measured player-day or progression forecast.",
+    "The pinned Builder fixture pays 4 vault every 12 accepted placements and grants 1.2 XP per accepted placement. Money reward events below are complete batches; XP events are placements. Level progression is outside this decision-level calculation.",
+    "A new world+XYZ coordinate is ordinary construction and remains payable; a repeat coordinate is the same UUID and world+XYZ within 600 seconds.",
+    "No prices, boosts, item rewards, or other professions are changed; BlockPlaceEvent remains uncancelled.",
+    "The process-local record is keyed by UUID and survives relog; maximum 100000 active coordinates fails closed when full."
+  ],
+  "participants": [
+    1,
+    1,
+    1
+  ],
+  "acceptance": {
+    "cooldown_seconds": 600,
+    "new_coordinate_weekly_delta": [
+      "0",
+      "0",
+      "0"
+    ],
+    "repeat_coordinate_after_vault": [
+      "0",
+      "0",
+      "0"
+    ],
+    "repeat_coordinate_after_xp": [
+      "0",
+      "0",
+      "0"
+    ]
+  },
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "builder_new_coordinate",
+          "kind": "mint",
+          "source": "src/test/e2e/fixtures/ecojobs/jobs/builder.yml:29-37",
+          "basis": "New coordinates remain payable before and after; activity values are CI fixture assumptions. Each counted money event is a complete batch of 12 accepted placements at level 1.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "1",
+              "10",
+              "100"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "1",
+              "10",
+              "100"
+            ]
+          }
+        },
+        {
+          "id": "builder_repeat_coordinate",
+          "kind": "mint",
+          "source": "src/main/kotlin/ru/ruscrafting/ecojobs/antifarm/BuilderPlacementGuard.kt:16-34",
+          "basis": "Same UUID and world+XYZ within the configured 600-second cooldown; only reward eligibility changes. Each counted money event is a complete batch of 12 accepted placements at level 1.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "1",
+              "10",
+              "100"
+            ]
+          },
+          "after": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "4",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "1",
+              "10",
+              "100"
+            ]
+          }
+        }
+      ]
+    },
+    "xp": {
+      "minor_per_unit": 10,
+      "disposable_per_player_day": {
+        "before": [
+          "0",
+          "0",
+          "0"
+        ],
+        "after": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "flows": [
+        {
+          "id": "builder_new_coordinate",
+          "kind": "mint",
+          "source": "src/test/e2e/fixtures/ecojobs/jobs/builder.yml:9-14",
+          "basis": "New coordinates remain payable before and after; XP is a separate unit from vault.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1.2",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "12",
+              "120",
+              "1200"
+            ]
+          },
+          "after": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1.2",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "12",
+              "120",
+              "1200"
+            ]
+          }
+        },
+        {
+          "id": "builder_repeat_coordinate",
+          "kind": "mint",
+          "source": "src/main/kotlin/ru/ruscrafting/ecojobs/antifarm/JobRewardGuard.kt:93-115",
+          "basis": "The same cached decision is consumed by the native XP filter and money pre-deposit gate.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "1.2",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "12",
+              "120",
+              "1200"
+            ]
+          },
+          "after": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "1.2",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              "12",
+              "120",
+              "1200"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "prices": []
+}

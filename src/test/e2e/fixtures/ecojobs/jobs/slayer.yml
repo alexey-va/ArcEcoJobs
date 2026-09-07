@@ -1,0 +1,36 @@
+name: "Hunter"
+description: "Disposable real-Paper slayer fixture."
+unlocked-by-default: true
+reset-on-quit: false
+join-price: 0
+leave-price: 0
+xp-formula: "100 * (1.2 ^ (%level% - 1))"
+max-level: 50
+xp-gain-methods:
+  - trigger: kill
+    multiplier: 1.0
+    filters:
+      from_spawner: false
+      entities: [zombie, skeleton, spider]
+      is_expression_true: "%arcecojobs_work_slayer_allowed%"
+    conditions: []
+level-placeholders:
+  - id: money
+    value: "1"
+effects-description:
+  1: ["&7One coin per kill."]
+rewards-description:
+  1: ["&7One coin per kill."]
+level-up-messages:
+  1: ["&7One coin per kill."]
+effects:
+  - id: give_money
+    args:
+      amount: "1 * %arcecojobs_boost_slayer_money_multiplier% * %arcecojobs_earnings_slayer_money_marker%"
+    triggers: [kill]
+    filters:
+      from_spawner: false
+      entities: [zombie, skeleton, spider]
+      is_expression_true: "%arcecojobs_work_slayer_allowed%"
+conditions: []
+icon: zombie_head

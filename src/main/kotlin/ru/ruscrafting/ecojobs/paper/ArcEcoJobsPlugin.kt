@@ -51,6 +51,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     private lateinit var moneyIntegration: VaultEconomyIntegration
     private var voucherLedger: OneTimeUseLedger = UnavailableOneTimeUseLedger
     private var discoveryLedger: DiscoveryLedger = UnavailableDiscoveryLedger
+    private lateinit var rewardGuard: ru.ruscrafting.ecojobs.antifarm.JobRewardGuard
     private var earnings: EarningsService? = null
     private var moneyAttribution: MoneyAttribution? = null
     private var explorationListener: ExplorationListener? = null
@@ -92,8 +93,13 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 UnavailableDiscoveryLedger
             }
             lifecycle.own(discoveryLedger)
+            moneyAttribution = MoneyAttribution()
+            rewardGuard = ru.ruscrafting.ecojobs.antifarm.JobRewardGuard({ settings }, locale,
+                isSlayerActive = { player -> ecoJobs.job("slayer")?.let { ecoJobs.active(player, it) } == true },
+                eligibleHunt = ecoJobs::payableHunt,
+            )
+            server.pluginManager.registerEvents(rewardGuard, this)
             if (settings.earnings.enabled) {
-                moneyAttribution = MoneyAttribution()
                 runCatching {
                     val service = EarningsService(
                         this,
@@ -123,7 +129,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 ecoJobs::names,
                 SigningKeyStore.loadOrCreate(dataFolder.toPath()),
             )
-            expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts, moneyAttribution).also {
+            expansion = BoostPlaceholderExpansion(pluginMeta.version, boosts, moneyAttribution, rewardGuard::allows).also {
                 require(it.register()) { "Could not register the PlaceholderAPI expansion" }
                 lifecycle.own(AutoCloseable { it.unregister() })
             }
@@ -205,7 +211,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
         )
         requireNotNull(pluginRuntime).own(jobsMenu)
         val command = JobsCommand(
-            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin, shop,
+            { settings }, locale, ecoJobs, boosts, { boosterRegistry }, vouchers, jobsMenu, ::reloadPlugin, shop, rewardGuard::summary,
         )
         jobsMenu.installAdminActions(command::executeAdmin)
         requireNotNull(getCommand("arcjobs")).apply {
@@ -283,6 +289,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                     earnings?.recordMoney(player.uniqueId, jobId, amount)
                 },
                 auditBridge = ReflectiveArcAuditBridge.discover(),
+                rewardAllowed = { player, job -> player.player?.let { rewardGuard.allows(it, job) } == true },
             )
         EconomyManager.register(moneyIntegration)
         check(EconomyManager.hasRegistrations()) { "eco did not accept the Vault economy integration" }
@@ -324,6 +331,10 @@ class ArcEcoJobsPlugin : JavaPlugin() {
     }
 
     private fun enforceMoneyIntegration(candidate: AddonSettings = settings) {
+        if (candidate.blockAfkRewards || candidate.huntGuard.enabled) {
+            val unguarded = ecoJobs.rewardGuardIntegrationProblems()
+            require(unguarded.isEmpty()) { "Missing pre-action reward guard filters in EcoJobs jobs: ${unguarded.joinToString()}. Deploy matching job configs before activation." }
+        }
         val problems = ecoJobs.moneyIntegrationProblems(candidate.earnings.enabled)
         if (problems.isEmpty()) return
         val message = "EcoJobs money integration placeholders are missing from jobs: ${problems.joinToString(", ")}"

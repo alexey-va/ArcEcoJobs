@@ -1,0 +1,69 @@
+name: "&#5688C7Кузнец"
+description: "&7Создавайте инструменты и полезное снаряжение."
+unlocked-by-default: true
+reset-on-quit: false
+join-price: 0
+leave-price: 0
+xp-formula: "100 * (1.2 ^ (%level% - 1))"
+max-level: 50
+xp-gain-methods:
+  - trigger: craft
+    multiplier: 2
+    conditions: []
+    filters:
+      items: &tools
+        - "*wooden_pickaxe"
+        - "*stone_pickaxe"
+        - "*iron_pickaxe"
+        - "*golden_pickaxe"
+        - "*diamond_pickaxe"
+        - "*netherite_pickaxe"
+        - "*wooden_axe"
+        - "*stone_axe"
+        - "*iron_axe"
+        - "*golden_axe"
+        - "*diamond_axe"
+        - "*netherite_axe"
+        - "*wooden_shovel"
+        - "*stone_shovel"
+        - "*iron_shovel"
+        - "*golden_shovel"
+        - "*diamond_shovel"
+        - "*netherite_shovel"
+        - "*wooden_hoe"
+        - "*stone_hoe"
+        - "*iron_hoe"
+        - "*golden_hoe"
+        - "*diamond_hoe"
+        - "*netherite_hoe"
+        - "*fishing_rod"
+        - "*flint_and_steel"
+        - "*clock"
+        - "*compass"
+        - "*lead"
+        - "*shears"
+        - "*spyglass"
+      is_expression_true: "%arcecojobs_work_toolsmith_allowed%"
+level-placeholders:
+  - id: money
+    value: "2 * (1 + (%level% - 1) * 0.03)"
+effects-description:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждый созданный инструмент."
+rewards-description:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждый созданный инструмент."
+level-up-messages:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждый созданный инструмент."
+effects:
+  - id: give_money
+    args:
+      amount: "(2 * (1 + (%level% - 1) * 0.03)) * %arcecojobs_boost_toolsmith_money_multiplier% * %arcecojobs_earnings_toolsmith_money_marker%"
+    filters:
+      items: *tools
+      is_expression_true: "%arcecojobs_work_toolsmith_allowed%"
+    triggers:
+      - craft
+conditions: []
+icon: 'player_head texture:eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODk2ZDRjODM4YTE2MDZhYzc1Nzc1NDIzMjA4NjE0OTcwOGI3OWFiYTAxYmU5NTNjNjUzOTkxMDFlODk0M2RhZiJ9fX0='

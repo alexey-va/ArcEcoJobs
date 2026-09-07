@@ -6,20 +6,29 @@ source, then runs `./gradlew plugwrightTest` with Java 25. Paper binds to
 localhost:25565 and uses disposable world/plugin data.
 
 The suite opens the ArcEcoJobs inventory, selects the job catalog, verifies the
-real Miner entry and its level lore, and opens the profession card. Job rewards,
-paid boosts, vouchers, native dialogs and cross-server persistence are outside
-this scenario. Existing JVM and storage tests remain in place.
-
-The fixture uses upstream's stock professions and disables only the strict
-ArcEcoJobs money-placeholder guard for them. Their production boost integration
-is not represented here; the warning about missing money placeholders is
-expected. The production guard remains enabled in packaged defaults.
+real Miner entry and its level lore, and opens the profession card. It also runs
+the real EcoJobs kill trigger through a disposable slayer fixture: the support
+plugin registers an in-memory eco AFK provider, joins the test player to the
+job, reports XP and Vault balance, and spawns one-hit entities for real
+mineflayer melee kills. The fixture covers AFK denial, moving valid kills,
+stationary cooldown timing, spawner metadata and passive-entity exclusions.
+The fixture writes the complete runtime-owned catalog used by the E2E server:
+the eleven jobs mirrored from the ops catalog (`beekeeper`, `builder`,
+`enchanter`, `explorer`, `farmer`, `fisherman`, `lumberjack`, `miner`,
+`slayer`, `smelter`, and `toolsmith`). Every XP gain method and every
+`give_money` effect carries its job-specific pre-action work gate, so startup
+validation cannot fall back to an unguarded bundled default. The disposable
+slayer fixture adds the real entity filters used by this test. Its AFK
+provider, command and jar exist only under `src/test/e2e/support`; no production
+plugin or server data is changed.
 
 Dependencies are actual plugins: eco/EcoJobs/libreforge 2026.33, LuckPerms
 5.5.71, PlaceholderAPI 2.12.3, Vault 1.7.3 and RedisEconomy 4.5.12. The fixture
 economy starts with zero balances. Production code and economic configuration
-are unchanged. Paper 26.1.2 is used because eco's runtime did not load on the
-Paper 1.21.11 build supplied by Plugwright 2.0.4. The runner and Node 22.14.0
+are unchanged. The E2E harness intentionally runs Paper 26.1.2, while
+production targets Paper/Purpur 1.21.11. Paper 26.1.2 is used because eco's
+runtime did not load on the Paper 1.21.11 build supplied by Plugwright 2.0.4;
+this does not change the production target. The runner and Node 22.14.0
 are pinned, and CI rejects npm lockfile changes.
 
 ## Upstream runtime packaging

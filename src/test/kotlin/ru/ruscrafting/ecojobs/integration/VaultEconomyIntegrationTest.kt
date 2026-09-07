@@ -87,6 +87,23 @@ class VaultEconomyIntegrationTest : StringSpec({
         bridge.cancelled shouldBe listOf("audit-token")
     }
 
+    "a denied job reward never reaches provider audit or earnings but unrelated eco payments still work" {
+        val id = UUID.randomUUID()
+        val actor = mockk<OfflinePlayer> { every { uniqueId } returns id }
+        val provider = mockk<Economy>()
+        val audit = mockk<JobAuditBridge>()
+        val attribution = MoneyAttribution()
+        val guarded = VaultEconomyIntegration(provider, attribution,
+            recordEarnings = { _, _, _ -> error("must not record denied earnings") },
+            auditBridge = audit, rewardAllowed = { _, _ -> false })
+        attribution.mark(id, "slayer")
+        guarded.giveMoney(actor, BigDecimal("10")) shouldBe false
+        verify(exactly = 0) { provider.depositPlayer(any<OfflinePlayer>(), any()) }
+        verify(exactly = 0) { audit.mark(any(), any(), any()) }
+        every { provider.depositPlayer(actor, 10.0) } returns success(10.0, 10.0)
+        guarded.giveMoney(actor, BigDecimal("10")) shouldBe true
+    }
+
     "withdraws the requested amount through Vault" {
         every { economy.withdrawPlayer(player, 2.5) } returns success(2.5, 10.25)
 

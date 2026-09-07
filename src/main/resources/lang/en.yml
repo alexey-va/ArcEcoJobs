@@ -17,6 +17,9 @@ common:
   permanent: 'permanent'
 
 message:
+  work-blocked-afk: '<gold>Jobs</gold> <dark_gray>·</dark_gray> <gray>Rewards are paused while AFK.</gray>'
+  work-blocked-farm: '<gold>Hunter</gold> <dark_gray>·</dark_gray> <gray>Stationary farms do not earn rewards. Hunt elsewhere.</gray>'
+  diagnose-antifarm: '<gray>Job reward protection: <white><status></white></gray>'
   player-only: '<prefix><#e6fff3>Only a player can use this command.'
   not-ready: '<prefix><#e6fff3>Jobs are still loading. Try again in a few seconds.'
   no-permission: '<prefix><#e36d6d>You do not have permission.'

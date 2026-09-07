@@ -36,6 +36,7 @@ class JobsCommand(
     private val menu: JobsMenu,
     private val reload: () -> Result<Unit>,
     private val shop: BoosterShopService? = null,
+    private val guardSummary: () -> String = { "unavailable" },
 ) : CommandExecutor, TabCompleter {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (sender is Player && menu.openAdminCommand(sender, args.toList())) return true
@@ -257,6 +258,7 @@ class JobsCommand(
 
         private fun diagnose(sender: CommandSender): Boolean {
             if (!sender.hasPermission("arcecojobs.admin.diagnose")) return message(sender, "message.no-permission")
+            message(sender, "message.diagnose-antifarm", mapOf("status" to text(guardSummary())))
             val problems = ecoJobs.moneyIntegrationProblems()
             return if (problems.isEmpty()) message(sender, "message.diagnose-ok", mapOf(
                 "jobs" to text(ecoJobs.jobs().size), "money" to text("OK"),

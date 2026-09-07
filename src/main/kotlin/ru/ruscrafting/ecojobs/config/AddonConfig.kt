@@ -50,6 +50,8 @@ data class AddonSettings(
     val redemptionStorage: RedemptionStorageSettings = RedemptionStorageSettings.disabled(),
     val menuPresentation: JobsMenuPresentation = JobsMenuPresentation.DIALOG,
     val shop: ShopSettings = ShopSettings.disabled(),
+    val blockAfkRewards: Boolean = true,
+    val huntGuard: ru.ruscrafting.ecojobs.antifarm.HuntGuardSettings = ru.ruscrafting.ecojobs.antifarm.HuntGuardSettings(),
 ) {
     companion object {
         fun load(file: File): AddonSettings {
@@ -112,6 +114,16 @@ data class AddonSettings(
                 guiItems = GuiItems.load(yaml),
                 redemptionStorage = redemptionStorage,
                 shop = shop,
+                blockAfkRewards = yaml.getBoolean("anti-farm.block-afk-rewards", true),
+                huntGuard = ru.ruscrafting.ecojobs.antifarm.HuntGuardSettings(
+                    enabled = yaml.getBoolean("anti-farm.stationary-hunt.enabled", true),
+                    minimumKills = yaml.getInt("anti-farm.stationary-hunt.minimum-kills", 120),
+                    minimumDurationMillis = yaml.getLong("anti-farm.stationary-hunt.minimum-seconds", 180) * 1000,
+                    siteRadius = yaml.getDouble("anti-farm.stationary-hunt.site-radius", 12.0),
+                    hunterRadius = yaml.getDouble("anti-farm.stationary-hunt.hunter-radius", 8.0),
+                    idleResetMillis = yaml.getLong("anti-farm.stationary-hunt.idle-reset-seconds", 600) * 1000,
+                    cooldownMillis = yaml.getLong("anti-farm.stationary-hunt.cooldown-seconds", 1800) * 1000,
+                ),
             )
         }
     }

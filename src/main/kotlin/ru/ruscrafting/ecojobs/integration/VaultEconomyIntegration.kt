@@ -20,6 +20,7 @@ class VaultEconomyIntegration(
     private val moneyAttribution: MoneyAttribution? = null,
     private val recordEarnings: (OfflinePlayer, String, BigDecimal) -> Unit = { _, _, _ -> },
     private val auditBridge: JobAuditBridge = NoopJobAuditBridge,
+    private val rewardAllowed: (OfflinePlayer, String) -> Boolean = { _, _ -> true },
 ) : EconomyIntegration {
     override fun getPluginName(): String = "Vault"
 
@@ -29,6 +30,7 @@ class VaultEconomyIntegration(
     override fun giveMoney(player: OfflinePlayer, amount: BigDecimal): Boolean {
         val playerId = moneyAttribution?.let { player.uniqueId }
         val jobId = playerId?.let { moneyAttribution.consume(it) }
+        if (jobId != null && (amount.signum() <= 0 || !rewardAllowed(player, jobId))) return false
         val auditToken = jobId?.let { auditBridge.mark(requireNotNull(playerId), it, amount) }
         val response =
             try {

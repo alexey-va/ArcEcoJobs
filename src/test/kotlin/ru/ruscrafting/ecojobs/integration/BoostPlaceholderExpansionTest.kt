@@ -25,6 +25,20 @@ class BoostPlaceholderExpansionTest : StringSpec({
         expansion.onRequest(player, "not_an_arcecojobs_placeholder").shouldBeNull()
     }
 
+    "pre-action XP and money guards match and a denied boost cannot restore the payout" {
+        val player = mockk<Player>()
+        val boosts = mockk<BoostService>()
+        var allowed = false
+        val expansion = BoostPlaceholderExpansion("test", boosts, rewardAllowed = { _, _ -> allowed })
+        expansion.onRequest(player, "work_slayer_allowed") shouldBe "0"
+        expansion.onRequest(player, "boost_slayer_money_multiplier") shouldBe "0"
+        expansion.onRequest(null, "work_slayer_allowed") shouldBe "0"
+        allowed = true
+        every { boosts.multiplier(player, "slayer", BoostType.MONEY) } returns 10.0
+        expansion.onRequest(player, "work_slayer_allowed") shouldBe "1"
+        expansion.onRequest(player, "boost_slayer_money_multiplier") shouldBe "10"
+    }
+
     "the next job formula clears an abandoned marker before calculating" {
         val playerId = UUID.randomUUID()
         val player = mockk<Player>()

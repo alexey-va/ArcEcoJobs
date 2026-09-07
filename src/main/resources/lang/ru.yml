@@ -17,6 +17,9 @@ common:
   permanent: 'навсегда'
 
 message:
+  work-blocked-afk: '<gold>Работы</gold> <dark_gray>·</dark_gray> <gray>В режиме АФК награды не начисляются.</gray>'
+  work-blocked-farm: '<gold>Охотник</gold> <dark_gray>·</dark_gray> <gray>Ферма в одной точке не оплачивается. Отправляйтесь на охоту.</gray>'
+  diagnose-antifarm: '<gray>Защита работ: <white><status></white></gray>'
   player-only: '<prefix><#e6fff3>Эту команду может выполнить только игрок.'
   not-ready: '<prefix><#e6fff3>Профессии ещё загружаются. Попробуйте через несколько секунд.'
   no-permission: '<prefix><#e36d6d>Недостаточно прав.'

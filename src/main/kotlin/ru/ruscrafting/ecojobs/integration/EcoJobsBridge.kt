@@ -43,6 +43,8 @@ class EcoJobsBridge(
     private val legacySection = LegacyComponentSerializer.legacySection()
     @Volatile
     private var leaderboardCache: CachedRankings? = null
+    private var huntFilterJob: Job? = null
+    private var huntFilters = emptyList<com.willfp.libreforge.filters.FilterList>()
     private var leaderboardBuildInFlight = false
     private val leaderboardCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
 
@@ -147,6 +149,35 @@ class EcoJobsBridge(
             multiplier in amount && (!requireEarningsMarker || marker in amount)
         }
         if (integrated) null else job.id
+    }
+
+    /** Reuse native spawner/entity/custom-entity filters; never count targets the job rejects. */
+    fun payableHunt(data: com.willfp.libreforge.triggers.TriggerData): Boolean {
+        val slayer = job("slayer") ?: return false
+        if (huntFilterJob !== slayer) {
+            val context = com.willfp.libreforge.ViolationContext(
+                Bukkit.getPluginManager().getPlugin("EcoJobs") as com.willfp.eco.core.EcoPlugin,
+                "ArcEcoJobs hunting eligibility",
+            )
+            val actions = slayer.config.getSubsections("xp-gain-methods") +
+                slayer.config.getSubsections("effects").filter { it.getString("id") == "give_money" }
+            val compiled = actions.map { action ->
+                com.willfp.libreforge.filters.FilterList(
+                    com.willfp.libreforge.filters.Filters.compile(action.getSubsection("filters"), context)
+                        .filterNot { it.filter.id == "is_expression_true" },
+                )
+            }
+            huntFilters = compiled
+            huntFilterJob = slayer
+        }
+        return huntFilters.any { it.isMet(data) }
+    }
+
+    fun rewardGuardIntegrationProblems(): List<String> = jobs().mapNotNull { job ->
+        val guard = "%arcecojobs_work_${job.id}_allowed%"
+        val actions = job.config.getSubsections("xp-gain-methods") +
+            job.config.getSubsections("effects").filter { it.getString("id") == "give_money" }
+        job.id.takeUnless { actions.isNotEmpty() && actions.all { guard == it.getString("filters.is_expression_true") } }
     }
 
     fun invalidateLeaderboards() {

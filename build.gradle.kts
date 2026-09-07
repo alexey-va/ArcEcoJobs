@@ -15,6 +15,14 @@ val integrationTestSourceSet = sourceSets.create("integrationTest") {
     runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 }
 
+// Disposable Paper-only control plane for the real reward-path E2E suite.
+val e2eSupportSourceSet = sourceSets.create("e2eSupport") {
+    java.srcDir("src/test/e2e/support/src/main/java")
+    resources.srcDir("src/test/e2e/support/src/main/resources")
+    compileClasspath += sourceSets.main.get().output
+}
+configurations["e2eSupportCompileOnly"].extendsFrom(configurations["compileOnly"])
+
 repositories {
     mavenCentral()
     maven("https://repo.rus-crafting.ru/grocermc/") {
@@ -96,8 +104,18 @@ tasks {
     check { dependsOn(shadowJar, "integrationTest") }
 }
 
+val e2eSupportJar by tasks.registering(Jar::class) {
+    archiveFileName.set("ArcEcoJobsE2ESupport.jar")
+    from(e2eSupportSourceSet.output)
+    dependsOn(e2eSupportSourceSet.classesTaskName)
+}
+
 val ecoJobsRuntimeJar = providers.gradleProperty("e2eEcoJobsJar")
     .orElse(layout.projectDirectory.file("e2e-ecojobs/bin/EcoJobs v2026.33.jar").asFile.absolutePath)
+val e2eJobIds = listOf(
+    "beekeeper", "builder", "enchanter", "explorer", "farmer", "fisherman",
+    "lumberjack", "miner", "slayer", "smelter", "toolsmith"
+)
 val plugwrightLibreforge by configurations.creating
 dependencies {
     add(plugwrightLibreforge.name, "com.willfp:libreforge:2026.33:shadow") { isTransitive = false }
@@ -135,9 +153,16 @@ plugwright {
         file("plugins/ArcEcoJobs/config.yml", projectDir.resolve("src/main/resources/config.yml").readText()
             .replaceFirst("default: ru", "default: en")
             .replaceFirst("use-client-locale: true", "use-client-locale: false")
-            .replaceFirst("require-money-placeholder: true", "require-money-placeholder: false"))
+            .replaceFirst("require-money-placeholder: true", "require-money-placeholder: false")
+            .replaceFirst("minimum-kills: 120", "minimum-kills: 20")
+            .replaceFirst("minimum-seconds: 180", "minimum-seconds: 30")
+            .replaceFirst("cooldown-seconds: 1800", "cooldown-seconds: 60"))
         file("plugins/EcoJobs-2026.33.jar", prepareEcoJobsRuntime.get().archiveFile.get().asFile)
+        e2eJobIds.forEach { jobId ->
+            file("plugins/EcoJobs/jobs/$jobId.yml", projectDir.resolve("src/test/e2e/fixtures/ecojobs/jobs/$jobId.yml"))
+        }
+        file("plugins/ArcEcoJobsE2ESupport.jar", e2eSupportJar.get().archiveFile.get().asFile)
         file("plugins/RedisEconomy/config.yml", projectDir.resolve("src/test/e2e/fixtures/rediseconomy.yml"))
     }
 }
-tasks.named("plugwrightTest") { dependsOn(prepareEcoJobsRuntime) }
+tasks.named("plugwrightTest") { dependsOn(prepareEcoJobsRuntime, e2eSupportJar) }

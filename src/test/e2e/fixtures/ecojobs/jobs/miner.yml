@@ -1,0 +1,52 @@
+name: "&6Шахтер"
+description: "&7Добывайте природные блоки киркой."
+unlocked-by-default: true
+reset-on-quit: false
+join-price: 0
+leave-price: 0
+xp-formula: "100 * (1.2 ^ (%level% - 1))"
+max-level: 50
+xp-gain-methods:
+  - trigger: mine_block
+    multiplier: 0.5
+    filters:
+      player_placed: false
+      is_expression_true: "%arcecojobs_work_miner_allowed%"
+    conditions: &pickaxe
+      - id: in_mainhand
+        args:
+          items:
+            - "*wooden_pickaxe"
+            - "*stone_pickaxe"
+            - "*iron_pickaxe"
+            - "*golden_pickaxe"
+            - "*diamond_pickaxe"
+            - "*netherite_pickaxe"
+level-placeholders:
+  - id: money
+    value: "2.5 * (1 + (%level% - 1) * 0.03)"
+  - id: blocks
+    value: "ceil(10 - %level% / 10)"
+effects-description:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждые &e%blocks% &7природных блоков."
+rewards-description:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждые &e%blocks% &7природных блоков."
+level-up-messages:
+  1:
+    - "&8• &a%money% &f\U0001F4B0 &7за каждые &e%blocks% &7природных блоков."
+effects:
+  - id: give_money
+    args:
+      every: "ceil(10 - %level% / 10)"
+      amount: "(2.5 * (1 + (%level% - 1) * 0.03)) * %arcecojobs_boost_miner_money_multiplier% * %arcecojobs_earnings_miner_money_marker%"
+    conditions: *pickaxe
+    filters:
+      player_placed: false
+      is_expression_true: "%arcecojobs_work_miner_allowed%"
+    triggers:
+      - mine_block
+conditions: []
+icon: 'player_head texture:eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODU3MDVjZjg2NGRmMmMxODJlMzJjNDg2YjcxNDdjYmY3ODJhMGFhM2RmOGE2ZDYxNDUzOTM5MGJmODRmYjE1ZCJ9fX0='
+

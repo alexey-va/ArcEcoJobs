@@ -22,7 +22,7 @@ Local unit/MockBukkit and package gate (no Docker required):
 ./gradlew clean test shadowJar
 ```
 
-The production artifact is `build/libs/ArcEcoJobs-0.1.15.jar`. The test suite
+The production artifact is `build/libs/ArcEcoJobs-0.1.21.jar`. The test suite
 uses public `arc-core 2.7.4` dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`

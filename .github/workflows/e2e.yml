@@ -28,6 +28,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: arcecojobs_e2e
+          MYSQL_USER: arcecojobs_e2e
+          MYSQL_PASSWORD: arcecojobs-e2e
+          MYSQL_ROOT_PASSWORD: arcecojobs-e2e-root
+        ports: ["33306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s --health-timeout=3s --health-retries=30
       redis:
         image: redis:7.4
         ports: ["6385:6379"]
@@ -74,6 +85,22 @@ jobs:
             2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
           sha256sum build/libs/ArcEcoJobs-0.1.21.jar e2e-arc/build/libs/ARC-1.4.4.jar > build/tested-plugin-sha256.txt
+      - name: Verify durable exploration claims
+        env:
+          E2E_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          query = "SELECT COUNT(*), SUM(status = 'APPLIED') FROM arcecojobs_chunk_discoveries WHERE chunk_x = 256 AND chunk_z = 256;"
+          rows = subprocess.check_output([
+              'docker', 'exec', os.environ['E2E_MYSQL_CONTAINER'],
+              'mysql', '-uarcecojobs_e2e', '-parcecojobs-e2e',
+              '--batch', '--skip-column-names', 'arcecojobs_e2e', '-e', query,
+          ], text=True).strip()
+          assert rows == '5\t5', f'Expected exactly five durably applied target-chunk claims: {rows!r}'
+          print('Five target-chunk rewards are durably APPLIED; no duplicate or sixth claim.')
+          PY
       - name: Retain the exact tested plugins
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

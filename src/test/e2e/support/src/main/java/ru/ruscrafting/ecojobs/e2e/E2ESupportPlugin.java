@@ -45,8 +45,10 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player) || args.length == 0) return false;
-        Job slayer = Jobs.getByID("slayer");
-        if (slayer == null) return false;
+        String jobId = args.length > 1 && (args[0].equalsIgnoreCase("setup") || args[0].equalsIgnoreCase("state"))
+            ? args[1] : "slayer";
+        Job job = Jobs.getByID(jobId);
+        if (job == null) return false;
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "afk" -> {
                 boolean enabled = args.length > 1 && args[1].equalsIgnoreCase("on");
@@ -57,17 +59,17 @@ public final class E2ESupportPlugin extends JavaPlugin implements CommandExecuto
                 player.getWorld().setTime(18000);
                 player.getWorld().setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
                 player.getWorld().setGameRule(org.bukkit.GameRule.DO_MOB_SPAWNING, false);
-                if (!EcoJobsAPI.hasJobActive(player, slayer)) EcoJobsAPI.joinJob(player, slayer);
-                EcoJobsAPI.setJobLevel(player, slayer, 1);
-                EcoJobsAPI.setJobXP(player, slayer, 0.0);
-                if (!EcoJobsAPI.hasJobActive(player, slayer)) throw new IllegalStateException("Slayer job did not become active");
+                if (!EcoJobsAPI.hasJobActive(player, job)) EcoJobsAPI.joinJob(player, job);
+                EcoJobsAPI.setJobLevel(player, job, 1);
+                EcoJobsAPI.setJobXP(player, job, 0.0);
+                if (!EcoJobsAPI.hasJobActive(player, job)) throw new IllegalStateException("Job did not become active: " + jobId);
                 player.sendMessage("E2E_SETUP");
             }
             case "state" -> {
                 Economy economy = Bukkit.getServicesManager().load(Economy.class);
                 double balance = economy == null ? Double.NaN : economy.getBalance(player);
-                player.sendMessage("E2E_STATE xp=" + EcoJobsAPI.getJobXP(player, slayer) + " balance=" + balance
-                    + " active=" + EcoJobsAPI.hasJobActive(player, slayer)
+                player.sendMessage("E2E_STATE xp=" + EcoJobsAPI.getJobXP(player, job) + " balance=" + balance
+                    + " active=" + EcoJobsAPI.hasJobActive(player, job)
                     + " afk=" + AFKManager.isAfk(player)
                     + " account=" + (economy != null && economy.hasAccount(player))
                     + " placeholders=" + me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player,

@@ -1,7 +1,7 @@
 # Real Paper EcoJobs menu tests
 
 GitHub runs this suite separately from JVM and MySQL integration tests. It starts
-an empty Redis 7.4 service on localhost:6385, builds the pinned upstream EcoJobs
+empty Redis 7.4 on localhost:6385 and MySQL 8.4 on localhost:33306, builds the pinned upstream EcoJobs
 source, then runs `./gradlew plugwrightTest` with Java 25. Paper binds to
 localhost:25565 and uses disposable world/plugin data.
 
@@ -21,6 +21,16 @@ validation cannot fall back to an unguarded bundled default. The disposable
 slayer fixture adds the real entity filters used by this test. Its AFK
 provider, command and jar exist only under `src/test/e2e/support`; no production
 plugin or server data is changed.
+
+The explorer scenario enables the real MySQL discovery ledger and uses native
+EcoJobs XP and Vault payouts. Players cross a chunk boundary by walking; a
+teleport alone earns nothing. Revisiting both discovered chunks and reconnecting
+cannot repeat the reward. Six distinct players enter the same target chunk:
+the first five receive the existing rank-scaled XP and 1.50/1.20/0.90/0.60/0.15
+coin payments; the sixth receives neither. CI also reads the actual discovery
+table and requires exactly five APPLIED target-chunk records. The support
+plugin only joins/reset-prepares a job and reads its public state; it does not
+dispatch discovery events or issue these rewards.
 
 Dependencies are actual plugins: eco/EcoJobs/libreforge 2026.33, LuckPerms
 5.5.71, PlaceholderAPI 2.12.3, Vault 1.7.3 and RedisEconomy 4.5.12. The fixture
@@ -44,7 +54,8 @@ upstream's Gradle plugin 2.0.0; `prepareEcoJobsRuntime` embeds that payload unde
 the required name. It preserves EcoJobs runtime classes and plugin identity;
 it does not replace providers or merge the two plugins' class trees.
 
-For a local run, prepare an empty disposable Redis instance on localhost:6385
+For a local run, prepare empty disposable Redis on localhost:6385 and MySQL on
+localhost:33306 (database/user `arcecojobs_e2e`, password `arcecojobs-e2e`)
 and build the same upstream source:
 
 ```bash

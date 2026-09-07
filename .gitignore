@@ -3,3 +3,4 @@ src/test/e2e/node_modules/
 .kotlin/
 build/
 e2e-ecojobs/
+e2e-arc/

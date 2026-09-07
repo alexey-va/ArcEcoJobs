@@ -59,6 +59,17 @@ jobs:
             -Pe2eArcJar="$GITHUB_WORKSPACE/e2e-arc/build/libs/ARC-1.4.4.jar" \
             2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
+          sha256sum build/libs/ArcEcoJobs-0.1.20.jar e2e-arc/build/libs/ARC-1.4.4.jar > build/tested-plugin-sha256.txt
+      - name: Retain the exact tested plugins
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: job-work-tested-plugins
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            build/libs/ArcEcoJobs-0.1.20.jar
+            e2e-arc/build/libs/ARC-1.4.4.jar
+            build/tested-plugin-sha256.txt
       - name: Upload Paper logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

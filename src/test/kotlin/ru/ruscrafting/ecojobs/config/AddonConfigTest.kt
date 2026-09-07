@@ -407,7 +407,7 @@ class AddonConfigTest : StringSpec({
         @Suppress("UNCHECKED_CAST")
         val amount = (money["args"] as Map<String, String>).getValue("amount")
         amount shouldBe
-            "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_value%) * %arcecojobs_boost_explorer_money_multiplier% * %arcecojobs_earnings_explorer_money_marker%"
+            "(1.5 * (1 + (%level% - 1) * 0.03) * %alt_trigger_value%) * %arcecojobs_boost_explorer_money_multiplier% * %arcecojobs_earnings_explorer_money_marker%"
     }
 
     "case variants cannot overwrite another preset" {

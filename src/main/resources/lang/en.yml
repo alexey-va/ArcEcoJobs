@@ -8,6 +8,7 @@ common:
   next-name: '<#92bed8>Next page'
   next-lore: '<#8c8c8c>Page <page> of <pages>'
   close-name: '<#aaa49a>Close'
+  unavailable-prefix: '<#aaa49a>[Unavailable] '
   loading: '<#8c8c8c>Loading data…'
   none: '<#8c8c8c>None'
   all-jobs: 'All jobs'
@@ -508,7 +509,6 @@ dialog:
     description: 'Review the effect, duration and price before buying.'
   close-tooltip: '<#969696>Return to the game. Escape follows the shared ARC menu setting.'
   main:
-    back: '<#969696>Main menu'
     description: '<italic:false><#e6fff3>Choose a job and earn money and XP for its activities.<newline><newline><#c8a477>Sections<#e6fff3><newline>Catalog — choose a job; my jobs — your progress.<newline>Leaders — rankings; boosts — your active bonuses.'
   catalog:
     description: '<italic:false><#e6fff3>Compare jobs and choose your next profession.<newline><#969696>Each job card shows joining conditions, levels, earnings, and boosts.'

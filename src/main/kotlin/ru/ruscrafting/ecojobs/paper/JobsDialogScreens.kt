@@ -2,7 +2,6 @@ package ru.ruscrafting.ecojobs.paper
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.JoinConfiguration
-import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
@@ -25,6 +24,8 @@ internal object JobsDialogScreens {
         detailSlot: Int?,
         escapeGoesBack: Boolean,
         actionable: (String, Int?) -> Boolean,
+        role: (String, Int?) -> JobsDialogStyle.Role,
+        forward: (String, Int?) -> Boolean,
         click: (Int) -> Unit,
         detail: (Int?) -> Unit,
         close: () -> Unit,
@@ -43,17 +44,23 @@ internal object JobsDialogScreens {
                 }
             }
         }
-        fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit) =
+        fun button(
+            id: String,
+            label: Component,
+            tooltip: Component = Component.empty(),
+            role: JobsDialogStyle.Role = JobsDialogStyle.Role.DEFAULT,
+            action: () -> Unit,
+        ) =
             PaperDialogButton(
-                id = PaperDialogActionId.of(id.replace('-', '_')), label = JobsDialogStyle.text(label),
+                id = PaperDialogActionId.of(id.replace('-', '_')), label = JobsDialogStyle.role(label, role),
                 tooltip = JobsDialogStyle.text(tooltip), width = if (view is JobsView.EarningsHours && detailSlot == null) 102 else 230, onClick = { action() },
             )
         val closeButton = button("close", locale.render("common.close-name", player),
-            locale.render("dialog.close-tooltip", player), close)
+            locale.render("dialog.close-tooltip", player), JobsDialogStyle.Role.MUTED, close)
         fun screen(title: Component, body: List<PaperDialogBody>, actions: List<PaperDialogButton>, back: PaperDialogButton, suffix: String = "") =
             PaperDialogScreen(
                 id = "ecojobs.${JobsMenuLayouts.menu(view).value}$suffix",
-                title = recolor(title, TextColor.color(0xf4bd6a)),
+                title = JobsDialogStyle.title(title, titleRole(view)),
                 body = body.map { it.copy(text = JobsDialogStyle.text(it.text)) },
                 buttons = actions,
                 // Core substitutes this footer with the actual shared history action.
@@ -65,7 +72,12 @@ internal object JobsDialogScreens {
             name(selected.item),
             listOf(PaperDialogBody(join(lore(selected.item)), 468)),
             emptyList(),
-            button("detail_back", locale.render("common.back-name", player), locale.render("common.back-lore", player)) { detail(null) },
+            button(
+                "detail_back",
+                JobsDialogStyle.back(locale.render("common.back-name", player)),
+                locale.render("common.back-lore", player),
+                JobsDialogStyle.Role.MUTED,
+            ) { detail(null) },
             ".detail",
         )
 
@@ -83,17 +95,40 @@ internal object JobsDialogScreens {
             val title = name(row.item)
             val lines = lore(row.item)
             val tooltip = join(lines)
+            val buttonRole = role(row.id, row.id.substringAfter('_').toIntOrNull())
             val inline = row.id in setOf("profile", "overview", "summary", "status", "self", "empty", "confirm") ||
                 view is JobsView.JobCard && row.id == "action" && !row.actionable
-            if (inline) body += PaperDialogBody(join(listOf(title) + lines), 468)
+            if (inline) body += PaperDialogBody(
+                if (buttonRole == JobsDialogStyle.Role.UNAVAILABLE) {
+                    JobsDialogStyle.role(join(listOf(title) + lines), buttonRole)
+                } else join(listOf(title) + lines),
+                468,
+            )
+            val hasForwardMarker = forward(row.id, row.id.substringAfter('_').toIntOrNull()) ||
+                view is JobsView.JobCard && row.id == "action" && buttonRole == JobsDialogStyle.Role.DESTRUCTIVE
+            val label = when {
+                view is JobsView.Catalog && row.id.startsWith("content_") -> JobsDialogStyle.state(
+                    title,
+                    buttonRole,
+                    locale.render("common.unavailable-prefix", player),
+                    trailingDetail = buttonRole != JobsDialogStyle.Role.UNAVAILABLE,
+                )
+                hasForwardMarker -> JobsDialogStyle.forward(title, buttonRole)
+                else -> title
+            }
+            val labelRole = if (hasForwardMarker || view is JobsView.Catalog && row.id.startsWith("content_")) {
+                JobsDialogStyle.Role.DEFAULT
+            } else buttonRole
             val control = when {
-                row.actionable -> button(row.id, title, tooltip) { click(row.slot) }
+                buttonRole == JobsDialogStyle.Role.UNAVAILABLE -> if (inline) null else button(row.id, label, tooltip, labelRole) {}
+                row.actionable -> button(row.id, label, tooltip, labelRole) { click(row.slot) }
                 inline -> null
-                else -> button("info_${row.id}", title, tooltip) { detail(row.slot) }
+                else -> button("info_${row.id}", label, tooltip, labelRole) { detail(row.slot) }
             }
             if (control != null) when (row.id) {
-                "back", "cancel" -> back = control.copy(label = JobsDialogStyle.text(locale.render("common.back-name", player)))
-                "previous", "next" -> pagination += control
+                "back", "cancel" -> back = control.copy(label = JobsDialogStyle.back(locale.render("common.back-name", player)))
+                "previous" -> pagination += control.copy(label = JobsDialogStyle.previous(control.label))
+                "next" -> pagination += control.copy(label = JobsDialogStyle.next(control.label))
                 else -> buttons += control
             }
         }
@@ -111,8 +146,13 @@ internal object JobsDialogScreens {
     private fun join(lines: List<Component>) = Component.join(JoinConfiguration.newlines(), lines)
         .decoration(TextDecoration.ITALIC, false)
 
-    private fun recolor(value: Component, color: TextColor): Component = value.color(color)
-        .decoration(TextDecoration.ITALIC, false).children(value.children().map { recolor(it, color) })
+    private fun titleRole(view: JobsView): JobsDialogStyle.Role = when (view) {
+        JobsView.Main, is JobsView.Catalog, is JobsView.JobCard, is JobsView.LeaveConfirm,
+        is JobsView.Help, is JobsView.Admin, is JobsView.Presets -> JobsDialogStyle.Role.ACTIVITY
+        is JobsView.Levels, is JobsView.LeaderboardSelector, is JobsView.Leaderboard -> JobsDialogStyle.Role.PROGRESSION
+        is JobsView.Earnings, is JobsView.EarningsHours, is JobsView.Boosts -> JobsDialogStyle.Role.PERSONAL
+        is JobsView.Shop, is JobsView.ShopConfirm -> JobsDialogStyle.Role.TRADE
+    }
 
     private val plain = PlainTextComponentSerializer.plainText()
 }

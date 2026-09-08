@@ -2,7 +2,6 @@ package ru.ruscrafting.ecojobs.paper
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.JoinConfiguration
-import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import ru.arc.paper.menu.*
@@ -144,8 +143,11 @@ internal class JobsAdminMenu(
         val summary = values.entries.map { (key, value) -> text(player, "value", mapOf(
             "field" to text(player, "field.$key"), "value" to (if (value.isBlank()) text(player, "preset-default") else Component.text(value)),
         )) }
+        val commit = button(player, "confirm") { run(player, action, args, back = back) }.let {
+            if (action == "revoke") it.copy(id = PaperDialogActionId.of("revoke_confirm"), label = text(player, "action.revoke")) else it
+        }
         show(player, "confirm", text(player, "action.$action"), listOf(text(player, "confirm"), Component.join(JoinConfiguration.newlines(), summary)),
-            listOf(button(player, "confirm") { run(player, action, args, back = back) }), reopen = { confirm(player, action, values, args, back) }, back = back)
+            listOf(commit), reopen = { confirm(player, action, values, args, back) }, back = back)
     }
 
     private fun run(player: Player, action: String, args: List<String>, extra: List<PaperDialogButton> = emptyList(), back: () -> Unit) {
@@ -183,9 +185,9 @@ internal class JobsAdminMenu(
             }
         })
         display.show(player, PaperDialogScreen(
-            id = "ecojobs.admin.$id", title = title.color(net.kyori.adventure.text.format.TextColor.color(0xf4bd6a)).decoration(TextDecoration.ITALIC, false),
+            id = "ecojobs.admin.$id", title = JobsDialogStyle.title(title),
             body = body.map { PaperDialogBody(JobsDialogStyle.text(it), 468) }, inputs = inputs,
-            buttons = actions.map { guard(it.copy(label = JobsDialogStyle.text(it.label), tooltip = JobsDialogStyle.text(it.tooltip))) },
+            buttons = actions.map { guard(it.copy(label = JobsDialogStyle.action(it.id.value, it.label), tooltip = JobsDialogStyle.text(it.tooltip))) },
             exitButton = guard((if (goesBack) backButton else closeButton).copy(width = 200)), columns = 2,
         ), reopen = reopen, onDismiss = { if (visits[player.uniqueId] === visit) invalidate(player) }, closeOnEscape = !goesBack)
         return visit
@@ -195,7 +197,7 @@ internal class JobsAdminMenu(
         PaperDialogActionId.of(action), text(player, "action.$action"), width = 230, onClick = { handler(it) },
     )
     private fun navigation(player: Player, action: String, handler: () -> Unit) = PaperDialogButton(
-        PaperDialogActionId.of(action), locale.render("common.$action-name", player).decoration(TextDecoration.ITALIC, false), width = 230, onClick = { handler() },
+        PaperDialogActionId.of(action), JobsDialogStyle.action(action, locale.render("common.$action-name", player)), width = 230, onClick = { handler() },
     )
     private fun text(player: Player, key: String, values: Map<String, Component> = emptyMap()) =
         JobsDialogStyle.text(locale.render("admin-dialog.$key", player, values))

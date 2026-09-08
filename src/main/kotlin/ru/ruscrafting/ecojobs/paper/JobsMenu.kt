@@ -1040,6 +1040,8 @@ class JobsMenu(
             player, active.view, active.frame, layouts, locale, active.detailSlot,
             escapeGoesBack(player),
             actionable = { id, index -> dialogActionable(player, active.view, id, index) },
+            role = { id, index -> dialogRole(player, active.view, id, index) },
+            forward = { id, index -> dialogForward(active.view, id, index) },
             click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
             detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
             close = { if (current()) dismiss(player) },
@@ -1109,6 +1111,79 @@ class JobsMenu(
                 "help" -> true
                 else -> false
             }
+            else -> false
+        }
+    }
+
+    private fun dialogRole(player: Player, view: JobsView, id: String, index: Int?): JobsDialogStyle.Role {
+        if (id == "back" || id == "cancel") return JobsDialogStyle.Role.MUTED
+        if (id == "previous" || id == "next") return JobsDialogStyle.Role.PAGINATION
+        if (index != null) return when (view) {
+            is JobsView.Catalog -> ecoJobs.jobs()
+                .filter { !view.activeOnly || ecoJobs.active(player, it) }
+                .getOrNull((view.page - 1) * content(view, player).size + index)
+                ?.let { job ->
+                    when {
+                        ecoJobs.active(player, job) -> JobsDialogStyle.Role.SELECTED
+                        ecoJobs.has(player, job) -> JobsDialogStyle.Role.AVAILABLE
+                        else -> JobsDialogStyle.Role.UNAVAILABLE
+                    }
+                } ?: JobsDialogStyle.Role.UNAVAILABLE
+            is JobsView.Levels, is JobsView.LeaderboardSelector, is JobsView.Leaderboard -> JobsDialogStyle.Role.PROGRESSION
+            is JobsView.Earnings, is JobsView.EarningsHours, is JobsView.Boosts -> JobsDialogStyle.Role.PERSONAL
+            is JobsView.Shop -> JobsDialogStyle.Role.TRADE
+            is JobsView.Presets -> boosters().values()
+                .getOrNull((view.page - 1) * content(view, player).size + index)
+                ?.let { if (it.enabled) JobsDialogStyle.Role.PERSONAL else JobsDialogStyle.Role.UNAVAILABLE }
+                ?: JobsDialogStyle.Role.UNAVAILABLE
+            else -> JobsDialogStyle.Role.DEFAULT
+        }
+        return when (view) {
+            JobsView.Main -> when (id) {
+                "catalog" -> JobsDialogStyle.Role.ACTIVITY
+                "active", "boosts" -> JobsDialogStyle.Role.PERSONAL
+                "leaderboard" -> JobsDialogStyle.Role.PROGRESSION
+                "shop" -> JobsDialogStyle.Role.TRADE
+                "help", "admin" -> JobsDialogStyle.Role.MUTED
+                else -> JobsDialogStyle.Role.DEFAULT
+            }
+            is JobsView.JobCard -> when (id) {
+                "action" -> when {
+                    ecoJobs.job(view.jobId)?.let { ecoJobs.active(player, it) } == true -> JobsDialogStyle.Role.DESTRUCTIVE
+                    ecoJobs.job(view.jobId)?.let { ecoJobs.canJoin(player, it) } == true -> JobsDialogStyle.Role.SAVE
+                    else -> JobsDialogStyle.Role.UNAVAILABLE
+                }
+                "earnings", "boosts" -> JobsDialogStyle.Role.PERSONAL
+                "scale", "leaderboard" -> JobsDialogStyle.Role.PROGRESSION
+                else -> JobsDialogStyle.Role.DEFAULT
+            }
+            is JobsView.LeaveConfirm -> if (id == "confirm") JobsDialogStyle.Role.DESTRUCTIVE else JobsDialogStyle.Role.DEFAULT
+            is JobsView.ShopConfirm -> if (id == "confirm") JobsDialogStyle.Role.SAVE else JobsDialogStyle.Role.DEFAULT
+            is JobsView.Earnings -> if (id == "summary") JobsDialogStyle.Role.PERSONAL else JobsDialogStyle.Role.DEFAULT
+            is JobsView.LeaderboardSelector -> if (id == "global") JobsDialogStyle.Role.PROGRESSION else JobsDialogStyle.Role.DEFAULT
+            is JobsView.Help -> when (id) {
+                "jobs" -> JobsDialogStyle.Role.ACTIVITY
+                "levels" -> JobsDialogStyle.Role.PROGRESSION
+                "boosts" -> JobsDialogStyle.Role.PERSONAL
+                "commands" -> JobsDialogStyle.Role.MUTED
+                else -> JobsDialogStyle.Role.DEFAULT
+            }
+            else -> JobsDialogStyle.Role.DEFAULT
+        }
+    }
+
+    private fun dialogForward(view: JobsView, id: String, index: Int?): Boolean {
+        if (index != null) return view is JobsView.Catalog || view is JobsView.Levels ||
+            view is JobsView.Earnings || view is JobsView.EarningsHours || view is JobsView.LeaderboardSelector ||
+            view is JobsView.Leaderboard || view is JobsView.Boosts || view is JobsView.Shop ||
+            view is JobsView.Help
+        return when (view) {
+            JobsView.Main -> id in setOf("catalog", "active", "leaderboard", "boosts", "shop", "help", "admin")
+            is JobsView.JobCard -> id in setOf("earnings", "scale", "leaderboard", "boosts")
+            is JobsView.Earnings -> id == "summary"
+            is JobsView.LeaderboardSelector -> id == "global"
+            is JobsView.Help -> id in setOf("jobs", "levels", "boosts", "commands")
+            is JobsView.Admin -> id == "presets"
             else -> false
         }
     }

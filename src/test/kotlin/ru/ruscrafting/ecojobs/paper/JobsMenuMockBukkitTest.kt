@@ -213,7 +213,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val root = screens.last()
                 root.id shouldBe "ecojobs.main"
                 plain(root.title) shouldBe "Работы"
-                root.title.color()?.value() shouldBe 0xf4bd6a
+                root.title.color()?.value() shouldBe 0xffb277
                 root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help")
                 root.exitButton?.id?.value shouldBe "back"
                 root.canCloseWithEscape shouldBe true
@@ -608,7 +608,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 h.menu.openAdminCommand(h.player, listOf("boost", "revoke", h.player.name, "all"))
                 click("review", mapOf("player" to h.player.name, "instance" to "all"))
                 h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", false)
-                click("confirm")
+                click("revoke_confirm")
                 screens.last().id shouldBe "ecojobs.admin.denied"
                 verify(exactly = 0) { h.boosts.revoke(any(), any(), any()) }
                 screens.forEach { screen -> screen.buttons.map { it.width }.distinct().size.coerceAtLeast(1) shouldBe 1 }

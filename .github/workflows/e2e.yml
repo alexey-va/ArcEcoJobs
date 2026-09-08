@@ -84,7 +84,12 @@ jobs:
             -Pe2eArcJar="$GITHUB_WORKSPACE/e2e-arc/build/libs/ARC-1.4.4.jar" \
             2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
-          sha256sum build/libs/ArcEcoJobs-0.1.22.jar e2e-arc/build/libs/ARC-1.4.4.jar > build/tested-plugin-sha256.txt
+          plugin_jars=(build/libs/ArcEcoJobs-*.jar)
+          if [[ ${#plugin_jars[@]} -ne 1 || ! -f "${plugin_jars[0]}" ]]; then
+            echo "Expected exactly one packaged ArcEcoJobs JAR" >&2
+            exit 1
+          fi
+          sha256sum "${plugin_jars[0]}" e2e-arc/build/libs/ARC-1.4.4.jar > build/tested-plugin-sha256.txt
       - name: Verify durable exploration claims
         env:
           E2E_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
@@ -108,7 +113,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: |
-            build/libs/ArcEcoJobs-0.1.22.jar
+            build/libs/ArcEcoJobs-*.jar
             e2e-arc/build/libs/ARC-1.4.4.jar
             build/tested-plugin-sha256.txt
       - name: Upload Paper logs

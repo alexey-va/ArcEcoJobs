@@ -28,7 +28,7 @@ import ru.ruscrafting.ecojobs.exploration.MySqlDiscoveryLedger
 import ru.ruscrafting.ecojobs.exploration.UnavailableDiscoveryLedger
 import ru.ruscrafting.ecojobs.integration.BoostPlaceholderExpansion
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
-import ru.ruscrafting.ecojobs.integration.ReflectiveArcAuditBridge
+import ru.ruscrafting.ecojobs.integration.ArcAuditBridge
 import ru.ruscrafting.ecojobs.integration.VaultEconomyIntegration
 import ru.ruscrafting.ecojobs.integration.VaultShopPaymentGateway
 import ru.ruscrafting.ecojobs.integration.RedisTokenShopPaymentGateway
@@ -301,7 +301,7 @@ class ArcEcoJobsPlugin : JavaPlugin() {
                 recordEarnings = { player, jobId, amount ->
                     earnings?.recordMoney(player.uniqueId, jobId, amount)
                 },
-                auditBridge = ReflectiveArcAuditBridge.discover(),
+                auditBridge = ArcAuditBridge.discover(),
                 rewardAllowed = { player, job -> player.player?.let { rewardGuard.allows(it, job) } == true },
             )
         EconomyManager.register(moneyIntegration)

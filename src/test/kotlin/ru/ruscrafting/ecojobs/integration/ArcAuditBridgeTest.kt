@@ -2,13 +2,14 @@ package ru.ruscrafting.ecojobs.integration
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import ru.arc.paper.api.ArcTelemetryProvider
 import java.math.BigDecimal
 import java.util.UUID
 
 class ArcAuditBridgeTest : StringSpec({
-    "uses cached exact method handles for the optional ARC bridge" {
+    "forwards audit calls through the typed ARC service" {
         FastBridgeFixture.reset()
-        val bridge = ReflectiveArcAuditBridge.discover(FastBridgeFixture::class.java.name)
+        val bridge = ArcAuditBridge(FastBridgeFixture)
         val playerId = UUID.randomUUID()
 
         val token = bridge.mark(playerId, "builder", BigDecimal("4.25"))
@@ -20,7 +21,7 @@ class ArcAuditBridgeTest : StringSpec({
     }
 })
 
-object FastBridgeFixture {
+object FastBridgeFixture : ArcTelemetryProvider {
     var markedPlayer: UUID? = null
     var cancelledToken: String? = null
 
@@ -29,14 +30,21 @@ object FastBridgeFixture {
         cancelledToken = null
     }
 
-    @JvmStatic
-    fun markJobReward(playerId: UUID, jobId: String, amount: Double): String {
+    override fun markJobReward(playerId: UUID, job: String, amount: Double): String {
         markedPlayer = playerId
-        return "$jobId:$amount"
+        return "$job:$amount"
     }
 
-    @JvmStatic
-    fun cancel(playerId: UUID, token: String?) {
+    override fun markExternalReward(
+        playerId: UUID,
+        source: String,
+        action: String,
+        amount: Double,
+        currency: String?,
+        rewardId: String?,
+    ): String? = null
+
+    override fun cancelAudit(playerId: UUID, token: String?) {
         check(markedPlayer == playerId)
         cancelledToken = token
     }

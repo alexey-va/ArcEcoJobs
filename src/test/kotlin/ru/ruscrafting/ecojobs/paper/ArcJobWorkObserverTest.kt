@@ -8,7 +8,6 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.entity.Player
-import ru.ruscrafting.ecojobs.integration.ArcJobWorkTelemetry
 import java.util.UUID
 
 class ArcJobWorkObserverTest : StringSpec({
@@ -66,7 +65,7 @@ class ArcJobWorkObserverTest : StringSpec({
         breaks shouldContainExactly listOf(id)
     }
 
-    "breaks continuity while AFK and when the optional ARC bridge is absent" {
+    "breaks continuity while AFK" {
         val playerId = UUID.randomUUID()
         val player = mockk<Player> {
             every { uniqueId } returns playerId
@@ -84,11 +83,7 @@ class ArcJobWorkObserverTest : StringSpec({
         )
 
         observer.onExperience(PlayerJobExpGainEvent(player, job, 1.0, false))
-        val absent = ArcJobWorkTelemetry.discover("ru.arc.metrics.NoSuchBridge")
-
         records shouldBe 0
         breaks shouldContainExactly listOf(playerId)
-        absent.record(playerId, "miner") shouldBe false
-        absent.breakPlayer(playerId)
     }
 })

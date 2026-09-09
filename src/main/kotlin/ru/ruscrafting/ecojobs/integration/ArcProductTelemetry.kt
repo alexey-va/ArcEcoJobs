@@ -1,15 +1,13 @@
 package ru.ruscrafting.ecojobs.integration
 
+import org.bukkit.Bukkit
+import ru.arc.paper.api.ArcTelemetryProvider
 import java.util.UUID
 
 /** Optional ARC observation after the owned purchase/redemption transition. */
 internal object ArcProductTelemetry {
-    private val method by lazy {
-        runCatching {
-            Class.forName("ru.arc.metrics.ExternalProductTelemetryBridge").getMethod(
-                "recordEvent", UUID::class.java, String::class.java, String::class.java, String::class.java,
-            )
-        }.getOrNull()
+    private val telemetry by lazy {
+        runCatching { Bukkit.getServicesManager().load(ArcTelemetryProvider::class.java) }.getOrNull()
     }
 
     fun purchased(playerId: UUID, purchaseId: UUID) = record(playerId, "job_boost_purchased", purchaseId)
@@ -20,6 +18,6 @@ internal object ArcProductTelemetry {
     }
 
     private fun record(playerId: UUID, event: String, operationId: UUID) {
-        runCatching { method?.invoke(null, playerId, "arcecojobs", event, operationId.toString()) }
+        runCatching { telemetry?.recordEvent(playerId, "arcecojobs", event, operationId.toString()) }
     }
 }

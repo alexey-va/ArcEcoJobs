@@ -1,38 +1,19 @@
 package ru.ruscrafting.ecojobs.integration
 
+import org.bukkit.Bukkit
+import ru.arc.paper.api.ArcTelemetryProvider
 import java.util.UUID
 
 /** Optional ARC bridge for accepted EcoJobs XP-event observations. */
 internal object ArcJobWorkTelemetry {
-    private val bridge by lazy { discover() }
+    private val telemetry by lazy {
+        runCatching { Bukkit.getServicesManager().load(ArcTelemetryProvider::class.java) }.getOrNull()
+    }
 
-    fun record(playerId: UUID, jobId: String): Boolean = runCatching {
-        bridge.record(playerId, jobId)
-    }.getOrDefault(false)
+    fun record(playerId: UUID, jobId: String): Boolean =
+        runCatching { telemetry?.recordJobWork(playerId, jobId) == true }.getOrDefault(false)
 
     fun breakPlayer(playerId: UUID) {
-        runCatching { bridge.breakPlayer(playerId) }
+        runCatching { telemetry?.breakJobWork(playerId) }
     }
-
-    internal fun discover(className: String = BRIDGE_CLASS): Bridge = runCatching {
-        val type = Class.forName(className)
-        Bridge(
-            type.getMethod("recordJobWork", UUID::class.java, String::class.java),
-            type.getMethod("breakJobWork", UUID::class.java),
-        )
-    }.getOrElse { Bridge(null, null) }
-
-    internal class Bridge(
-        private val recordMethod: java.lang.reflect.Method?,
-        private val breakMethod: java.lang.reflect.Method?,
-    ) {
-        fun record(playerId: UUID, jobId: String): Boolean =
-            (recordMethod?.invoke(null, playerId, jobId) as? Boolean) == true
-
-        fun breakPlayer(playerId: UUID) {
-            breakMethod?.invoke(null, playerId)
-        }
-    }
-
-    private const val BRIDGE_CLASS = "ru.arc.metrics.ExternalProductTelemetryBridge"
 }

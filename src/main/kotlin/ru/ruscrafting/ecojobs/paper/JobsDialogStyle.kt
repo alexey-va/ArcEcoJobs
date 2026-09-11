@@ -80,16 +80,18 @@ internal object JobsDialogStyle {
         return role(decorated, role)
     }
 
-    private fun recolor(component: Component, color: TextColor): Component = component
-        .color(color)
-        .decoration(TextDecoration.ITALIC, false)
-        .children(component.children().map { recolor(it, color) })
+    private fun recolor(component: Component, color: TextColor, root: Boolean = true): Component {
+        val source = component.color()
+        val tinted = if (root || source?.value() in AUTHORED_NEUTRALS) component.color(color) else component
+        return tinted.decoration(TextDecoration.ITALIC, false)
+            .children(tinted.children().map { recolor(it, color, root = false) })
+    }
 
     private val Role.color: TextColor
         get() = when (this) {
             Role.AVAILABLE -> TextColor.color(0xffffff)
             Role.SELECTED, Role.SAVE -> TextColor.color(0x9bd48d)
-            Role.UNAVAILABLE, Role.MUTED -> TextColor.color(0xaaa49a)
+            Role.UNAVAILABLE, Role.MUTED -> TextColor.color(0xffffff)
             Role.PERSONAL -> TextColor.color(0xc4a7e7)
             Role.PAGINATION -> TextColor.color(0x92bed8)
             Role.DESTRUCTIVE -> TextColor.color(0xff6b61)
@@ -101,7 +103,18 @@ internal object JobsDialogStyle {
 
     private val colors = mapOf(
         0xe6fff3 to 0xe8dfd2,
-        0x8c8c8c to 0xaaa49a, 0x969696 to 0xaaa49a, 0xaaaaaa to 0xaaa49a,
+        0x8c8c8c to 0xe8dfd2, 0x969696 to 0xe8dfd2, 0xaaaaaa to 0xe8dfd2,
+        0x20252b to 0xe8dfd2, 0x555555 to 0xe8dfd2, 0x666666 to 0xe8dfd2,
+        0x707070 to 0xe8dfd2, 0x707a76 to 0xe8dfd2, 0x77736d to 0xe8dfd2,
+        0x777777 to 0xe8dfd2, 0x9aa8b7 to 0xe8dfd2, 0xaaa49a to 0xe8dfd2,
+        0xb8b8b8 to 0xe8dfd2, 0xb8c8c0 to 0xe8dfd2, 0xc9c3ba to 0xe8dfd2,
+        0xd0d0d0 to 0xe8dfd2,
         0x79c99e to 0x9bd48d,
+    )
+
+    private val AUTHORED_NEUTRALS = setOf(
+        0x20252b, 0x555555, 0x666666, 0x707070, 0x707a76, 0x77736d, 0x777777,
+        0x8c8c8c, 0x969696, 0x9aa8b7, 0xaaaaaa, 0xaaa49a, 0xb8b8b8, 0xb8c8c0,
+        0xc9c3ba, 0xd0d0d0,
     )
 }

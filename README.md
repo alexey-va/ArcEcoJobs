@@ -26,7 +26,7 @@ For a focused change, run the relevant unit test explicitly, for example
 `./gradlew test --tests '*JobsCommandTest' shadowJar`. Full verification
 is opt-in with `./gradlew clean check shadowJar`; it includes the disposable
 MySQL `integrationTest` owned by CI. The production artifact is
-`build/libs/ArcEcoJobs-0.1.27.jar`. The test suite uses public `arc-core 2.7.9`
+`build/libs/ArcEcoJobs-0.1.28.jar`. The test suite uses public `arc-core 2.7.9`
 dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`

@@ -6,10 +6,6 @@ import java.util.UUID
 
 /** Optional ARC observation after the owned purchase/redemption transition. */
 internal object ArcProductTelemetry {
-    private val telemetry by lazy {
-        runCatching { Bukkit.getServicesManager().load(ArcTelemetryProvider::class.java) }.getOrNull()
-    }
-
     fun purchased(playerId: UUID, purchaseId: UUID) = record(playerId, "job_boost_purchased", purchaseId)
     fun activated(playerId: UUID, voucherId: UUID) = record(playerId, "job_boost_activated", voucherId)
 
@@ -18,6 +14,14 @@ internal object ArcProductTelemetry {
     }
 
     private fun record(playerId: UUID, event: String, operationId: UUID) {
-        runCatching { telemetry?.recordEvent(playerId, "arcecojobs", event, operationId.toString()) }
+        if (!Bukkit.getPluginManager().isPluginEnabled("ARC")) return
+        runCatching { AvailableArcTelemetry.recordEvent(playerId, event, operationId) }
+    }
+
+    private object AvailableArcTelemetry {
+        fun recordEvent(playerId: UUID, event: String, operationId: UUID) {
+            Bukkit.getServicesManager().load(ArcTelemetryProvider::class.java)
+                ?.recordEvent(playerId, "arcecojobs", event, operationId.toString())
+        }
     }
 }

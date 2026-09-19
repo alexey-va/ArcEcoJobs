@@ -65,23 +65,34 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: alexey-va/ARC
-          ref: 65ec2606c974cfc4802b03606b8b3d69e78ae201
+          ref: ae2786f787b260d9a2c4db1407bf1332a4538dd6
           path: e2e-arc
       - name: Build the pinned ARC runtime
         working-directory: e2e-arc
         run: ./gradlew --no-daemon shadowJar
       - name: Record staged runtime hashes
+        id: arc-runtime
+        shell: bash
         run: |
+          shopt -s extglob nullglob
+          arc_jars=(e2e-arc/build/libs/ARC-!(*-plain).jar)
+          if [[ ${#arc_jars[@]} -ne 1 || ! -f "${arc_jars[0]}" ]]; then
+            echo "Expected exactly one packaged ARC JAR" >&2
+            exit 1
+          fi
+          echo "jar=$GITHUB_WORKSPACE/${arc_jars[0]}" >> "$GITHUB_OUTPUT"
           sha256sum \
             "e2e-ecojobs/bin/EcoJobs v2026.33.jar" \
-            e2e-arc/build/libs/ARC-1.4.4.jar
+            "${arc_jars[0]}"
       - name: Run ArcEcoJobs on real Paper
         shell: bash
+        env:
+          ARC_RUNTIME_JAR: ${{ steps.arc-runtime.outputs.jar }}
         run: |
           set -o pipefail
           mkdir -p build
           ./gradlew --no-daemon plugwrightTest \
-            -Pe2eArcJar="$GITHUB_WORKSPACE/e2e-arc/build/libs/ARC-1.4.4.jar" \
+            -Pe2eArcJar="$ARC_RUNTIME_JAR" \
             2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
           plugin_jars=(build/libs/ArcEcoJobs-*.jar)
@@ -89,7 +100,7 @@ jobs:
             echo "Expected exactly one packaged ArcEcoJobs JAR" >&2
             exit 1
           fi
-          sha256sum "${plugin_jars[0]}" e2e-arc/build/libs/ARC-1.4.4.jar > build/tested-plugin-sha256.txt
+          sha256sum "${plugin_jars[0]}" "$ARC_RUNTIME_JAR" > build/tested-plugin-sha256.txt
       - name: Verify durable exploration claims
         env:
           E2E_MYSQL_CONTAINER: ${{ job.services.mysql.id }}
@@ -114,7 +125,7 @@ jobs:
           if-no-files-found: error
           path: |
             build/libs/ArcEcoJobs-*.jar
-            e2e-arc/build/libs/ARC-1.4.4.jar
+            e2e-arc/build/libs/ARC-*.jar
             build/tested-plugin-sha256.txt
       - name: Upload Paper logs
         if: always()

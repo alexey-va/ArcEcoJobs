@@ -324,28 +324,28 @@ class JobsMenuMockBukkitTest : StringSpec({
                 h.menu.openShop(h.player)
                 h.menu.open(h.player, JobsView.Shop(2, JobsView.Main))
                 h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
-                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                h.player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
                 paper.performTicks(1)
                 h.player.openInventory.topInventory.getItem(h.layouts.slot(JobsView.Shop(2, JobsView.Main), "previous")) shouldNotBe null
                 plain(h.player.openInventory.title()) shouldBe "Магазин усилителей"
-                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                h.player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
                 paper.performTicks(1)
                 runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Работы"
 
                 // A new screen opened before the deferred return runs owns the next tick.
                 h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
-                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLAYER))
+                h.player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
                 h.menu.open(h.player, JobsView.Main)
                 paper.performTicks(1)
                 plain(h.player.openInventory.title()) shouldBe "Работы"
 
                 h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
-                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.PLUGIN))
+                h.player.closeInventory(InventoryCloseEvent.Reason.PLUGIN)
                 paper.performTicks(1)
                 runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Магазин усилителей"
 
                 h.menu.open(h.player, JobsView.ShopConfirm(preset, JobsView.Shop(2, JobsView.Main)))
-                paper.callEvent(InventoryCloseEvent(h.player.openInventory, InventoryCloseEvent.Reason.DISCONNECT))
+                h.player.closeInventory(InventoryCloseEvent.Reason.DISCONNECT)
                 paper.performTicks(1)
                 runCatching { plain(h.player.openInventory.title()) }.getOrNull() shouldNotBe "Магазин усилителей"
             }

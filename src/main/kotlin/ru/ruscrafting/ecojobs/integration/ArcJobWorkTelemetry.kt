@@ -7,13 +7,17 @@ import java.util.UUID
 /** Optional ARC bridge for accepted EcoJobs XP-event observations. */
 internal object ArcJobWorkTelemetry {
     fun record(playerId: UUID, jobId: String): Boolean {
-        if (!Bukkit.getPluginManager().isPluginEnabled("ARC")) return false
-        return runCatching { AvailableArcTelemetry.record(playerId, jobId) }.getOrDefault(false)
+        return runCatching {
+            Bukkit.getPluginManager().isPluginEnabled("ARC") && AvailableArcTelemetry.record(playerId, jobId)
+        }.getOrDefault(false)
     }
 
     fun breakPlayer(playerId: UUID) {
-        if (!Bukkit.getPluginManager().isPluginEnabled("ARC")) return
-        runCatching { AvailableArcTelemetry.breakPlayer(playerId) }
+        runCatching {
+            if (Bukkit.getPluginManager().isPluginEnabled("ARC")) {
+                AvailableArcTelemetry.breakPlayer(playerId)
+            }
+        }
     }
 
     private object AvailableArcTelemetry {

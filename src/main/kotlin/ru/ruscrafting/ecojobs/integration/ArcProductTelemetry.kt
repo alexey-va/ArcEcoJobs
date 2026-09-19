@@ -14,8 +14,11 @@ internal object ArcProductTelemetry {
     }
 
     private fun record(playerId: UUID, event: String, operationId: UUID) {
-        if (!Bukkit.getPluginManager().isPluginEnabled("ARC")) return
-        runCatching { AvailableArcTelemetry.recordEvent(playerId, event, operationId) }
+        runCatching {
+            if (Bukkit.getPluginManager().isPluginEnabled("ARC")) {
+                AvailableArcTelemetry.recordEvent(playerId, event, operationId)
+            }
+        }
     }
 
     private object AvailableArcTelemetry {

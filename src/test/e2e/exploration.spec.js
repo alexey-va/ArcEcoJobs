@@ -21,14 +21,23 @@ async function setup(player, signal) {
   await player.bot.waitForTicks(100);
   await player.teleport(4094.5, 65, 4096.5);
   await waitUntil(() => Math.abs(player.bot.entity.position.x - 4094.5) < 0.5, { signal });
+  await player.bot.waitForChunksToLoad();
 }
 
 async function cross(player, x, signal) {
   try {
     const destination = player.bot.entity.position.clone().set(x, 65, 4096.5);
+    const direction = Math.sign(x - player.bot.entity.position.x);
     await player.bot.lookAt(destination.offset(0, 1.5, 0), true);
     player.bot.setControlState('forward', true);
-    await waitUntil(() => player.bot.entity.position.distanceTo(destination) < 0.5, {
+    // A 250ms poll can miss the entire one-block arrival window while walking.
+    // Crossing the target plane stays true after that overshoot.
+    await waitUntil(() => {
+      const position = player.bot.entity.position;
+      return (position.x - x) * direction >= 0
+        && Math.abs(position.y - destination.y) < 0.5
+        && Math.abs(position.z - destination.z) < 0.5;
+    }, {
       signal, timeout: 10000, message: 'Explorer must cross the chunk edge by walking',
     });
   } finally {

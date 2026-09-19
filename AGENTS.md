@@ -6,7 +6,7 @@ Standalone Kotlin/Paper addon for EcoJobs on RusCrafting.
   PlaceholderAPI 2.12.3, Java 25, and Kotlin 2.3.0.
 - Use the pinned public `arc-core` release by default; opt into a local
   composite only with `-ParcCoreDir=/absolute/path/to/arc-core`. Paper tests use
-  `ru.ruscrafting.arc:arc-core-paper-testing:2.0.3` and
+  `ru.ruscrafting.arc:arc-core-paper-testing:2.7.9` and
   `MockBukkitTestRuntime`; never pin MockBukkit directly.
 - All MySQL contours use `arc-core-sql` for connection settings, pool/executor
   lifecycle, and checksum-protected migrations. Voucher redemption uses the

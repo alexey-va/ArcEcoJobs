@@ -26,7 +26,7 @@ For a focused change, run the relevant unit test explicitly, for example
 `./gradlew test --tests '*JobsCommandTest' shadowJar`. Full verification
 is opt-in with `./gradlew clean check shadowJar`; it includes the disposable
 MySQL `integrationTest` owned by CI. The production artifact is
-`build/libs/ArcEcoJobs-0.1.21.jar`. The test suite uses public `arc-core 2.7.4`
+`build/libs/ArcEcoJobs-0.1.27.jar`. The test suite uses public `arc-core 2.7.9`
 dependencies by default. Pass
 `-ParcCoreDir=/absolute/path/to/arc-core` only when intentionally testing an
 unpublished local core checkout. GitHub CI additionally runs `integrationTest`
@@ -245,7 +245,7 @@ player menus prevents late operation results from reopening the old screen.
 All operations reuse the same permission checks and validators as console
 commands. Grid buttons use the same width, including Close when Escape means Back.
 
-Native dialogs share ArcCore 2.7.4 history with the server main menu. Direct
+Native dialogs share ArcCore 2.7.9 history with the server main menu. Direct
 commands start a new flow; Back restores fresh menu data, while forms retain
 their draft. Only an explicit `arc-menu-escape=close` overrides history.
 Loading and result pages share a visit and dismissed requests cannot reopen it.

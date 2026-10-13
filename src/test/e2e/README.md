@@ -5,6 +5,11 @@ empty Redis 7.4 on localhost:6385 and MySQL 8.4 on localhost:33306, builds the p
 source, then runs `./gradlew plugwrightTest` with Java 25. Paper binds to
 localhost:25565 and uses disposable world/plugin data.
 
+Before Paper starts, CI seeds a non-empty `spawn` glyph catalog in disposable
+Redis and refreshes its publication timestamp every 30 seconds until the E2E
+process exits. ARC's 120-second lease therefore remains valid throughout this
+suite; the production fail-closed chat guard is still active.
+
 The suite opens the ArcEcoJobs inventory, selects the job catalog, verifies the
 real Miner entry and its level lore, and opens the profession card. It also runs
 the real EcoJobs kill trigger through a disposable slayer fixture: the support

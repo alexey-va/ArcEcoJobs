@@ -1,1 +1,7 @@
-enabled: false
+enabled: true
+host: 127.0.0.1
+port: 6385
+username: default
+password: ""
+server-name: e2e
+main-server: false

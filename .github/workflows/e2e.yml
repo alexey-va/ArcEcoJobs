@@ -91,9 +91,18 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
+          python3 src/test/e2e/fixtures/refresh-chat-glyph-catalog.py --once
+          python3 src/test/e2e/fixtures/refresh-chat-glyph-catalog.py --heartbeat \
+            >> build/chat-glyph-catalog-heartbeat.log 2>&1 &
+          glyph_heartbeat_pid=$!
+          trap 'kill "$glyph_heartbeat_pid" 2>/dev/null || true; wait "$glyph_heartbeat_pid" 2>/dev/null || true' EXIT
           ./gradlew --no-daemon plugwrightTest \
             -Pe2eArcJar="$ARC_RUNTIME_JAR" \
             2>&1 | tee build/plugwright-e2e.log
+          kill -0 "$glyph_heartbeat_pid" || {
+            echo "Disposable ARC glyph catalog heartbeat stopped during the E2E run" >&2
+            exit 1
+          }
           git diff --exit-code -- src/test/e2e/package-lock.json
           plugin_jars=(build/libs/ArcEcoJobs-*.jar)
           if [[ ${#plugin_jars[@]} -ne 1 || ! -f "${plugin_jars[0]}" ]]; then

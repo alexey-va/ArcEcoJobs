@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.32"
+version = "0.1.33"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -39,12 +39,12 @@ kotlin { jvmToolchain(25) }
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.7.21")
-    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.21")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.21")
-    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.21")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.21")
-    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.21")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.22")
+    implementation("ru.ruscrafting.arc:arc-core-menu:2.7.22")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.7.22")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:2.7.22")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.22")
+    compileOnly("ru.ruscrafting.arc:arc-core-paper-api:2.7.22")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.willfp:EcoJobs:2026.33")
     compileOnly("com.willfp:eco:2026.33")
@@ -67,12 +67,12 @@ dependencies {
     testImplementation("net.luckperms:api:5.5")
     testImplementation("ru.ruscrafting.thirdparty:rediseconomy:4.5.12")
     testImplementation("me.clip:placeholderapi:2.12.3")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.21")
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.21")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.7.22")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-api:2.7.22")
     testImplementation("org.yaml:snakeyaml:2.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.21")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.22")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }
@@ -103,6 +103,11 @@ tasks {
         archiveClassifier.set("")
         mergeServiceFiles()
         exclude("org/slf4j/**")
+        exclude("ru/arc/paper/sql/PaperSqlServiceProvider*.class")
+        exclude("ru/arc/paper/sql/SharedPaperSqlService*.class")
+        exclude("ru/arc/paper/redis/PaperRedisServiceProvider*.class")
+        exclude("ru/arc/paper/redis/SharedPaperRedisService*.class")
+        exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*.class")
         exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*.class")
         exclude("ru/arc/paper/api/**")
     }
@@ -148,6 +153,7 @@ plugwright {
     acceptEula.set(true)
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     downloadPlugins {
+        url("https://github.com/retrooper/packetevents/releases/download/v2.12.1/packetevents-spigot-2.12.1.jar")
         url("https://cdn.modrinth.com/data/E4spwmyA/versions/ihIOXEWh/eco-2026.33-modrinth.jar")
         url("https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar")
         url("https://github.com/PlaceholderAPI/PlaceholderAPI/releases/download/2.12.3/PlaceholderAPI-2.12.3.jar")

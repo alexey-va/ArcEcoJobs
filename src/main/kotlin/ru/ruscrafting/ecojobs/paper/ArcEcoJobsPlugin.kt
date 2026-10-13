@@ -11,6 +11,7 @@ import ru.arc.observability.RuntimeHealthState
 import ru.arc.onetime.OneTimeUseLedger
 import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.paper.runtime.PaperPluginRuntime
+import ru.arc.paper.sql.PaperSqlServices
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.SigningKeyStore
 import ru.ruscrafting.ecojobs.boost.VoucherLedgerStorage
@@ -66,6 +67,8 @@ class ArcEcoJobsPlugin : JavaPlugin() {
             it.start("version" to pluginMeta.version)
         }
         try {
+            // Register first so all conditional stores close before the shared SQL factory bridge.
+            lifecycle.own(PaperSqlServices.installConsumer(this))
             saveDefaultConfig()
             saveResourceIfMissing("boosters.yml")
             saveResourceIfMissing("lang/ru.yml")

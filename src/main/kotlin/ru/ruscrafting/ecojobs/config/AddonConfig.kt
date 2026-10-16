@@ -101,7 +101,7 @@ data class AddonSettings(
                     it.name.equals(yaml.getString("gui.presentation", "dialog"), true)
                 } ?: error("gui.presentation must be dialog or inventory"),
                 defaultLocale = defaultLocale,
-                useClientLocale = yaml.getBoolean("locale.use-client-locale", true),
+                useClientLocale = yaml.getBoolean("locale.use-client-locale", false),
                 interceptEcoJobsRoot = yaml.getBoolean("commands.intercept-ecojobs-root", true),
                 leaderboardCache = Duration.ofSeconds(leaderboardCacheSeconds),
                 leaderboardEntriesPerPage = leaderboardEntriesPerPage,

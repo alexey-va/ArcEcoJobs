@@ -56,7 +56,9 @@ class AddonConfigTest : StringSpec({
     }.toFile()
 
     "native dialogs are default for old configs and inventory remains selectable" {
-        AddonSettings.load(yaml("{}")).menuPresentation shouldBe JobsMenuPresentation.DIALOG
+        val oldSettings = AddonSettings.load(yaml("{}"))
+        oldSettings.menuPresentation shouldBe JobsMenuPresentation.DIALOG
+        oldSettings.useClientLocale shouldBe false
         AddonSettings.load(yaml("gui:\n  presentation: inventory")).menuPresentation shouldBe JobsMenuPresentation.INVENTORY
         shouldThrow<IllegalStateException> { AddonSettings.load(yaml("gui:\n  presentation: typo")) }
     }

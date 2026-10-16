@@ -1,6 +1,6 @@
 locale:
   default: ru
-  use-client-locale: true
+  use-client-locale: false
 
 commands:
   intercept-ecojobs-root: true

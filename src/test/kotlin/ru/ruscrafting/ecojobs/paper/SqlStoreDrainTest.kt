@@ -29,6 +29,7 @@ class SqlStoreDrainTest : FreeSpec({
             val cleanupWorker = BoundedAsyncExecutor("ecojobs-test-cleanup")
             val enteredCleanup = CountDownLatch(1)
             val releaseCleanup = CountDownLatch(1)
+            val closeStarted = CountDownLatch(1)
             val leaseReleased = AtomicBoolean()
             val connection = mockk<Connection>(relaxed = true) {
                 every { close() } answers {
@@ -44,7 +45,8 @@ class SqlStoreDrainTest : FreeSpec({
             val accepted = runtime.executor.read { Unit }
             try {
                 enteredCleanup.await(5, TimeUnit.SECONDS) shouldBe true
-                val closing = cleanupWorker.submit { store.close() }
+                val closing = cleanupWorker.submit { closeStarted.countDown(); store.close() }
+                closeStarted.await(5, TimeUnit.SECONDS) shouldBe true
                 shouldThrow<TimeoutException> { closing.get(100, TimeUnit.MILLISECONDS) }
                 leaseReleased.get() shouldBe false
                 releaseCleanup.countDown()

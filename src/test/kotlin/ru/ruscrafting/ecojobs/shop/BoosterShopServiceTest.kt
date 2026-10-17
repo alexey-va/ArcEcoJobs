@@ -10,38 +10,103 @@ import java.time.Duration
 import java.util.UUID
 
 class BoosterShopServiceTest : StringSpec({
+    val tasks = ru.arc.core.LifecycleTaskScope(ru.arc.core.ExecutorTaskScheduler())
+    val nativeWork = ru.arc.core.BudgetedTaskQueue(tasks)
+    val storage = java.util.concurrent.Executor { it.run() }
+    afterSpec { nativeWork.close(); tasks.close() }
     fun preset() = BoosterPreset("workday", true, BoostType.ALL, 150, Duration.ofHours(1), setOf("all"), BoosterItemDefinition(org.bukkit.Material.PAPER, null, null, "x", "x", false, false, emptySet(), emptyMap()), BoosterPrice(ShopCurrency.MONEY, BigDecimal("250")))
     open class Pay(var outcome: PaymentOutcome = PaymentOutcome.ACCEPTED, var balance: Boolean = true) : ShopPaymentGateway { var charges = 0; override fun has(playerId: UUID, amount: BigDecimal): Boolean = balance; open override fun charge(playerId: UUID, amount: BigDecimal): PaymentOutcome = outcome.also { if (it == PaymentOutcome.ACCEPTED) charges++ } }
     class TokenPay(outcome: PaymentOutcome = PaymentOutcome.ACCEPTED, balance: Boolean = true) : Pay(outcome, balance) {
         override fun forCurrency(currency: ShopCurrency): ShopPaymentGateway? = takeIf { currency == ShopCurrency.TOKENS }
     }
-    open class Deliver(var room: Boolean = true, var result: DeliveryOutcome = DeliveryOutcome.DELIVERED) : ShopDeliveryGateway { var bytes = mutableListOf<ByteArray>(); var saves = 0; override fun hasRoom(playerId: UUID): Boolean = room; open override fun contains(playerId: UUID, voucherId: UUID): Boolean = false; override fun deliver(playerId: UUID, itemBytes: ByteArray): DeliveryOutcome = result.also { bytes += itemBytes }; override fun save(playerId: UUID): Boolean = true.also { saves++ } }
-    fun service(root: java.nio.file.Path, pay: Pay) = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay) { _, _, _ -> byteArrayOf(1, 2, 3) }
+    open class Deliver(var room: Boolean = true, var result: DeliveryOutcome = DeliveryOutcome.DELIVERED) : ShopDeliveryGateway { var bytes = mutableListOf<ByteArray>(); var saves = 0; override fun hasRoom(playerId: UUID): Boolean = room; open override fun contains(playerId: UUID, voucherId: UUID): Boolean = false; open override fun deliver(playerId: UUID, itemBytes: ByteArray): DeliveryOutcome = result.also { bytes += itemBytes }; override fun save(playerId: UUID): Boolean = true.also { saves++ } }
+    fun service(root: java.nio.file.Path, pay: Pay) = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay, storage, nativeWork) { _, _, _ -> byteArrayOf(1, 2, 3) }
 
-    "insufficient funds never charges" { val p = UUID.randomUUID(); val pay = Pay(balance = false); service(Files.createTempDirectory("shop"), pay).buy(p, preset(), Deliver()) shouldBe PurchaseResult.InsufficientFunds; pay.charges shouldBe 0 }
+    "delayed journal stages never run on Paper and fence each native side effect" {
+        val scheduler = ru.arc.core.TestTaskScheduler()
+        val scope = ru.arc.core.LifecycleTaskScope(scheduler)
+        val work = ru.arc.core.BudgetedTaskQueue(scope, maximumSteps = 1)
+        val writes = ArrayDeque<Runnable>()
+        var inStorage = false
+        val events = mutableListOf<String>()
+        var purchase: ShopPurchase? = null
+        val store = object : ShopPurchaseStore {
+            override fun findOpen(playerId: UUID, presetId: String): ShopPurchase? {
+                check(inStorage)
+                events += "read"
+                return null
+            }
+            override fun create(value: ShopPurchase): ShopPurchase {
+                check(inStorage)
+                purchase = value
+                events += value.state.name
+                return value
+            }
+            override fun update(value: ShopPurchase): ShopPurchase = create(value)
+        }
+        val pay = object : Pay() {
+            override fun charge(playerId: UUID, amount: BigDecimal): PaymentOutcome {
+                check(!inStorage)
+                purchase!!.state shouldBe PurchaseState.CHARGING
+                events += "charge"
+                return super.charge(playerId, amount)
+            }
+        }
+        val delivery = object : Deliver() {
+            override fun deliver(playerId: UUID, itemBytes: ByteArray): DeliveryOutcome {
+                check(!inStorage)
+                purchase!!.state shouldBe PurchaseState.DELIVERING
+                events += "item"
+                return super.deliver(playerId, itemBytes)
+            }
+        }
+        val service = BoosterShopService({ true }, store, pay, java.util.concurrent.Executor(writes::addLast), work) { _, _, _ -> byteArrayOf(1) }
+        val player = UUID.randomUUID()
+        try {
+            val first = service.buy(player, preset(), delivery)
+            (service.buy(player, preset(), delivery) === first) shouldBe true
+            scheduler.tick(4)
+            first.isDone shouldBe false
+            pay.charges shouldBe 0
+            events.isEmpty() shouldBe true
+            repeat(60) {
+                if (writes.isNotEmpty()) {
+                    inStorage = true
+                    try { writes.removeFirst().run() } finally { inStorage = false }
+                }
+                scheduler.tick()
+            }
+            (first.join() is PurchaseResult.Delivered) shouldBe true
+            events shouldBe listOf("read", "RESERVED", "CHARGING", "charge", "CHARGED", "DELIVERING", "item", "DELIVERED")
+            delivery.saves shouldBe 1
+            pay.charges shouldBe 1
+        } finally { work.close(); scope.close() }
+    }
+
+    "insufficient funds never charges" { val p = UUID.randomUUID(); val pay = Pay(balance = false); service(Files.createTempDirectory("shop"), pay).buy(p, preset(), Deliver()).join() shouldBe PurchaseResult.InsufficientFunds; pay.charges shouldBe 0 }
     "token price routes to the named token gateway" {
         val p = UUID.randomUUID()
         val pay = TokenPay()
         val tokenPreset = preset().copy(price = BoosterPrice(ShopCurrency.TOKENS, BigDecimal("90")))
-        (service(Files.createTempDirectory("shop"), pay).buy(p, tokenPreset, Deliver()) is PurchaseResult.Delivered) shouldBe true
+        (service(Files.createTempDirectory("shop"), pay).buy(p, tokenPreset, Deliver()).join() is PurchaseResult.Delivered) shouldBe true
         pay.charges shouldBe 1
     }
     "token price never falls back to the money gateway" {
         val p = UUID.randomUUID()
         val money = Pay()
         val tokenPreset = preset().copy(price = BoosterPrice(ShopCurrency.TOKENS, BigDecimal("90")))
-        service(Files.createTempDirectory("shop"), money).buy(p, tokenPreset, Deliver()) shouldBe PurchaseResult.Unavailable
+        service(Files.createTempDirectory("shop"), money).buy(p, tokenPreset, Deliver()).join() shouldBe PurchaseResult.Unavailable
         money.charges shouldBe 0
     }
-    "unknown provider remains pending and does not retry" { val p = UUID.randomUUID(); val pay = Pay(PaymentOutcome.UNKNOWN); val root = Files.createTempDirectory("shop"); val s = service(root, pay); s.buy(p, preset(), Deliver()) shouldBe PurchaseResult.PaymentPending; s.buy(p, preset(), Deliver()) shouldBe PurchaseResult.PaymentPending; pay.charges shouldBe 0 }
-    "delivery failure after charge remains recoverable without a second charge" { val p = UUID.randomUUID(); val pay = Pay(); val d = Deliver(result = DeliveryOutcome.FAILED); val root = Files.createTempDirectory("shop"); service(root, pay).buy(p, preset(), d) shouldBe PurchaseResult.DeliveryFailed; pay.charges shouldBe 1; d.result = DeliveryOutcome.DELIVERED; service(root, pay).buy(p, preset(), d) shouldBe PurchaseResult.PaymentPending; d.bytes.size shouldBe 1; pay.charges shouldBe 1 }
-    "full inventory rejects before reserving payment" { val p = UUID.randomUUID(); val pay = Pay(); val d = Deliver(room = false); service(Files.createTempDirectory("shop"), pay).buy(p, preset(), d) shouldBe PurchaseResult.InventoryFull; pay.charges shouldBe 0 }
+    "unknown provider remains pending and does not retry" { val p = UUID.randomUUID(); val pay = Pay(PaymentOutcome.UNKNOWN); val root = Files.createTempDirectory("shop"); val s = service(root, pay); s.buy(p, preset(), Deliver()).join() shouldBe PurchaseResult.PaymentPending; s.buy(p, preset(), Deliver()).join() shouldBe PurchaseResult.PaymentPending; pay.charges shouldBe 0 }
+    "delivery failure after charge remains recoverable without a second charge" { val p = UUID.randomUUID(); val pay = Pay(); val d = Deliver(result = DeliveryOutcome.FAILED); val root = Files.createTempDirectory("shop"); service(root, pay).buy(p, preset(), d).join() shouldBe PurchaseResult.DeliveryFailed; pay.charges shouldBe 1; d.result = DeliveryOutcome.DELIVERED; service(root, pay).buy(p, preset(), d).join() shouldBe PurchaseResult.PaymentPending; d.bytes.size shouldBe 1; pay.charges shouldBe 1 }
+    "full inventory rejects before reserving payment" { val p = UUID.randomUUID(); val pay = Pay(); val d = Deliver(room = false); service(Files.createTempDirectory("shop"), pay).buy(p, preset(), d).join() shouldBe PurchaseResult.InventoryFull; pay.charges shouldBe 0 }
     "delivering without the voucher remains pending and never reissues bytes" {
         val p = UUID.randomUUID(); val root = Files.createTempDirectory("shop"); val store = AtomicShopPurchaseStore(root)
         val purchase = ShopPurchase(UUID.randomUUID(), p, "workday", UUID.randomUUID(), preset().price!!, java.time.Instant.now(), "AQ==", PurchaseState.DELIVERING)
         store.create(purchase)
         val pay = Pay(); val d = Deliver(result = DeliveryOutcome.FAILED)
-        val result = BoosterShopService({ true }, store, pay) { _, _, _ -> byteArrayOf(9) }.buy(p, preset(), d)
+        val result = BoosterShopService({ true }, store, pay, storage, nativeWork) { _, _, _ -> byteArrayOf(9) }.buy(p, preset(), d).join()
         result shouldBe PurchaseResult.PaymentPending
         d.bytes.size shouldBe 0
         pay.charges shouldBe 0
@@ -51,20 +116,20 @@ class BoosterShopServiceTest : StringSpec({
         val purchase = ShopPurchase(UUID.randomUUID(), p, "workday", UUID.randomUUID(), preset().price!!, java.time.Instant.now(), "AQ==", PurchaseState.DELIVERING)
         store.create(purchase)
         val d = object : Deliver() { override fun contains(playerId: UUID, voucherId: UUID) = true }
-        val result = BoosterShopService({ true }, store, Pay()) { _, _, _ -> byteArrayOf(9) }.buy(p, preset(), d)
+        val result = BoosterShopService({ true }, store, Pay(), storage, nativeWork) { _, _, _ -> byteArrayOf(9) }.buy(p, preset(), d).join()
         (result is PurchaseResult.Recovered) shouldBe true
         d.saves shouldBe 1
         store.findOpen(p, "workday") shouldBe null
     }
     "charge unknown exception is pending and a repeated click does not charge" {
         val p = UUID.randomUUID(); val pay = object : Pay() { override fun charge(playerId: UUID, amount: BigDecimal): PaymentOutcome = throw IllegalStateException("unknown") }
-        val root = Files.createTempDirectory("shop"); val d = Deliver(); val s = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay) { _, _, _ -> byteArrayOf(1) }
-        s.buy(p, preset(), d) shouldBe PurchaseResult.PaymentPending
-        s.buy(p, preset(), d) shouldBe PurchaseResult.PaymentPending
+        val root = Files.createTempDirectory("shop"); val d = Deliver(); val s = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay, storage, nativeWork) { _, _, _ -> byteArrayOf(1) }
+        s.buy(p, preset(), d).join() shouldBe PurchaseResult.PaymentPending
+        s.buy(p, preset(), d).join() shouldBe PurchaseResult.PaymentPending
     }
     "a terminal delivered purchase permits a later deliberate purchase" {
-        val p = UUID.randomUUID(); val pay = Pay(); val root = Files.createTempDirectory("shop"); val d = Deliver(); val s = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay) { _, _, _ -> byteArrayOf(1) }
-        s.buy(p, preset(), d); s.buy(p, preset(), d)
+        val p = UUID.randomUUID(); val pay = Pay(); val root = Files.createTempDirectory("shop"); val d = Deliver(); val s = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay, storage, nativeWork) { _, _, _ -> byteArrayOf(1) }
+        s.buy(p, preset(), d).join(); s.buy(p, preset(), d).join()
         pay.charges shouldBe 2
     }
     "recovery delivers the originally snapshotted bytes after preset changes" {
@@ -76,8 +141,8 @@ class BoosterShopServiceTest : StringSpec({
             UUID.randomUUID(), player, "workday", UUID.randomUUID(), preset().price!!,
             java.time.Instant.now(), java.util.Base64.getEncoder().encodeToString(byteArrayOf(4, 5)), PurchaseState.CHARGED,
         ))
-        val service = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay) { _, _, _ -> byteArrayOf(9, 9) }
-        (service.buy(player, preset().copy(multiplierBasisPoints = 300), delivery) is PurchaseResult.Delivered) shouldBe true
+        val service = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay, storage, nativeWork) { _, _, _ -> byteArrayOf(9, 9) }
+        (service.buy(player, preset().copy(multiplierBasisPoints = 300), delivery).join() is PurchaseResult.Delivered) shouldBe true
         delivery.bytes.single().toList() shouldBe listOf<Byte>(4, 5)
         pay.charges shouldBe 0
     }
@@ -94,8 +159,8 @@ class BoosterShopServiceTest : StringSpec({
         val delivery = Deliver()
         val repriced = preset().copy(price = BoosterPrice(ShopCurrency.MONEY, BigDecimal("999")))
 
-        val result = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay) { _, _, _ -> byteArrayOf(9) }
-            .buy(player, repriced, delivery)
+        val result = BoosterShopService({ true }, AtomicShopPurchaseStore(root), pay, storage, nativeWork) { _, _, _ -> byteArrayOf(9) }
+            .buy(player, repriced, delivery).join()
 
         (result is PurchaseResult.Delivered) shouldBe true
         pay.charges shouldBe 0
@@ -105,16 +170,16 @@ class BoosterShopServiceTest : StringSpec({
         val player = UUID.randomUUID()
         val root = Files.createTempDirectory("shop")
         val hidden = preset().copy(shopVisible = false)
-        val fresh = BoosterShopService({ true }, AtomicShopPurchaseStore(root), Pay()) { _, _, _ -> byteArrayOf(1) }
-        fresh.buy(player, hidden, Deliver()) shouldBe PurchaseResult.Unavailable
+        val fresh = BoosterShopService({ true }, AtomicShopPurchaseStore(root), Pay(), storage, nativeWork) { _, _, _ -> byteArrayOf(1) }
+        fresh.buy(player, hidden, Deliver()).join() shouldBe PurchaseResult.Unavailable
 
         val purchase = ShopPurchase(
             UUID.randomUUID(), player, hidden.id, UUID.randomUUID(), hidden.price!!,
             java.time.Instant.now(), "AQ==", PurchaseState.CHARGED,
         )
         AtomicShopPurchaseStore(root).create(purchase)
-        val recovered = BoosterShopService({ true }, AtomicShopPurchaseStore(root), Pay()) { _, _, _ -> byteArrayOf(9) }
-            .buy(player, hidden, Deliver())
+        val recovered = BoosterShopService({ true }, AtomicShopPurchaseStore(root), Pay(), storage, nativeWork) { _, _, _ -> byteArrayOf(9) }
+            .buy(player, hidden, Deliver()).join()
         (recovered is PurchaseResult.Delivered) shouldBe true
     }
 })

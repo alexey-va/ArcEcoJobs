@@ -17,22 +17,27 @@ class JobsLocale(
     private val settings: () -> AddonSettings,
 ) {
     private val mini = MiniMessage.miniMessage()
-    private var russian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
-    private var english = loadYamlStrict(dataFolder.resolve("lang/en.yml"))
+    class Prepared internal constructor(val russian: YamlConfiguration, val english: YamlConfiguration)
+    @Volatile private var catalog = Prepared(loadYamlStrict(dataFolder.resolve("lang/ru.yml")), loadYamlStrict(dataFolder.resolve("lang/en.yml")))
+    private val russian get() = catalog.russian
+    private val english get() = catalog.english
     private val bundled = listOf("ru", "en").associateWith { language ->
         requireNotNull(javaClass.getResourceAsStream("/lang/$language.yml")).reader(Charsets.UTF_8).use {
             YamlConfiguration().apply { load(it) }
         }
     }
 
-    fun reload(dataFolder: File, presets: Collection<BoosterPreset> = emptyList()) {
+    fun reload(dataFolder: File, presets: Collection<BoosterPreset> = emptyList()) = install(prepare(dataFolder, presets))
+
+    fun prepare(dataFolder: File, presets: Collection<BoosterPreset> = emptyList()): Prepared {
         val candidateRussian = loadYamlStrict(dataFolder.resolve("lang/ru.yml"))
         val candidateEnglish = loadYamlStrict(dataFolder.resolve("lang/en.yml"))
         validate(candidateRussian, candidateEnglish)
         validateBoosterKeys(candidateRussian, candidateEnglish, presets)
-        russian = candidateRussian
-        english = candidateEnglish
+        return Prepared(candidateRussian, candidateEnglish)
     }
+
+    fun install(prepared: Prepared) { catalog = prepared }
 
     fun render(
         path: String,

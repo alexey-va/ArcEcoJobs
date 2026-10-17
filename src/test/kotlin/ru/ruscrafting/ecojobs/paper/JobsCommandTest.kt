@@ -26,7 +26,7 @@ class JobsCommandTest : StringSpec({
         boosters = { mockk<BoosterRegistry>() },
         vouchers = mockk<VoucherService>(),
         menu = mockk<JobsMenu>(),
-        reload = { Result.success(Unit) },
+        reload = { java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) },
     )
     val command = mockk<Command>()
 

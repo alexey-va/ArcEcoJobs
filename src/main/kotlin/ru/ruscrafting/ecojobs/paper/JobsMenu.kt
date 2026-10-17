@@ -20,6 +20,8 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
 import ru.arc.paper.menu.PaperMenuConfiguration
 import ru.arc.paper.menu.PaperMenuFrame
 import ru.arc.paper.menu.PaperMenuRuntime
@@ -76,7 +78,7 @@ class JobsMenu(
     private val boosters: () -> BoosterRegistry,
     private val vouchers: VoucherService,
     private val earnings: () -> EarningsService?,
-    private val reload: () -> Result<Unit>,
+    private val reload: () -> java.util.concurrent.CompletableFuture<Result<Unit>>,
     private val layouts: JobsMenuLayouts,
     dialogDisplay: JobsDialogDisplay? = null,
     private val escapeGoesBack: (Player) -> Boolean = { player ->
@@ -92,6 +94,10 @@ class JobsMenu(
     private val number = DecimalFormat("#,##0.##")
     private val plain = PlainTextComponentSerializer.plainText()
     private val pendingClicks = mutableSetOf<java.util.UUID>()
+    private val shopPurchases = mutableSetOf<java.util.UUID>()
+    private val callbacks = LifecycleTaskScope(BukkitTaskScheduler(plugin))
+    private val visits = mutableMapOf<java.util.UUID, Any>()
+    private var replacingMenus = false
     private val menuRuntimeDelegate = lazy { PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), layouts.current()) }
     private val menuRuntime by menuRuntimeDelegate
     private val activeFrames = mutableMapOf<java.util.UUID, ActiveFrame>()
@@ -145,6 +151,7 @@ class JobsMenu(
     private fun usesDialog(player: Player) = presentations[player.uniqueId] == JobsMenuPresentation.DIALOG
 
     private fun dismiss(player: Player, closeDialog: Boolean = true) {
+        if (!replacingMenus) visits.remove(player.uniqueId)
         adminMenu?.invalidate(player)
         activeFrames.remove(player.uniqueId)
         if (presentations.remove(player.uniqueId) == JobsMenuPresentation.DIALOG && closeDialog) dialogs.close(player)
@@ -155,6 +162,7 @@ class JobsMenu(
 
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
+        visits.remove(event.player.uniqueId)
         adminMenu?.invalidate(event.player)
         activeFrames.remove(event.player.uniqueId)
         presentations.remove(event.player.uniqueId)
@@ -174,6 +182,7 @@ class JobsMenu(
                 pendingInventoryReturns.remove(playerId)
                 return
             }
+            if (!replacingMenus && event.reason == InventoryCloseEvent.Reason.PLAYER) visits.remove(playerId)
             if (event.reason != InventoryCloseEvent.Reason.PLAYER || active == null) {
                 directEntryViews.remove(playerId)
                 pendingInventoryReturns.remove(playerId)
@@ -201,6 +210,7 @@ class JobsMenu(
     }
 
     fun open(player: Player, view: JobsView = JobsView.Main) {
+        visits[player.uniqueId] = Any()
         // A new screen supersedes any deferred Escape return scheduled by the prior screen.
         pendingInventoryReturns.remove(player.uniqueId)
         adminMenu?.invalidate(player)
@@ -275,11 +285,17 @@ class JobsMenu(
 
     fun replaceMenus(candidate: PaperMenuConfiguration) {
         layouts.replace(candidate)
-        activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
-        if (menuRuntimeDelegate.isInitialized()) menuRuntime.replace(candidate)
+        replacingMenus = true
+        try {
+            activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
+            if (menuRuntimeDelegate.isInitialized()) menuRuntime.replace(candidate)
+        } finally { replacingMenus = false }
     }
 
     override fun close() {
+        callbacks.close()
+        shopPurchases.clear()
+        visits.clear()
         activeFrames.keys.toList().mapNotNull(Bukkit::getPlayer).forEach(::dismiss)
         adminMenu?.clear()
         activeFrames.clear()
@@ -829,16 +845,26 @@ class JobsMenu(
         if (slot != element(view, "confirm")) return
         val preset = boosters().get(view.preset.id)
         if (preset != view.preset) return player.sendMessage(locale.render("message.shop-unavailable", player))
-        when (shop?.buy(player.uniqueId, preset, PlayerShopDeliveryGateway(player, vouchers)) ?: PurchaseResult.ShopDisabled) {
-                is PurchaseResult.Delivered, is PurchaseResult.Recovered -> player.sendMessage(locale.render("message.shop-purchased", player))
-                PurchaseResult.ShopDisabled -> player.sendMessage(locale.render("message.shop-disabled", player))
-                PurchaseResult.InsufficientFunds -> player.sendMessage(locale.render("message.shop-insufficient", player))
-                PurchaseResult.InventoryFull -> player.sendMessage(locale.render("message.inventory-full", player))
-                PurchaseResult.PaymentPending -> player.sendMessage(locale.render("message.shop-pending", player))
-                PurchaseResult.PaymentFailed, PurchaseResult.DeliveryFailed -> player.sendMessage(locale.render("message.shop-failed", player))
-                PurchaseResult.Unavailable -> player.sendMessage(locale.render("message.shop-unavailable", player))
+        if (!shopPurchases.add(player.uniqueId)) return
+        val expected = activeFrames[player.uniqueId]
+        val purchase = shop?.buy(player.uniqueId, preset, PlayerShopDeliveryGateway(player, vouchers))
+            ?: java.util.concurrent.CompletableFuture.completedFuture(PurchaseResult.ShopDisabled)
+        purchase.whenCompleteSync(callbacks) { result, failure ->
+            shopPurchases.remove(player.uniqueId)
+            if (!player.isOnline || activeFrames[player.uniqueId] !== expected) return@whenCompleteSync
+            if (failure != null) plugin.logger.log(java.util.logging.Level.SEVERE, "Could not complete job booster purchase", failure)
+            val key = when (result) {
+                is PurchaseResult.Delivered, is PurchaseResult.Recovered -> "message.shop-purchased"
+                PurchaseResult.ShopDisabled -> "message.shop-disabled"
+                PurchaseResult.InsufficientFunds -> "message.shop-insufficient"
+                PurchaseResult.InventoryFull -> "message.inventory-full"
+                PurchaseResult.PaymentPending -> "message.shop-pending"
+                PurchaseResult.PaymentFailed, PurchaseResult.DeliveryFailed, null -> "message.shop-failed"
+                PurchaseResult.Unavailable -> "message.shop-unavailable"
             }
-        open(player, view.back)
+            player.sendMessage(locale.render(key, player))
+            open(player, view.back)
+        }
     }
 
     private fun openHelp(player: Player, view: JobsView.Help) {
@@ -879,13 +905,17 @@ class JobsMenu(
         if (!player.hasPermission("arcecojobs.admin")) return open(player, view.back)
         when (slot) {
             element(view, "reload") -> if (player.hasPermission("arcecojobs.admin.reload")) {
-                reload().fold(
-                    onSuccess = {
-                        player.sendMessage(locale.render("message.reload-ok", player))
-                        open(player, view)
-                    },
-                    onFailure = { failure -> player.sendMessage(locale.render("message.reload-failed", player, mapOf("reason" to text(failure.message ?: "unknown")))) },
-                )
+                val visit = visits[player.uniqueId]
+                reload().whenCompleteSync(callbacks) { result, failure ->
+                    if (!player.isOnline || visits[player.uniqueId] !== visit) return@whenCompleteSync
+                    (result ?: Result.failure(failure ?: IllegalStateException("Reload did not complete"))).fold(
+                        onSuccess = {
+                            player.sendMessage(locale.render("message.reload-ok", player))
+                            open(player, view)
+                        },
+                        onFailure = { error -> player.sendMessage(locale.render("message.reload-failed", player, mapOf("reason" to text(error.message ?: "unknown")))) },
+                    )
+                }
             }
             element(view, "presets") -> if (player.hasPermission("arcecojobs.admin.booster")) open(player, JobsView.Presets(1, view))
             element(view, "help") -> locale.lines("command.admin-help", player).forEach(player::sendMessage)
@@ -1052,7 +1082,10 @@ class JobsMenu(
                 open(player, active.view)
             }),
             onDismiss = {
-                if (activeFrames[player.uniqueId] === active) activeFrames.remove(player.uniqueId)
+                if (activeFrames[player.uniqueId] === active) {
+                    activeFrames.remove(player.uniqueId)
+                    if (!replacingMenus) visits.remove(player.uniqueId)
+                }
                 active.revision++
             },
             closeOnEscape = !escapeGoesBack(player),

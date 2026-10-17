@@ -34,7 +34,7 @@ class JobsCommand(
     private val boosters: () -> BoosterRegistry,
     private val vouchers: VoucherService,
     private val menu: JobsMenu,
-    private val reload: () -> Result<Unit>,
+    private val reload: () -> java.util.concurrent.CompletableFuture<Result<Unit>>,
     private val shop: BoosterShopService? = null,
     private val guardSummary: () -> String = { "unavailable" },
 ) : CommandExecutor, TabCompleter {
@@ -108,10 +108,14 @@ class JobsCommand(
 
         private fun reload(sender: CommandSender): Boolean {
             if (!sender.hasPermission("arcecojobs.admin.reload")) return message(sender, "message.no-permission")
-            reload().fold(
-                onSuccess = { message(sender, "message.reload-ok") },
-                onFailure = { message(sender, "message.reload-failed", mapOf("reason" to text(it.message ?: "unknown"))) },
-            )
+            pending = true
+            reload().thenAccept { result ->
+                result.fold(
+                    onSuccess = { message(sender, "message.reload-ok") },
+                    onFailure = { message(sender, "message.reload-failed", mapOf("reason" to text(it.message ?: "unknown"))) },
+                )
+                finish()
+            }
             return true
         }
 

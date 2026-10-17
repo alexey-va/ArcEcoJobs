@@ -21,15 +21,23 @@ import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.core.BoundedAsyncExecutor
+import ru.arc.core.BudgetedTaskQueue
+import ru.arc.paper.player.PaperOfflinePlayerData
 import ru.ruscrafting.ecojobs.config.AddonSettings
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
 data class RankingEntry(val uuid: UUID, val name: String, val level: Int, val xp: Double)
 
 class EcoJobsBridge(
     private val plugin: JavaPlugin,
+    private val nativeWork: BudgetedTaskQueue,
+    private val worker: BoundedAsyncExecutor,
+    private val offlineData: PaperOfflinePlayerData,
     private val settings: () -> AddonSettings,
 ) {
     private data class CachedRankings(
@@ -37,7 +45,7 @@ class EcoJobsBridge(
         val rankings: Map<String, List<RankingEntry>>,
     )
 
-    private data class PlayerRef(val uuid: UUID, val name: String)
+    internal data class PlayerRef(val uuid: UUID, val name: String)
 
     private val legacyAmpersand = LegacyComponentSerializer.legacyAmpersand()
     private val legacySection = LegacyComponentSerializer.legacySection()
@@ -46,7 +54,8 @@ class EcoJobsBridge(
     private var huntFilterJob: Job? = null
     private var huntFilters = emptyList<com.willfp.libreforge.filters.FilterList>()
     private var leaderboardBuildInFlight = false
-    private val leaderboardCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
+    private var leaderboardCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
+    private val closed = AtomicBoolean()
 
     fun jobs(): List<Job> = Jobs.values().sortedBy(Job::id)
     fun job(id: String?): Job? = Jobs.getByID(id?.lowercase())
@@ -111,33 +120,66 @@ class EcoJobsBridge(
 
         leaderboardBuildInFlight = true
         val jobs = jobs()
-        val players = Bukkit.getOfflinePlayers().map { player ->
-            PlayerRef(player.uniqueId, player.name ?: player.uniqueId.toString().take(8))
-        }
         val startedAt = System.nanoTime()
-        plugin.server.scheduler.runTaskAsynchronously(plugin, Runnable {
-            val result = runCatching { buildRankings(jobs, players) }
-            if (!plugin.isEnabled) return@Runnable
-            runCatching { plugin.server.scheduler.runTask(plugin, Runnable {
+        captureLeaderboardPlayers().thenCompose { players -> worker.submit {
+            players.size to buildRankings(jobs, players)
+        } }.whenComplete { built, failure ->
+            nativeWork.call({ !closed.get() }) {
                 leaderboardBuildInFlight = false
-                val completion = result.map { rankings ->
+                val completion = if (failure != null) Result.failure(failure) else runCatching {
+                    val (playerCount, rankings) = requireNotNull(built)
                     leaderboardCache = CachedRankings(Instant.now().plus(settings().leaderboardCache), rankings)
                     val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
                     plugin.logger.info(
-                        "Leaderboard cache refreshed asynchronously for ${players.size} profiles and ${jobs.size} jobs in ${elapsedMillis}ms",
+                        "Leaderboard cache refreshed asynchronously for $playerCount profiles and ${jobs.size} jobs in ${elapsedMillis}ms",
                     )
                     Unit
                 }
                 if (completion.isFailure) {
                     plugin.logger.log(Level.WARNING, "Could not refresh the ArcEcoJobs leaderboard cache", completion.exceptionOrNull())
                 }
-                val callbacks = leaderboardCallbacks.toList()
-                leaderboardCallbacks.clear()
-                callbacks.forEach { notifyCallback(it, completion) }
-            }) }.onFailure { failure ->
-                if (plugin.isEnabled) plugin.logger.log(Level.WARNING, "Could not finish the ArcEcoJobs leaderboard refresh", failure)
+                val callbacks = leaderboardCallbacks.iterator()
+                leaderboardCallbacks = mutableListOf()
+                nativeWork.submit({ !closed.get() }) {
+                    if (!callbacks.hasNext()) true else { notifyCallback(callbacks.next(), completion); false }
+                }
+            }.thenCompose { it }.whenComplete { _, publicationFailure ->
+                if (publicationFailure != null && !closed.get()) {
+                    plugin.logger.log(Level.WARNING, "Could not finish the ArcEcoJobs leaderboard refresh", publicationFailure)
+                }
             }
-        })
+        }
+    }
+
+    internal fun captureLeaderboardPlayers(): CompletableFuture<List<PlayerRef>> {
+        val online = linkedMapOf<UUID, String>()
+        val players = Bukkit.getOnlinePlayers().iterator()
+        return nativeWork.submit({ !closed.get() }) {
+            if (!players.hasNext()) true else {
+                val player = players.next()
+                online[player.uniqueId] = player.name
+                false
+            }
+        }.thenCompose { worker.submit { offlineData.listPlayerIds() + online.keys } }
+            .thenCompose { ids -> nativeWork.call({ !closed.get() }) {
+                val pending = ids.iterator()
+                val cachedNames = linkedMapOf<UUID, String>()
+                nativeWork.submit({ !closed.get() }) {
+                    if (!pending.hasNext()) true else {
+                        val id = pending.next()
+                        @Suppress("DEPRECATION")
+                        val name = Bukkit.getOfflinePlayer(id).playerProfile.name
+                        name?.takeIf(String::isNotEmpty)?.let { cachedNames[id] = it }
+                        false
+                    }
+                }.thenCompose { worker.submit {
+                    val persisted = offlineData.names(ids.filter { it !in cachedNames && it !in online })
+                    if (persisted.failures.isNotEmpty()) {
+                        plugin.logger.warning("Could not read ${persisted.failures.size} offline player names; UUIDs remain in the leaderboard population")
+                    }
+                    ids.map { id -> PlayerRef(id, online[id] ?: cachedNames[id] ?: persisted.names[id] ?: id.toString().take(8)) }
+                } }
+            }.thenCompose { it } }
     }
 
     fun moneyIntegrationProblems(requireEarningsMarker: Boolean = settings().earnings.enabled): List<String> = jobs().mapNotNull { job ->
@@ -175,6 +217,7 @@ class EcoJobsBridge(
     }
 
     fun shutdown() {
+        closed.set(true)
         leaderboardBuildInFlight = false
         leaderboardCallbacks.clear()
         leaderboardCache = null

@@ -9,7 +9,6 @@ import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 
 class EarningsService(
@@ -19,11 +18,17 @@ class EarningsService(
     private val clock: Clock = Clock.systemUTC(),
 ) : AutoCloseable {
     private data class BucketKey(val playerId: UUID, val jobId: String, val epochHour: Long)
-    private data class PendingBatch(val id: UUID, val entries: List<HourlyEarnings>)
+    private data class PendingBatch(val id: UUID, val buckets: Map<BucketKey, EarningsTotals>) {
+        val entries: List<HourlyEarnings> by lazy {
+            buckets.map { (key, totals) -> HourlyEarnings(key.playerId, key.jobId, key.epochHour,
+                totals.copy(money = normalize(totals.money), xp = normalize(totals.xp))) }
+        }
+    }
     private data class CachedReport(val validUntil: Instant, val report: EarningsReport)
 
     private val lock = Any()
-    private val pending = linkedMapOf<BucketKey, EarningsTotals>()
+    private var pending = linkedMapOf<BucketKey, EarningsTotals>()
+    private val worker = ru.arc.core.BoundedAsyncExecutor("arc-ecojobs-earnings", capacity = 32)
     private val cache = object : LinkedHashMap<Pair<UUID, String>, CachedReport>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<UUID, String>, CachedReport>?): Boolean =
             size > MAXIMUM_CACHED_REPORTS
@@ -35,19 +40,20 @@ class EarningsService(
     private var lastOverflowWarning = Instant.EPOCH
     private var lastWriteWarning = Instant.EPOCH
     private var closed = false
+    private val closeCompletion = CompletableFuture<Unit>()
     private var flushTask: BukkitTask? = null
     private var cleanupTask: BukkitTask? = null
 
     fun start() {
         check(!closed) { "earnings service is closed" }
         check(flushTask == null && cleanupTask == null) { "earnings service is already started" }
-        flushTask = plugin.server.scheduler.runTaskTimer(
+        flushTask = plugin.server.scheduler.runTaskTimerAsynchronously(
             plugin,
             Runnable { flush() },
             settings.flushInterval.toTicks(),
             settings.flushInterval.toTicks(),
         )
-        cleanupTask = plugin.server.scheduler.runTaskTimer(
+        cleanupTask = plugin.server.scheduler.runTaskTimerAsynchronously(
             plugin,
             Runnable { prune() },
             INITIAL_CLEANUP_DELAY_TICKS,
@@ -90,7 +96,7 @@ class EarningsService(
                 check(!closed) { "earnings service is closed" }
                 store.read(playerId, normalizedJob, from)
             }.thenApply { rows -> flushSucceeded to rows }
-        }.thenApply { (flushSucceeded, rows) ->
+        }.thenApplyAsync({ (flushSucceeded, rows) ->
             EarningsReport(rows, settings.zoneId).also { report ->
                 synchronized(lock) {
                     check(!closed) { "earnings service is closed" }
@@ -99,31 +105,33 @@ class EarningsService(
                     }
                 }
             }
-        }.whenComplete { _, _ ->
+        }, worker).whenComplete { _, _ ->
             synchronized(lock) { reportReads.remove(cacheKey, readToken) }
         }
     }
 
     fun flush(): CompletableFuture<Unit> = flush(allowClosed = false)
 
-    private fun flush(allowClosed: Boolean): CompletableFuture<Unit> {
+    private fun flush(allowClosed: Boolean, terminalWorker: Boolean = false): CompletableFuture<Unit> {
         val write: CompletableFuture<Unit>
         val completion = CompletableFuture<Unit>()
-        val batchId: UUID
+        val batch: PendingBatch
         synchronized(lock) {
             if (closed && !allowClosed) return CompletableFuture.completedFuture(Unit)
             writeInFlight?.let { return it }
-            val batch = retryBatch ?: drainPending() ?: return CompletableFuture.completedFuture(Unit)
+            batch = retryBatch ?: drainPending() ?: return CompletableFuture.completedFuture(Unit)
             retryBatch = batch
-            batchId = batch.id
             writeInFlight = completion
-            write = runCatching { store.write(batch.id, batch.entries) }
-                .getOrElse { CompletableFuture.failedFuture(it) }
         }
+        // Only O(1) detachment happens on the producer thread; conversion and the
+        // store call always execute on storage, including the terminal flush.
+        write = if (terminalWorker) runCatching { store.write(batch.id, batch.entries) }
+            .getOrElse { CompletableFuture.failedFuture(it) }
+        else worker.submit { store.write(batch.id, batch.entries) }.thenCompose { it }
         write.whenComplete { _, failure ->
             synchronized(lock) {
                 if (writeInFlight === completion) writeInFlight = null
-                if (failure == null && retryBatch?.id == batchId) retryBatch = null
+                if (failure == null && retryBatch?.id == batch.id) retryBatch = null
             }
             if (failure == null) completion.complete(Unit) else {
                 warnWrite(failure)
@@ -145,7 +153,7 @@ class EarningsService(
         synchronized(lock) {
             if (closed) return
             val existing = pending[key]
-            val occupied = pending.size + (retryBatch?.entries?.size ?: 0)
+            val occupied = pending.size + (retryBatch?.buckets?.size ?: 0)
             if (existing == null && occupied >= settings.maximumPendingBuckets) {
                 val now = clock.instant()
                 if (lastOverflowWarning.plusSeconds(60).isBefore(now)) {
@@ -165,19 +173,9 @@ class EarningsService(
 
     private fun drainPending(): PendingBatch? {
         if (pending.isEmpty()) return null
-        val entries = pending.map { (key, totals) ->
-            HourlyEarnings(
-                key.playerId,
-                key.jobId,
-                key.epochHour,
-                totals.copy(
-                    money = normalize(totals.money),
-                    xp = normalize(totals.xp),
-                ),
-            )
-        }
-        pending.clear()
-        return PendingBatch(UUID.randomUUID(), entries)
+        val detached = pending
+        pending = linkedMapOf()
+        return PendingBatch(UUID.randomUUID(), detached)
     }
 
     private fun prune() {
@@ -211,16 +209,25 @@ class EarningsService(
         cleanupTask?.cancel()
         flushTask = null
         cleanupTask = null
-        runCatching { flushBuffered(allowClosed = true).get(5, TimeUnit.SECONDS) }
-            .onFailure {
-                if (it is InterruptedException) Thread.currentThread().interrupt()
-                plugin.logger.log(Level.WARNING, "Could not finish the final ArcEcoJobs earnings flush", it)
+        worker.closeAsync {
+            try {
+                flush(allowClosed = true, terminalWorker = true)
+                    .thenCompose { flush(allowClosed = true, terminalWorker = true) }.join()
+            } finally {
+                store.close()
             }
-        store.close()
+        }.whenComplete { _, failure ->
+            if (failure == null) closeCompletion.complete(Unit) else {
+                plugin.logger.log(Level.WARNING, "Could not close ArcEcoJobs earnings storage", failure)
+                closeCompletion.completeExceptionally(failure)
+            }
+        }
     }
 
+    fun closeAsync(): CompletableFuture<Unit> { close(); return closeCompletion.copy() }
+
     internal fun pendingBucketCount(): Int = synchronized(lock) {
-        pending.size + (retryBatch?.entries?.size ?: 0)
+        pending.size + (retryBatch?.buckets?.size ?: 0)
     }
 
     companion object {

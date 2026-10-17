@@ -51,4 +51,41 @@ class BuilderPlacementGuardTest : StringSpec({
         guard.record(first, 601_000).allowed shouldBe true
         guard.record(newer, 601_000).allowed shouldBe false
     }
+    "full expiration and ring reuse preserve every active placement window" {
+        val guard = BuilderPlacementGuard { BuilderPlacementSettings(cooldownMillis = 60_000, maximumEntries = 100_000) }
+        repeat(100_000) { index -> guard.record(first.copy(x = index), 0).allowed shouldBe true }
+        guard.record(first.copy(x = 100_000), 1).capacityFull shouldBe true
+        repeat(100_000) { index -> guard.record(first.copy(x = index + 100_000), 60_000).allowed shouldBe true }
+        guard.record(first.copy(x = 150_000), 60_001).allowed shouldBe false
+        guard.record(first.copy(x = 1), 60_001).capacityFull shouldBe true
+        guard.record(first.copy(x = 1), 120_000).allowed shouldBe true
+    }
+
+    "cooldown and capacity reloads match the original fail-closed window semantics" {
+        var config = BuilderPlacementSettings(cooldownMillis = 60_000, maximumEntries = 32)
+        val guard = BuilderPlacementGuard { config }
+        val reference = linkedMapOf<BuilderPlacementGuard.Key, Long>()
+        var previousNow = Long.MIN_VALUE
+        var clock = 0L
+        val random = java.util.Random(7)
+        repeat(4_096) { index ->
+            if (index % 31 == 0) config = config.copy(cooldownMillis = if (random.nextBoolean()) 60_000 else 120_000,
+                maximumEntries = 1 + random.nextInt(64), enabled = random.nextInt(5) != 0)
+            clock += random.nextInt(8_000) - 1_000
+            val now = maxOf(previousNow, clock)
+            previousNow = now
+            val key = first.copy(x = random.nextInt(128))
+            val expected = if (!config.enabled) BuilderPlacementGuard.Decision(key, now, true) else {
+                val iterator = reference.entries.iterator()
+                while (iterator.hasNext() && now - iterator.next().value >= config.cooldownMillis) iterator.remove()
+                when {
+                    key in reference -> BuilderPlacementGuard.Decision(key, now, false)
+                    reference.size >= config.maximumEntries -> BuilderPlacementGuard.Decision(key, now, false, capacityFull = true)
+                    else -> { reference[key] = now; BuilderPlacementGuard.Decision(key, now, true) }
+                }
+            }
+            guard.record(key, clock) shouldBe expected
+        }
+    }
+
 })

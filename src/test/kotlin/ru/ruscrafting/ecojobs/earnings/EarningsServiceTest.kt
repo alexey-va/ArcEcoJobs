@@ -151,11 +151,11 @@ class EarningsServiceTest : StringSpec({
         val player = UUID.randomUUID()
         service.recordMoney(player, "builder", BigDecimal.ONE)
 
-        val closing = CompletableFuture.runAsync(service::close)
+        service.close()
         store.started.await(5, TimeUnit.SECONDS) shouldBe true
         service.recordMoney(player, "builder", BigDecimal.TEN)
         store.release.complete(Unit)
-        closing.get(5, TimeUnit.SECONDS)
+        service.closeAsync().get(5, TimeUnit.SECONDS)
 
         store.writes.flatten().single().totals shouldBe EarningsTotals(
             money = BigDecimal("1.000000"),
@@ -164,31 +164,44 @@ class EarningsServiceTest : StringSpec({
         )
     }
 
+    "terminal flush failure is observable after storage is closed" {
+        val store = RecordingEarningsStore().apply { failNextWrite = true }
+        val service = EarningsService(plugin, settings(), store, clock)
+        service.recordMoney(UUID.randomUUID(), "builder", BigDecimal.ONE)
+
+        runCatching { service.closeAsync().get(5, TimeUnit.SECONDS) }.isFailure shouldBe true
+        store.closeCalls shouldBe 1
+        store.writes.size shouldBe 0
+    }
+
     "a report drains the batches preceding it without chasing later earnings forever" {
         val store = ControlledEarningsStore()
         val service = EarningsService(plugin, settings(), store, clock)
         val player = UUID.randomUUID()
         service.recordMoney(player, "builder", BigDecimal.ONE)
         service.flush()
+        val firstWrite = store.awaitWrite()
         service.recordMoney(player, "builder", BigDecimal.TEN)
         val report = service.report(player, "builder")
-        store.completions[0].complete(Unit)
+        firstWrite.complete(Unit)
+        val secondWrite = store.awaitWrite()
         service.recordMoney(player, "builder", BigDecimal("100"))
-        store.completions[1].complete(Unit)
+        secondWrite.complete(Unit)
 
-        report.isDone shouldBe true
+        report.get(5, TimeUnit.SECONDS)
         report.join().total.money shouldBe BigDecimal("11.000000")
         service.pendingBucketCount() shouldBe 1
-        service.flush()
-        store.completions[2].complete(Unit)
-        service.close()
+        val lastFlush = service.flush()
+        store.awaitWrite().complete(Unit)
+        lastFlush.get(5, TimeUnit.SECONDS)
+        service.closeAsync().get(5, TimeUnit.SECONDS)
     }
 
     "a synchronous write rejection retains the batch and returns a failed future" {
         val store = RecordingEarningsStore().apply { throwNextWrite = true }
         val service = EarningsService(plugin, settings(), store, clock)
         service.recordMoney(UUID.randomUUID(), "builder", BigDecimal.ONE)
-        service.flush().isCompletedExceptionally shouldBe true
+        runCatching { service.flush().join() }.isFailure shouldBe true
         service.flush().join()
         store.attemptedBatchIds.toSet().size shouldBe 1
         store.writes.size shouldBe 1
@@ -201,9 +214,10 @@ class EarningsServiceTest : StringSpec({
         val player = UUID.randomUUID()
         service.report(player, "builder").join()
         service.close()
-        service.report(player, "builder").isCompletedExceptionally shouldBe true
+        runCatching { service.report(player, "builder").join() }.isFailure shouldBe true
         shouldThrow<IllegalStateException> { service.start() }
         service.close()
+        service.closeAsync().join()
         store.closeCalls shouldBe 1
         store.reads shouldBe 1
     }
@@ -275,7 +289,8 @@ class EarningsServiceTest : StringSpec({
         val report = service.report(UUID.randomUUID(), "builder")
         service.close()
         delayed.complete(emptyList())
-        report.isCompletedExceptionally shouldBe true
+        runCatching { report.join() }.isFailure shouldBe true
+        service.closeAsync().join()
         store.closeCalls shouldBe 1
     }
 
@@ -285,7 +300,7 @@ class EarningsServiceTest : StringSpec({
         }
         val service = EarningsService(plugin, settings(), store, clock)
         val player = UUID.randomUUID()
-        service.report(player, "builder").isCompletedExceptionally shouldBe true
+        runCatching { service.report(player, "builder").join() }.isFailure shouldBe true
         service.report(player, "builder").join().total.money shouldBe BigDecimal.ZERO
         store.reads shouldBe 2
         service.close()
@@ -294,7 +309,8 @@ class EarningsServiceTest : StringSpec({
 
 private class ControlledEarningsStore : HourlyEarningsStore {
     private val delegate = RecordingEarningsStore()
-    val completions = mutableListOf<CompletableFuture<Unit>>()
+    private val completions = java.util.concurrent.LinkedBlockingQueue<CompletableFuture<Unit>>()
+    fun awaitWrite(): CompletableFuture<Unit> = checkNotNull(completions.poll(5, TimeUnit.SECONDS)) { "Storage write did not start" }
     override fun write(batchId: UUID, entries: List<HourlyEarnings>): CompletableFuture<Unit> =
         CompletableFuture<Unit>().also(completions::add).thenCompose { delegate.write(batchId, entries) }
     override fun read(playerId: UUID, jobId: String, fromEpochHour: Long) = delegate.read(playerId, jobId, fromEpochHour)

@@ -29,7 +29,7 @@ class JobsMenuTest : StringSpec({
             boosters = { mockk<BoosterRegistry>() },
             vouchers = mockk<VoucherService>(),
             earnings = { mockk<EarningsService>() },
-            reload = { Result.success(Unit) },
+            reload = { java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) },
             layouts = layouts,
         )
 

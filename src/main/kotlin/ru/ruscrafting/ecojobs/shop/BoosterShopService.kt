@@ -13,6 +13,10 @@ import java.nio.file.Path
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
+import ru.arc.core.BudgetedTaskQueue
 
 interface ShopPaymentGateway {
     fun has(playerId: UUID, amount: BigDecimal): Boolean
@@ -45,50 +49,123 @@ class AtomicShopPurchaseStore(dataFolder: Path) : ShopPurchaseStore {
 
 sealed interface PurchaseResult { data class Delivered(val purchase: ShopPurchase): PurchaseResult; data class Recovered(val purchase: ShopPurchase): PurchaseResult; data object ShopDisabled: PurchaseResult; data object Unavailable: PurchaseResult; data object InsufficientFunds: PurchaseResult; data object InventoryFull: PurchaseResult; data object PaymentFailed: PurchaseResult; data object PaymentPending: PurchaseResult; data object DeliveryFailed: PurchaseResult }
 
-class BoosterShopService(private val enabled: () -> Boolean, private val store: ShopPurchaseStore, private val payment: ShopPaymentGateway, private val voucherFactory: (UUID, UUID, BoosterPreset) -> ByteArray) {
-    fun buy(playerId: UUID, preset: BoosterPreset, delivery: ShopDeliveryGateway): PurchaseResult {
-        if (!enabled()) return PurchaseResult.ShopDisabled
-        store.findOpen(playerId, preset.id)?.let { return recover(playerId, it, delivery) }
-        val price = preset.price ?: return PurchaseResult.Unavailable
-        if (!preset.enabled || !preset.shopVisible) return PurchaseResult.Unavailable
-        val currencyPayment = payment.forCurrency(price.currency) ?: return PurchaseResult.Unavailable
-        if (!delivery.hasRoom(playerId)) return PurchaseResult.InventoryFull
-        val id = UUID.randomUUID(); val purchase = store.create(ShopPurchase(UUID.randomUUID(), playerId, preset.id, id, price, Instant.now(), Base64.getEncoder().encodeToString(voucherFactory(playerId, id, preset)), PurchaseState.RESERVED))
-        if (!runCatching { currencyPayment.has(playerId, price.amount) }.getOrDefault(false)) { transition(purchase, PurchaseState.FAILED); return PurchaseResult.InsufficientFunds }
-        val charging = transition(purchase, PurchaseState.CHARGING)
-        return when (runCatching { currencyPayment.charge(playerId, price.amount) }.getOrDefault(PaymentOutcome.UNKNOWN)) { PaymentOutcome.UNKNOWN -> PurchaseResult.PaymentPending; PaymentOutcome.REJECTED -> { transition(charging, PurchaseState.FAILED); PurchaseResult.PaymentFailed }; PaymentOutcome.ACCEPTED -> deliver(playerId, transition(charging, PurchaseState.CHARGED), delivery) }
-    }
-    private fun recover(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): PurchaseResult = when (purchase.state) { PurchaseState.CHARGING -> PurchaseResult.PaymentPending; PurchaseState.CHARGED, PurchaseState.DELIVERING -> deliver(playerId, purchase, delivery); PurchaseState.RESERVED -> { transition(purchase, PurchaseState.FAILED); PurchaseResult.PaymentFailed }; PurchaseState.DELIVERED -> PurchaseResult.Recovered(purchase); PurchaseState.FAILED -> PurchaseResult.Unavailable }
-    private fun deliver(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): PurchaseResult {
-        if (delivery.contains(playerId, purchase.voucherId)) {
-            if (!delivery.save(playerId)) return PurchaseResult.DeliveryFailed
-            return PurchaseResult.Recovered(transition(purchase, PurchaseState.DELIVERED))
+/** Filesystem transitions run on storage; player/payment operations run through the lifecycle. */
+class BoosterShopService(
+    private val enabled: () -> Boolean,
+    private val store: ShopPurchaseStore,
+    private val payment: ShopPaymentGateway,
+    private val storage: Executor,
+    private val nativeWork: BudgetedTaskQueue,
+    private val offerCurrent: (UUID, BoosterPreset) -> Boolean = { _, _ -> true },
+    private val voucherFactory: (UUID, UUID, BoosterPreset) -> ByteArray,
+) {
+    private val inFlight = ConcurrentHashMap<UUID, CompletableFuture<PurchaseResult>>()
+
+    fun buy(playerId: UUID, preset: BoosterPreset, delivery: ShopDeliveryGateway): CompletableFuture<PurchaseResult> {
+        val result = CompletableFuture<PurchaseResult>()
+        inFlight.putIfAbsent(playerId, result)?.let { return it }
+        val operation = nativeWork.call({ true }) { enabled() }.thenCompose { available ->
+            if (!available) CompletableFuture.completedFuture(PurchaseResult.ShopDisabled)
+            else CompletableFuture.supplyAsync({ store.findOpen(playerId, preset.id) }, storage).thenCompose { existing ->
+                if (existing != null) recover(playerId, existing, delivery)
+                else reserve(playerId, preset, delivery)
+            }
         }
-        // An item may have left the inventory before a crash. Never mint another copy
-        // after delivery has started; the original signed voucher remains valid.
-        if (purchase.state == PurchaseState.DELIVERING) return PurchaseResult.PaymentPending
-        if (!delivery.hasRoom(playerId)) return PurchaseResult.InventoryFull
-        val delivering = transition(purchase, PurchaseState.DELIVERING)
-        return when (runCatching {
-            delivery.deliver(playerId, Base64.getDecoder().decode(delivering.voucherBytes))
-        }.getOrDefault(DeliveryOutcome.FAILED)) {
-            DeliveryOutcome.FULL -> PurchaseResult.InventoryFull
-            DeliveryOutcome.FAILED -> PurchaseResult.DeliveryFailed
-            DeliveryOutcome.DELIVERED -> if (delivery.save(playerId)) {
-                PurchaseResult.Delivered(transition(delivering, PurchaseState.DELIVERED))
-            } else PurchaseResult.DeliveryFailed
+        operation.whenComplete { value, failure ->
+            inFlight.remove(playerId, result)
+            if (failure == null) result.complete(value) else result.completeExceptionally(failure)
         }
+        return result
     }
-    private fun transition(purchase: ShopPurchase, state: PurchaseState) = store.update(purchase.copy(state = state)).also {
-        if (state == PurchaseState.DELIVERED && purchase.state != PurchaseState.DELIVERED) {
-            ru.ruscrafting.ecojobs.integration.ArcProductTelemetry.purchased(it.playerId, it.id)
+
+    private fun reserve(playerId: UUID, preset: BoosterPreset, delivery: ShopDeliveryGateway): CompletableFuture<PurchaseResult> =
+        nativeWork.call({ true }) {
+            val price = preset.price
+            if (!enabled()) return@call PurchaseResult.ShopDisabled
+            if (price == null || !preset.enabled || !preset.shopVisible || !offerCurrent(playerId, preset)) return@call PurchaseResult.Unavailable
+            if (payment.forCurrency(price.currency) == null) return@call PurchaseResult.Unavailable
+            if (!delivery.hasRoom(playerId)) return@call PurchaseResult.InventoryFull
+            val voucherId = UUID.randomUUID()
+            ShopPurchase(UUID.randomUUID(), playerId, preset.id, voucherId, price, Instant.now(),
+                Base64.getEncoder().encodeToString(voucherFactory(playerId, voucherId, preset)), PurchaseState.RESERVED)
+        }.thenCompose { prepared ->
+            if (prepared is PurchaseResult) CompletableFuture.completedFuture(prepared)
+            else CompletableFuture.supplyAsync({ store.create(prepared as ShopPurchase) }, storage).thenCompose { reserved ->
+                nativeWork.call({ true }) {
+                    when {
+                        !enabled() || !offerCurrent(playerId, preset) -> PurchaseResult.Unavailable
+                        !runCatching { payment.forCurrency(reserved.price.currency)?.has(playerId, reserved.price.amount) == true }.getOrDefault(false) -> PurchaseResult.InsufficientFunds
+                        else -> null
+                    }
+                }.thenCompose { rejected ->
+                    if (rejected != null) transition(reserved, PurchaseState.FAILED).thenApply { rejected }
+                    else transition(reserved, PurchaseState.CHARGING).thenCompose { charging ->
+                        nativeWork.call({ true }) {
+                            // No provider call may run after logout, permission loss or an offer replacement.
+                            if (!enabled() || !offerCurrent(playerId, preset)) null
+                            else runCatching { payment.forCurrency(charging.price.currency)?.charge(playerId, charging.price.amount) }
+                                .getOrDefault(PaymentOutcome.UNKNOWN) ?: PaymentOutcome.UNKNOWN
+                        }.thenCompose { outcome ->
+                            when (outcome) {
+                                null -> transition(charging, PurchaseState.FAILED).thenApply { PurchaseResult.Unavailable }
+                                PaymentOutcome.UNKNOWN -> CompletableFuture.completedFuture(PurchaseResult.PaymentPending)
+                                PaymentOutcome.REJECTED -> transition(charging, PurchaseState.FAILED).thenApply { PurchaseResult.PaymentFailed }
+                                PaymentOutcome.ACCEPTED -> transition(charging, PurchaseState.CHARGED).thenCompose { deliver(playerId, it, delivery) }
+                            }
+                        }
+                    }
+                }
+            }
         }
-    }
+
+    private fun recover(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): CompletableFuture<PurchaseResult> =
+        when (purchase.state) {
+            PurchaseState.CHARGING -> CompletableFuture.completedFuture(PurchaseResult.PaymentPending)
+            PurchaseState.CHARGED, PurchaseState.DELIVERING -> deliver(playerId, purchase, delivery)
+            PurchaseState.RESERVED -> transition(purchase, PurchaseState.FAILED).thenApply { PurchaseResult.PaymentFailed }
+            PurchaseState.DELIVERED -> CompletableFuture.completedFuture(PurchaseResult.Recovered(purchase))
+            PurchaseState.FAILED -> CompletableFuture.completedFuture(PurchaseResult.Unavailable)
+        }
+
+    private fun deliver(playerId: UUID, purchase: ShopPurchase, delivery: ShopDeliveryGateway): CompletableFuture<PurchaseResult> =
+        nativeWork.call({ true }) {
+            when {
+                delivery.contains(playerId, purchase.voucherId) -> if (delivery.save(playerId)) null else PurchaseResult.DeliveryFailed
+                // Never reissue bytes after delivery began; the signed voucher may have left the inventory.
+                purchase.state == PurchaseState.DELIVERING -> PurchaseResult.PaymentPending
+                !delivery.hasRoom(playerId) -> PurchaseResult.InventoryFull
+                else -> purchase
+            }
+        }.thenCompose { inspected ->
+            when (inspected) {
+                null -> transition(purchase, PurchaseState.DELIVERED).thenApply { PurchaseResult.Recovered(it) }
+                is PurchaseResult -> CompletableFuture.completedFuture(inspected)
+                else -> transition(purchase, PurchaseState.DELIVERING).thenCompose { delivering ->
+                    nativeWork.call({ true }) {
+                        when (runCatching { delivery.deliver(playerId, Base64.getDecoder().decode(delivering.voucherBytes)) }
+                            .getOrDefault(DeliveryOutcome.FAILED)) {
+                            DeliveryOutcome.FULL -> PurchaseResult.InventoryFull
+                            DeliveryOutcome.FAILED -> PurchaseResult.DeliveryFailed
+                            DeliveryOutcome.DELIVERED -> if (delivery.save(playerId)) null else PurchaseResult.DeliveryFailed
+                        }
+                    }.thenCompose { rejected ->
+                        if (rejected != null) CompletableFuture.completedFuture(rejected)
+                        else transition(delivering, PurchaseState.DELIVERED).thenApply { PurchaseResult.Delivered(it) }
+                    }
+                }
+            }
+        }
+
+    private fun transition(purchase: ShopPurchase, state: PurchaseState): CompletableFuture<ShopPurchase> =
+        CompletableFuture.supplyAsync({ store.update(purchase.copy(state = state)) }, storage).thenCompose { updated ->
+            if (state != PurchaseState.DELIVERED || purchase.state == PurchaseState.DELIVERED) CompletableFuture.completedFuture(updated)
+            else nativeWork.call({ true }) { ru.ruscrafting.ecojobs.integration.ArcProductTelemetry.purchased(updated.playerId, updated.id); updated }
+        }
 }
 
 class PlayerShopDeliveryGateway(private val player: Player, private val vouchers: VoucherService) : ShopDeliveryGateway {
-    override fun hasRoom(playerId: UUID) = player.inventory.storageContents.any { it == null || it.type.isAir }
-    override fun contains(playerId: UUID, voucherId: UUID) = player.inventory.contents.any { vouchers.matchesVoucherId(it, voucherId) }
-    override fun deliver(playerId: UUID, itemBytes: ByteArray) = runCatching { if (player.inventory.addItem(ItemStack.deserializeBytes(itemBytes)).isEmpty()) DeliveryOutcome.DELIVERED else DeliveryOutcome.FULL }.getOrDefault(DeliveryOutcome.FAILED)
-    override fun save(playerId: UUID) = runCatching { player.saveData(); true }.getOrDefault(false)
+    override fun hasRoom(playerId: UUID) = player.isOnline && player.inventory.storageContents.any { it == null || it.type.isAir }
+    override fun contains(playerId: UUID, voucherId: UUID) = player.isOnline && player.inventory.contents.any { vouchers.matchesVoucherId(it, voucherId) }
+    override fun deliver(playerId: UUID, itemBytes: ByteArray) = runCatching { if (!player.isOnline) DeliveryOutcome.FAILED else if (player.inventory.addItem(ItemStack.deserializeBytes(itemBytes)).isEmpty()) DeliveryOutcome.DELIVERED else DeliveryOutcome.FULL }.getOrDefault(DeliveryOutcome.FAILED)
+    override fun save(playerId: UUID) = runCatching { check(player.isOnline); player.saveData(); true }.getOrDefault(false)
 }

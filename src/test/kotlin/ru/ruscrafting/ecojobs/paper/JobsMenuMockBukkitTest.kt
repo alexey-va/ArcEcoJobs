@@ -532,7 +532,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val settings = AddonSettings.load(h.dataFolder.resolve("config.yml").toFile())
                 val locale = JobsLocale(h.dataFolder.toFile()) { settings }
                 var reloads = 0
-                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { reloads++; Result.success(Unit) })
+                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { reloads++; java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) })
                 h.menu.installAdminActions(command::executeAdmin)
                 fun click(id: String, values: Map<String, String> = emptyMap()) {
                     val screen = screens.last()
@@ -665,7 +665,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 h.player.addAttachment(h.plugin, "arcecojobs.admin.boost", true)
                 val settings = AddonSettings.load(h.dataFolder.resolve("config.yml").toFile())
                 val locale = JobsLocale(h.dataFolder.toFile()) { settings }
-                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { Result.success(Unit) })
+                val command = JobsCommand({ settings }, locale, h.ecoJobs, h.boosts, { h.boosters }, h.vouchers, h.menu, { java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) })
                 val replies = mutableListOf<(List<ru.ruscrafting.ecojobs.domain.BoostInstance>?, Throwable?) -> Unit>()
                 every { h.boosts.loadActive(any(), any()) } answers { replies += lastArg<(List<ru.ruscrafting.ecojobs.domain.BoostInstance>?, Throwable?) -> Unit>() }
                 h.menu.installAdminActions(command::executeAdmin)
@@ -729,9 +729,16 @@ private class JobsMenuHarness(
     val boosters: BoosterRegistry,
     val vouchers: VoucherService,
     val dataFolder: Path,
+    val bridgeTasks: ru.arc.core.LifecycleTaskScope,
+    val bridgeNative: ru.arc.core.BudgetedTaskQueue,
+    val bridgeWorker: ru.arc.core.BoundedAsyncExecutor,
 ) : AutoCloseable {
     override fun close() {
         menu.close()
+        ecoJobs.shutdown()
+        bridgeNative.close()
+        bridgeTasks.close()
+        bridgeWorker.closeAsync().get(5, java.util.concurrent.TimeUnit.SECONDS)
         dataFolder.toFile().deleteRecursively()
     }
 }
@@ -762,7 +769,11 @@ private fun menuHarness(
     val settings = AddonSettings.load(dataFolder.resolve("config.yml").toFile()).let { it.copy(menuPresentation = presentation, earnings = it.earnings.copy(enabled = earnings != null)) }
     val layouts = JobsMenuLayouts(dataFolder)
     val locale = JobsLocale(dataFolder.toFile()) { settings }.also(JobsLocale::validate)
-    val ecoJobs = spyk(EcoJobsBridge(plugin) { settings }) {
+    val bridgeTasks = ru.arc.core.LifecycleTaskScope(ru.arc.core.TestTaskScheduler())
+    val bridgeNative = ru.arc.core.BudgetedTaskQueue(bridgeTasks)
+    val bridgeWorker = ru.arc.core.BoundedAsyncExecutor("ecojobs-menu-leaderboard-test")
+    val ecoJobs = spyk(EcoJobsBridge(plugin, bridgeNative, bridgeWorker,
+        ru.arc.paper.player.PaperOfflinePlayerData(dataFolder.resolve("playerdata"))) { settings }) {
         every { activeJobs(player) } returns emptyList()
         every { limit(player) } returns 3
         every { totalLevel(player) } returns 0
@@ -786,7 +797,7 @@ private fun menuHarness(
         boosters = { boosters },
         vouchers = vouchers,
         earnings = { earnings },
-        reload = { Result.success(Unit) },
+        reload = { java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) },
         layouts = layouts,
         escapeGoesBack = { escapeBack() },
         dialogDisplay = display?.let { sink -> object : JobsDialogDisplay {
@@ -806,7 +817,8 @@ private fun menuHarness(
         JobsListener({ settings }, locale, menu, boosts, vouchers),
         plugin,
     )
-    return JobsMenuHarness(plugin, player, menu, ecoJobs, layouts, boosts, boosters, vouchers, dataFolder)
+    return JobsMenuHarness(plugin, player, menu, ecoJobs, layouts, boosts, boosters, vouchers, dataFolder,
+        bridgeTasks, bridgeNative, bridgeWorker)
 }
 
 private fun clickTop(

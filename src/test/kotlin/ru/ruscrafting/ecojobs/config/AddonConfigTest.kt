@@ -326,15 +326,33 @@ class AddonConfigTest : StringSpec({
         } shouldBe true
     }
 
-    "production and lab voucher catalogs match the bundled defaults" {
-        val expected = Files.readString(project.resolve("src/main/resources/boosters.yml"))
+    "production voucher behavior matches the bundled catalog with operator item overlays" {
+        val expected = BoosterRegistry.load(
+            project.resolve("src/main/resources/boosters.yml").toFile(),
+            settings,
+            setOf("miner"),
+        ).values().associateBy(BoosterPreset::id)
         listOf(
             opsRoot().resolve("classic/plugins/ArcEcoJobs/boosters.yml"),
             opsRoot().resolve("classic_survival/plugins/ArcEcoJobs/boosters.yml"),
-            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/boosters.yml"),
         ).forEach { path ->
-            Files.readString(path) shouldBe expected
+            val actual = BoosterRegistry.load(path.toFile(), settings, setOf("miner"))
+                .values().associateBy(BoosterPreset::id)
+            actual.keys shouldBe expected.keys
+            actual.forEach { (id, preset) ->
+                val bundled = expected.getValue(id)
+                preset.copy(item = preset.item.copy(
+                    material = bundled.item.material,
+                    customModelData = bundled.item.customModelData,
+                    loreKey = bundled.item.loreKey,
+                )) shouldBe bundled
+            }
         }
+        BoosterRegistry.load(
+            opsRoot().resolve("scripts/lab/plugin-configs/ArcEcoJobs/boosters.yml").toFile(),
+            settings,
+            setOf("miner"),
+        ).values().associateBy(BoosterPreset::id) shouldBe expected
     }
 
     "production GUI overlays use the reviewed RusCrafting model data on both nodes" {

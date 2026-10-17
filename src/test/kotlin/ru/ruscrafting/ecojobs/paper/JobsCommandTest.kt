@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
+import org.bukkit.entity.Player
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.VoucherService
 import ru.ruscrafting.ecojobs.config.AddonSettings
@@ -30,7 +31,7 @@ class JobsCommandTest : StringSpec({
     val command = mockk<Command>()
 
     "ordinary players are offered only the read-only boost command" {
-        val sender = mockk<CommandSender> {
+        val sender = mockk<Player> {
             every { hasPermission(any<String>()) } returns false
         }
 
@@ -54,9 +55,10 @@ class JobsCommandTest : StringSpec({
     }
 
     "booster override completion does not suggest an option twice" {
-        val sender = mockk<CommandSender> {
+        val sender = mockk<Player> {
             every { hasPermission(any<String>()) } returns false
             every { hasPermission("arcecojobs.admin.booster") } returns true
+            every { hasPermission("arcecojobs.use") } returns true
         }
 
         handler.onTabComplete(sender, command, "arcjobs", arrayOf("")) shouldBe
@@ -68,5 +70,27 @@ class JobsCommandTest : StringSpec({
             "arcjobs",
             arrayOf("booster", "give", "Player", "workday", "1", "--duration", "1h", ""),
         ) shouldBe listOf("--multiplier", "--type", "--jobs")
+
+        handler.onTabComplete(sender, command, "arcjobs", arrayOf("booster", "give", "Player", "workday", "--duration", "1")) shouldBe
+            listOf("1h", "1d")
+        handler.onTabComplete(sender, command, "arcjobs", arrayOf("booster", "give", "Player", "workday", "1", "--du")) shouldBe
+            listOf("--duration")
+        listOf(
+            arrayOf("boosters", ""),
+            arrayOf("booster", "unknown", ""),
+            arrayOf("booster", "give", "Player", "workday", "bad-amount", ""),
+            arrayOf("booster", "give", "Player", "workday", "1", "--unknown", ""),
+            arrayOf("boost", "grant", "Player", "1h", "2", "ALL", "all", ""),
+            arrayOf("reload", ""),
+        ).forEach { handler.onTabComplete(sender, command, "arcjobs", it) shouldBe emptyList() }
+    }
+
+    "console and denied players see only commands they can execute" {
+        val console = mockk<CommandSender> { every { hasPermission(any<String>()) } returns false }
+        handler.onTabComplete(console, command, "arcjobs", arrayOf("")) shouldBe listOf("help")
+        handler.onTabComplete(console, command, "arcjobs", arrayOf("boost", "")) shouldBe emptyList()
+        val player = mockk<Player> { every { hasPermission(any<String>()) } returns false }
+        handler.onTabComplete(player, command, "arcjobs", arrayOf("")) shouldBe listOf("help", "boost")
+        handler.onTabComplete(player, command, "arcjobs", arrayOf("booster", "give", "")) shouldBe emptyList()
     }
 })

@@ -358,28 +358,33 @@ class JobsCommand(
         val canManageBoosts = sender.hasPermission("arcecojobs.admin.boost")
         val options = when (args.size) {
             1 -> buildList {
-                addAll(listOf("help", "boost", "dialog", "inventory"))
-                if (JobsAdminMenu.canOpen(sender)) add("admin")
-                if (shop != null && settings().shop.enabled) add("shop")
+                add("help")
+                if (sender is Player || canManageBoosts) add("boost")
+                if (sender is Player && sender.hasPermission("arcecojobs.use")) {
+                    addAll(listOf("dialog", "inventory"))
+                    if (shop != null && settings().shop.enabled) add("shop")
+                }
+                if (sender is Player && JobsAdminMenu.canOpen(sender)) add("admin")
                 if (sender.hasPermission("arcecojobs.admin.reload")) add("reload")
                 if (canManageBoosters) addAll(listOf("boosters", "booster"))
                 if (sender.hasPermission("arcecojobs.admin.diagnose")) add("diagnose")
             }
             2 -> when (args[0].lowercase()) {
-                "boosters" -> if (canManageBoosters) listOf("list") else emptyList()
                 "booster" -> if (canManageBoosters) listOf("inspect", "give") else emptyList()
-                "boost" -> listOf("list") + if (canManageBoosts) listOf("grant", "revoke") else emptyList()
+                "boost" -> (if (sender is Player || canManageBoosts) listOf("list") else emptyList()) +
+                    if (canManageBoosts) listOf("grant", "revoke") else emptyList()
                 else -> emptyList()
             }
             3 -> when (args[0].lowercase() to args[1].lowercase()) {
-                "booster" to "inspect" -> if (canManageBoosters) boosters().values().map { it.id } + "hand" else emptyList()
+                "booster" to "inspect" -> if (canManageBoosters) boosters().values().map { it.id } +
+                    (if (sender is Player) listOf("hand") else emptyList()) else emptyList()
                 "booster" to "give" -> if (canManageBoosters) onlinePlayers() else emptyList()
                 "boost" to "list" -> if (canManageBoosts) onlinePlayers() else emptyList()
                 "boost" to "grant", "boost" to "revoke" -> if (canManageBoosts) onlinePlayers() else emptyList()
                 else -> emptyList()
             }
             4 -> when (args[0].lowercase() to args[1].lowercase()) {
-                "booster" to "give" -> if (canManageBoosters) boosters().values().map { it.id } else emptyList()
+                "booster" to "give" -> if (canManageBoosters) boosters().values().filter { it.enabled }.map { it.id } else emptyList()
                 "boost" to "grant" -> if (canManageBoosts) listOf("30m", "1h", "1d") else emptyList()
                 "boost" to "revoke" -> if (canManageBoosts) revokeSuggestions(args[2]) else emptyList()
                 else -> emptyList()
@@ -411,21 +416,34 @@ class JobsCommand(
         return options.filter { it.startsWith(prefix, true) }
     }
 
-    private fun boosterOverrideSuggestions(args: Array<out String>): List<String> = when (args.getOrNull(args.lastIndex - 1)?.lowercase()) {
-        "--duration" -> listOf("30m", "1h", "1d")
-        "--multiplier" -> listOf("1.25", "1.5", "2")
-        "--type" -> BoostType.entries.map(BoostType::name)
-        "--jobs" -> jobSuggestions()
-        else -> unusedOverrideFlags(args)
+    private fun boosterOverrideSuggestions(args: Array<out String>): List<String> {
+        val preceding = args.drop(4).dropLast(1)
+        val overrides = if (preceding.firstOrNull()?.startsWith("--") == false) {
+            if (preceding.first().toIntOrNull() !in 1..64) return emptyList()
+            preceding.drop(1)
+        } else preceding
+        if (overrides.indices.step(2).any { overrides[it].lowercase() !in OVERRIDE_FLAGS }) return emptyList()
+        if (overrides.size % 2 == 0) return unusedOverrideFlags(args)
+        return when (overrides.last().lowercase()) {
+            "--duration" -> listOf("30m", "1h", "1d")
+            "--multiplier" -> listOf("1.25", "1.5", "2")
+            "--type" -> BoostType.entries.map(BoostType::name)
+            "--jobs" -> jobSuggestions()
+            else -> emptyList()
+        }
     }
 
     private fun unusedOverrideFlags(args: Array<out String>): List<String> {
-        val used = args.map(String::lowercase).toSet()
-        return listOf("--duration", "--multiplier", "--type", "--jobs").filterNot(used::contains)
+        val used = args.dropLast(1).map(String::lowercase).toSet()
+        return OVERRIDE_FLAGS.filterNot(used::contains)
     }
 
     private fun jobSuggestions(): List<String> = listOf("all") + ecoJobs.jobs().map { it.id }
     private fun onlinePlayers(): List<String> = Bukkit.getOnlinePlayers().map(Player::getName)
     private fun revokeSuggestions(playerName: String): List<String> = listOf("all") +
         (Bukkit.getPlayerExact(playerName)?.let(boosts::active).orEmpty().map { it.instanceId.toString().take(8) })
+
+    private companion object {
+        val OVERRIDE_FLAGS = listOf("--duration", "--multiplier", "--type", "--jobs")
+    }
 }

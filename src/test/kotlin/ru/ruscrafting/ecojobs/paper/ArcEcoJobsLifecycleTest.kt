@@ -17,65 +17,40 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ArcEcoJobsLifecycleTest : FreeSpec({
-    "reenable and a superseded waiting enable preserve the exact unfinished predecessor" {
+    "maintenance enable waits for IO preparation and handles failure before returning" {
         MockBukkitTestRuntime.open().use { paper ->
             listOf("EcoJobs", "LuckPerms", "PlaceholderAPI", "Vault", "ARC").forEach(paper::createSimplePlugin)
-            val entered = CountDownLatch(1)
-            val release = CountDownLatch(1)
-            val preparations = AtomicInteger()
+            var preparations = 0
             mockkObject(SigningKeyStore)
             every { SigningKeyStore.loadOrCreate(any()) } answers {
                 Bukkit.isPrimaryThread() shouldBe false
-                if (preparations.incrementAndGet() == 1) {
-                    entered.countDown()
-                    check(release.await(5, TimeUnit.SECONDS))
-                }
-                ByteArray(32) { 1 }
+                preparations++
+                throw IllegalStateException("isolated signing preparation failure")
             }
-            var plugin: ArcEcoJobsPlugin? = null
             try {
-                plugin = paper.loadPlugin<ArcEcoJobsPlugin>()
-                awaitLifecycle(paper) { entered.count == 0L }
-                paper.server.pluginManager.disablePlugin(plugin)
-                plugin.drained().isDone shouldBe false
+                val plugin = paper.loadPlugin<ArcEcoJobsPlugin>()
+                preparations shouldBe 1
+                plugin.isEnabled shouldBe false
+                plugin.drained().isDone shouldBe true
                 plugin.onDisable()
-                plugin.drained().isDone shouldBe false
-                paper.server.pluginManager.enablePlugin(plugin)
-                paper.performTicks(3)
-                preparations.get() shouldBe 1
-                paper.server.pluginManager.disablePlugin(plugin)
-                plugin.drained().isDone shouldBe false
-                paper.server.pluginManager.enablePlugin(plugin)
-                paper.performTicks(3)
-                preparations.get() shouldBe 1
-                release.countDown()
-                awaitLifecycle(paper) { preparations.get() == 2 }
-                plugin.isEnabled shouldBe true
-            } finally {
-                release.countDown()
-                plugin?.let { active ->
-                    paper.server.pluginManager.disablePlugin(active)
-                    active.drained().get(5, TimeUnit.SECONDS)
-                }
-                unmockkObject(SigningKeyStore)
-            }
+                preparations shouldBe 1
+            } finally { unmockkObject(SigningKeyStore) }
         }
     }
 
-    "terminal ledger close remains part of the actual drain and a failed predecessor seals reenable" {
+    "maintenance failure drains the actual ledger before enable returns" {
         MockBukkitTestRuntime.open().use { paper ->
             listOf("EcoJobs", "LuckPerms", "PlaceholderAPI", "Vault", "ARC").forEach(paper::createSimplePlugin)
             val bundled = AddonSettings.load(Path.of(System.getProperty("arcecojobs.projectDir"))
                 .resolve("src/main/resources/config.yml").toFile())
             val enabled = bundled.copy(redemptionStorage = bundled.redemptionStorage.copy(enabled = true, password = "disposable-test"))
-            val prepared = CountDownLatch(1)
-            val releasePrepare = CountDownLatch(1)
             val closeEntered = CountDownLatch(1)
             val ledgerClose = CompletableFuture<Unit>()
-            val opens = AtomicInteger()
+            val returned = AtomicBoolean()
+            val observedBeforeReturn = AtomicBoolean()
             val ledger = mockk<MySqlOneTimeUseLedger> {
                 every { closeAsync() } answers {
                     Bukkit.isPrimaryThread() shouldBe false
@@ -85,42 +60,25 @@ class ArcEcoJobsLifecycleTest : FreeSpec({
             }
             mockkObject(AddonSettings.Companion, VoucherLedgerStorage, SigningKeyStore)
             every { AddonSettings.load(any()) } returns enabled
-            every { VoucherLedgerStorage.open(any()) } answers { opens.incrementAndGet(); ledger }
-            every { SigningKeyStore.loadOrCreate(any()) } answers {
-                prepared.countDown()
-                check(releasePrepare.await(5, TimeUnit.SECONDS))
-                ByteArray(32) { 1 }
-            }
-            var plugin: ArcEcoJobsPlugin? = null
+            every { VoucherLedgerStorage.open(any()) } returns ledger
+            every { SigningKeyStore.loadOrCreate(any()) } throws IllegalStateException("isolated startup failure after acquisition")
+            val release = Thread {
+                try {
+                    if (closeEntered.await(5, TimeUnit.SECONDS)) observedBeforeReturn.set(!returned.get())
+                } finally { ledgerClose.complete(Unit) }
+            }.apply { start() }
             try {
-                plugin = paper.loadPlugin<ArcEcoJobsPlugin>()
-                awaitLifecycle(paper) { prepared.count == 0L }
-                paper.server.pluginManager.disablePlugin(plugin)
-                releasePrepare.countDown()
-                closeEntered.await(5, TimeUnit.SECONDS) shouldBe true
-                plugin.drained().isDone shouldBe false
-                paper.server.pluginManager.enablePlugin(plugin)
-                paper.performTicks(3)
-                opens.get() shouldBe 1
-                ledgerClose.completeExceptionally(IllegalStateException("delayed terminal cleanup failed"))
-                awaitLifecycle(paper) { !plugin.isEnabled }
-                plugin.drained().isCompletedExceptionally shouldBe true
-                opens.get() shouldBe 1
+                val plugin = paper.loadPlugin<ArcEcoJobsPlugin>()
+                returned.set(true)
+                observedBeforeReturn.get() shouldBe true
+                plugin.isEnabled shouldBe false
+                plugin.drained().isDone shouldBe true
+                plugin.drained().join()
             } finally {
-                releasePrepare.countDown()
                 ledgerClose.complete(Unit)
-                plugin?.let { active ->
-                    paper.server.pluginManager.disablePlugin(active)
-                    runCatching { active.drained().get(5, TimeUnit.SECONDS) }
-                }
+                release.join(5_000)
                 unmockkObject(AddonSettings.Companion, VoucherLedgerStorage, SigningKeyStore)
             }
         }
     }
 })
-
-private fun awaitLifecycle(paper: MockBukkitTestRuntime, ready: () -> Boolean) {
-    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-    while (!ready() && System.nanoTime() < deadline) { paper.performTicks(1); Thread.sleep(1) }
-    ready() shouldBe true
-}

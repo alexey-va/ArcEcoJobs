@@ -66,17 +66,12 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
     private var initialized = false
     private lateinit var storage: BoundedAsyncExecutor
     private lateinit var nativeWork: BudgetedTaskQueue
-    private var preparingJobs = false
     private var reloadInFlight: CompletableFuture<Result<Unit>>? = null
-    private class StorageGeneration(val worker: BoundedAsyncExecutor) {
-        val resources = java.util.concurrent.ConcurrentLinkedDeque<AutoCloseable>()
-        val drain = CompletableFuture<Unit>()
-        var earnings: EarningsService? = null
-        var explorationDrain = CompletableFuture.completedFuture(Unit)
-    }
-    private var generation: StorageGeneration? = null
-    private var predecessor = CompletableFuture.completedFuture(Unit)
-    internal fun drained(): CompletableFuture<Unit> = (generation?.drain ?: predecessor).copy()
+    private val storageResources = java.util.concurrent.ConcurrentLinkedDeque<AutoCloseable>()
+    private var sqlBinding: AutoCloseable? = null
+    private var shutdownDrain = CompletableFuture.completedFuture(Unit)
+    private var explorationDrain = CompletableFuture.completedFuture(Unit)
+    internal fun drained(): CompletableFuture<Unit> = shutdownDrain.copy()
 
     private data class Prepared(
         val settings: AddonSettings,
@@ -94,32 +89,14 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
             pluginRuntime = it
             it.start("version" to pluginMeta.version)
         }
-        predecessor.whenCompleteSync(lifecycle.tasks) { _, failure ->
-            if (pluginRuntime !== lifecycle) return@whenCompleteSync
-            if (failure != null) {
-                logger.log(Level.SEVERE, "ArcEcoJobs cannot start before its predecessor drained successfully", failure)
-                server.pluginManager.disablePlugin(this)
-            } else beginGeneration(lifecycle)
-        }
-    }
-
-    private fun beginGeneration(lifecycle: PaperPluginRuntime) {
         try {
-            val owner = StorageGeneration(BoundedAsyncExecutor("arc-ecojobs-storage"))
-            generation = owner
-            storage = owner.worker
-            lifecycle.own(PaperSqlServices.installConsumer(this, owner.drain))
+            storage = BoundedAsyncExecutor("arc-ecojobs-storage")
+            shutdownDrain = CompletableFuture()
+            explorationDrain = CompletableFuture.completedFuture(Unit)
+            sqlBinding = PaperSqlServices.installConsumer(this, shutdownDrain)
             nativeWork = lifecycle.own(BudgetedTaskQueue(lifecycle.tasks))
-            owner.worker.submit { prepare(owner) }.whenCompleteSync(lifecycle.tasks) { prepared, failure ->
-                if (generation !== owner || pluginRuntime !== lifecycle) return@whenCompleteSync
-                if (failure != null || prepared == null) {
-                    logger.log(Level.SEVERE, "ArcEcoJobs failed closed during storage preparation", failure)
-                    server.pluginManager.disablePlugin(this)
-                } else runCatching { initialize(lifecycle, owner, prepared) }.onFailure {
-                    logger.log(Level.SEVERE, "ArcEcoJobs failed closed during startup", it)
-                    server.pluginManager.disablePlugin(this)
-                }
-            }
+            // Maintenance startup is sequential; this helper only performs IO/codec work.
+            initialize(lifecycle, storage.submit { prepare() }.get())
         } catch (failure: Throwable) {
             logger.log(Level.SEVERE, "ArcEcoJobs failed closed during startup", failure)
             server.pluginManager.disablePlugin(this)
@@ -127,7 +104,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
     }
 
     /** Worker-only: none of these parsers construct player inventories or native item stacks. */
-    private fun prepare(owner: StorageGeneration): Prepared {
+    private fun prepare(): Prepared {
         saveDefaultConfig()
         saveResourceIfMissing("boosters.yml")
         saveResourceIfMissing("lang/ru.yml")
@@ -135,23 +112,23 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
         val candidate = AddonSettings.load(dataFolder.resolve("config.yml"))
         val layouts = JobsMenuLayouts(dataFolder.toPath())
         val texts = JobsLocale(dataFolder) { settings }.also(JobsLocale::validate)
-        val vouchers = if (candidate.redemptionStorage.enabled) VoucherLedgerStorage.open(candidate.redemptionStorage).also(owner.resources::add)
+        val vouchers = if (candidate.redemptionStorage.enabled) VoucherLedgerStorage.open(candidate.redemptionStorage).also(storageResources::add)
             else UnavailableOneTimeUseLedger
-        val discoveries = if (candidate.exploration.enabled) MySqlDiscoveryLedger.open(candidate.redemptionStorage).also(owner.resources::add)
+        val discoveries = if (candidate.exploration.enabled) MySqlDiscoveryLedger.open(candidate.redemptionStorage).also(storageResources::add)
             else UnavailableDiscoveryLedger
         val earnings = if (candidate.earnings.enabled) runCatching { MySqlHourlyEarningsStore.open(candidate.redemptionStorage) }
             .onFailure { logger.log(Level.SEVERE, "Hourly job earnings analytics is unavailable; jobs and payouts will continue", it) }.getOrNull() else null
         // Track the pool until its main-thread EarningsService takes ownership.
-        earnings?.let(owner.resources::add)
+        earnings?.let(storageResources::add)
         return Prepared(candidate, layouts, texts, vouchers, discoveries, earnings,
             SigningKeyStore.loadOrCreate(dataFolder.toPath()), AtomicShopPurchaseStore(dataFolder.toPath()))
     }
 
-    private fun initialize(lifecycle: PaperPluginRuntime, owner: StorageGeneration, prepared: Prepared) {
+    private fun initialize(lifecycle: PaperPluginRuntime, prepared: Prepared) {
             settings = prepared.settings
             menuLayouts = prepared.layouts
             locale = prepared.locale
-            val jobs = EcoJobsBridge(this, nativeWork, owner.worker, ru.arc.paper.player.PaperOfflinePlayerData.capture(server)) { settings }
+            val jobs = EcoJobsBridge(this, nativeWork, storage, ru.arc.paper.player.PaperOfflinePlayerData.capture(server)) { settings }
             ecoJobs = jobs
             lifecycle.own(AutoCloseable(jobs::shutdown))
             val luckPerms = requireNotNull(server.servicesManager.load(LuckPerms::class.java)) { "LuckPerms API is unavailable" }
@@ -178,8 +155,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
                     )
                     runCatching { service.start() }.onFailure { runCatching { service.close() } }.getOrThrow()
                     service.also {
-                        owner.resources.remove(prepared.earningsStore)
-                        owner.earnings = service
+                        storageResources.remove(prepared.earningsStore)
                         earnings = service
                         lifecycle.own(service)
                         logger.info("Hourly job earnings analytics is ready")
@@ -212,21 +188,51 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
                 }
             }
             lifecycle.registerHealth("storage", ::storageHealth)
-            scheduleBootstrap(lifecycle, owner, prepared.shopStore)
+            scheduleBootstrap(lifecycle, prepared.shopStore)
     }
 
     override fun onDisable() {
-        val owner = generation
-        generation = null
-        if (owner != null) predecessor = owner.drain
         bootstrapTask?.cancel()
         bootstrapTask = null
-        if (::nativeWork.isInitialized) nativeWork.close()
-        val lifecycle = pluginRuntime
+        val lifecycle = pluginRuntime ?: return
         pluginRuntime = null
-        val nativeFailure = runCatching { lifecycle?.close() }.exceptionOrNull()
-        if (nativeFailure != null) logger.log(Level.SEVERE, "Could not close ArcEcoJobs runtime", nativeFailure)
-        owner?.let { closeStorage(it, nativeFailure) }
+        val activeEarnings = earnings
+        val binding = sqlBinding.also { sqlBinding = null }
+        var failure: Throwable? = null
+        fun attempt(close: () -> Unit) {
+            try { close() } catch (error: Throwable) {
+                if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
+            }
+        }
+        attempt { if (::nativeWork.isInitialized) nativeWork.close() }
+        attempt { lifecycle.close() }
+        // Main continuations are sealed above. These futures only drain accepted IO.
+        val exploration = explorationDrain
+        attempt {
+            if (::storage.isInitialized) storage.closeAsync {
+                var terminalFailure: Throwable? = null
+                fun closeResource(close: () -> Unit) {
+                    try { close() } catch (error: Throwable) {
+                        if (terminalFailure == null) terminalFailure = error else if (terminalFailure !== error) terminalFailure.addSuppressed(error)
+                    }
+                }
+                closeResource { exploration.join() }
+                while (true) {
+                    val resource = storageResources.pollLast() ?: break
+                    closeResource {
+                        if (resource is ru.arc.sql.onetime.MySqlOneTimeUseLedger) resource.closeAsync().join()
+                        else resource.close()
+                    }
+                }
+                terminalFailure?.let { throw it }
+            }.join()
+        }
+        attempt { activeEarnings?.closeAsync()?.join() }
+        attempt { binding?.close() }
+        if (failure == null) shutdownDrain.complete(Unit) else {
+            shutdownDrain.completeExceptionally(failure)
+            logger.log(Level.SEVERE, "Could not close EcoJobs storage", failure)
+        }
         expansion = null
         explorationListener = null
         earnings = null
@@ -235,64 +241,26 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
         discoveryLedger = UnavailableDiscoveryLedger
         voucherLedger = UnavailableOneTimeUseLedger
         initialized = false
-        preparingJobs = false
         reloadInFlight = null
     }
 
-    private fun closeStorage(owner: StorageGeneration, nativeFailure: Throwable?) {
-        val earningsDrain = runCatching { owner.earnings?.closeAsync() ?: CompletableFuture.completedFuture(Unit) }
-            .getOrElse { CompletableFuture.failedFuture(it) }
-        val explorationDrain = owner.explorationDrain
-        val persistenceDrain = owner.worker.closeAsync {
-            var failure: Throwable? = nativeFailure
-            try { explorationDrain.join() } catch (error: Throwable) {
-                if (failure == null) failure = error else failure.addSuppressed(error)
-            }
-            while (true) {
-                val resource = owner.resources.pollLast() ?: break
-                try {
-                    if (resource is ru.arc.sql.onetime.MySqlOneTimeUseLedger) resource.closeAsync().join()
-                    else resource.close()
-                } catch (error: Throwable) {
-                    if (failure == null) failure = error else failure.addSuppressed(error)
-                }
-            }
-            failure?.let { throw it }
-        }
-        CompletableFuture.allOf(persistenceDrain, earningsDrain).whenComplete { _, _ ->
-            val failures = listOf(persistenceDrain, earningsDrain).mapNotNull { future ->
-                runCatching { future.join() }.exceptionOrNull()?.let { it.cause ?: it }
-            }
-            if (failures.isEmpty()) owner.drain.complete(Unit) else {
-                val failure = failures.first()
-                failures.drop(1).filterNot { it === failure }.forEach(failure::addSuppressed)
-                owner.drain.completeExceptionally(failure)
-                logger.log(Level.SEVERE, "Could not drain EcoJobs storage", failure)
-            }
-        }
-    }
-
-    private fun scheduleBootstrap(lifecycle: PaperPluginRuntime, owner: StorageGeneration, store: AtomicShopPurchaseStore) {
+    private fun scheduleBootstrap(lifecycle: PaperPluginRuntime, store: AtomicShopPurchaseStore) {
         var attempts = 0
         bootstrapTask = lifecycle.tasks.runTimer(delayTicks = 1L, periodTicks = 20L) {
             attempts++
-            if (ecoJobs.jobs().isNotEmpty() && !preparingJobs) {
-                preparingJobs = true
+            if (ecoJobs.jobs().isNotEmpty()) {
                 val jobIds = validatedJobIds()
-                storage.submit { BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds).also { locale.validate(it.values()) } }
-                    .whenCompleteSync(lifecycle.tasks) { registry, failure ->
-                        bootstrapTask?.cancel()
-                        bootstrapTask = null
-                        if (failure != null || registry == null) {
-                            logger.log(Level.SEVERE, "ArcEcoJobs failed closed during delayed storage preparation", failure)
-                            markRuntimeDown()
-                            server.pluginManager.disablePlugin(this)
-                        } else runCatching { finishInitialization(lifecycle, owner, registry, store) }.onFailure {
-                            logger.log(Level.SEVERE, "ArcEcoJobs failed closed during delayed startup", it)
-                            markRuntimeDown()
-                            server.pluginManager.disablePlugin(this)
-                        }
-                    }
+                bootstrapTask?.cancel()
+                bootstrapTask = null
+                runCatching {
+                    val registry = BoosterRegistry.load(dataFolder.resolve("boosters.yml"), settings, jobIds)
+                    locale.validate(registry.values())
+                    finishInitialization(lifecycle, registry, store)
+                }.onFailure {
+                    logger.log(Level.SEVERE, "ArcEcoJobs failed closed during delayed startup", it)
+                    markRuntimeDown()
+                    server.pluginManager.disablePlugin(this)
+                }
             } else if (attempts >= 120) {
                 logger.severe("EcoJobs did not register any jobs within 120 seconds")
                 markRuntimeDown()
@@ -301,7 +269,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
         }
     }
 
-    private fun finishInitialization(lifecycle: PaperPluginRuntime, owner: StorageGeneration, registry: BoosterRegistry, store: AtomicShopPurchaseStore) {
+    private fun finishInitialization(lifecycle: PaperPluginRuntime, registry: BoosterRegistry, store: AtomicShopPurchaseStore) {
         check(!initialized) { "ArcEcoJobs is already initialized" }
         bindEconomyIntegration()
         val jobIds = validatedJobIds()
@@ -357,7 +325,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
             ).also {
                 server.pluginManager.registerEvents(it, this)
                 lifecycle.own(AutoCloseable {
-                    owner.explorationDrain = it.shutdown().whenComplete { _, failure ->
+                    explorationDrain = it.shutdown().whenComplete { _, failure ->
                         if (failure != null) logger.log(Level.WARNING, "Could not finish exploration shutdown", failure)
                     }
                 })

@@ -22,7 +22,7 @@ interface HourlyEarningsStore : AutoCloseable {
     override fun close() = Unit
 }
 
-class MySqlHourlyEarningsStore private constructor(
+class MySqlHourlyEarningsStore internal constructor(
     private val runtime: SqlRuntime,
 ) : HourlyEarningsStore {
     override fun write(batchId: UUID, entries: List<HourlyEarnings>): CompletableFuture<Unit> {
@@ -119,7 +119,14 @@ class MySqlHourlyEarningsStore private constructor(
         hourly
     }
 
-    override fun close() = runtime.close()
+    /** Called by the storage cleanup worker after earnings admission has been sealed. */
+    override fun close() {
+        var failure = runCatching { runtime.executor.closeAsync().join() }.exceptionOrNull()
+        try { runtime.close() } catch (error: Throwable) {
+            if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
+        }
+        failure?.let { throw it }
+    }
 
     companion object {
         private const val HOURLY_TABLE = "arcecojobs_earnings_hourly"

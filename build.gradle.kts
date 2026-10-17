@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.40"
+version = "0.1.41"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -109,6 +109,7 @@ tasks {
         exclude("ru/arc/paper/redis/SharedPaperRedisService*.class")
         exclude("ru/arc/paper/metrics/PaperArcMetricsProvider*.class")
         exclude("ru/arc/paper/packet/PaperVisualPacketRuntime*.class")
+        exclude("ru/arc/paper/runtime/PaperNativeCleanupServiceProvider*.class")
         exclude("ru/arc/paper/api/**")
     }
     check { dependsOn(shadowJar, "integrationTest") }

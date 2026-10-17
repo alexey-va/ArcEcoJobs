@@ -59,7 +59,7 @@ object UnavailableDiscoveryLedger : DiscoveryLedger {
         CompletableFuture.failedFuture(IllegalStateException("chunk discovery ledger is unavailable"))
 }
 
-class MySqlDiscoveryLedger private constructor(
+class MySqlDiscoveryLedger internal constructor(
     private val runtime: SqlRuntime,
 ) : DiscoveryLedger {
     override val available: Boolean = true
@@ -176,7 +176,14 @@ class MySqlDiscoveryLedger private constructor(
             }
         }
 
-    override fun close() = runtime.close()
+    /** Called by the storage cleanup worker after exploration admission has been sealed. */
+    override fun close() {
+        var failure = runCatching { runtime.executor.closeAsync().join() }.exceptionOrNull()
+        try { runtime.close() } catch (error: Throwable) {
+            if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
+        }
+        failure?.let { throw it }
+    }
 
     companion object {
         const val MAX_DISCOVERERS = 5

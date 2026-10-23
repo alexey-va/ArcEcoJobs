@@ -7,6 +7,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
 import ru.arc.paper.menu.PaperDialogScreen
@@ -70,7 +71,13 @@ internal object JobsDialogScreens {
         val selected = rows.firstOrNull { it.slot == detailSlot }
         if (selected != null) return screen(
             name(selected.item),
-            listOf(PaperDialogBody(join(lore(selected.item)), 468)),
+            listOf(DialogTables.framedBody(JobsDialogStyle.text(join(lore(selected.item))), frame = when (view) {
+                is JobsView.Help, is JobsView.Admin -> DialogTables.Frame.COMMON
+                is JobsView.Earnings, is JobsView.EarningsHours, is JobsView.Leaderboard -> DialogTables.Frame.RARE
+                is JobsView.Shop, is JobsView.ShopConfirm -> DialogTables.Frame.LEGENDARY
+                is JobsView.Boosts, is JobsView.Levels, is JobsView.Presets -> DialogTables.Frame.EPIC
+                else -> DialogTables.Frame.UNCOMMON
+            }, width = 400)),
             emptyList(),
             button(
                 "detail_back",
@@ -98,12 +105,14 @@ internal object JobsDialogScreens {
             val buttonRole = role(row.id, row.id.substringAfter('_').toIntOrNull())
             val inline = row.id in setOf("profile", "overview", "summary", "status", "self", "empty", "confirm") ||
                 view is JobsView.JobCard && row.id == "action" && !row.actionable
-            if (inline) body += PaperDialogBody(
-                if (buttonRole == JobsDialogStyle.Role.UNAVAILABLE) {
+            if (inline) {
+                val information = if (buttonRole == JobsDialogStyle.Role.UNAVAILABLE) {
                     JobsDialogStyle.role(join(listOf(title) + lines), buttonRole)
-                } else join(listOf(title) + lines),
-                468,
-            )
+                } else JobsDialogStyle.text(join(listOf(title) + lines))
+                body += if (row.id in setOf("profile", "overview", "summary", "status", "self", "confirm")) {
+                    DialogTables.filledBody(rows = listOf(listOf(information)), headers = null, width = 400, columnWeights = listOf(1))
+                } else PaperDialogBody(information, 468)
+            }
             val hasForwardMarker = forward(row.id, row.id.substringAfter('_').toIntOrNull()) ||
                 view is JobsView.JobCard && row.id == "action" && buttonRole == JobsDialogStyle.Role.DESTRUCTIVE
             val label = when {

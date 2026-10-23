@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "0.1.44"
+version = "0.1.45"
 description = "Rich EcoJobs interface and LuckPerms-backed boosts for RusCrafting"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {

@@ -138,7 +138,9 @@ internal object JobsDialogScreens {
                 "back", "cancel" -> back = control.copy(label = JobsDialogStyle.back(locale.render("common.back-name", player)))
                 "previous" -> pagination += control.copy(label = JobsDialogStyle.previous(control.label))
                 "next" -> pagination += control.copy(label = JobsDialogStyle.next(control.label))
-                else -> buttons += control
+                else -> if (view is JobsView.JobCard && row.id == "action" && buttonRole == JobsDialogStyle.Role.SAVE) {
+                    buttons.add(0, control)
+                } else buttons += control
             }
         }
         buttons += pagination

@@ -373,8 +373,10 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click("catalog")
                 click("content_0")
                 screens.last().id shouldBe "ecojobs.job"
+                screens.last().buttons.first().id.value shouldBe "action"
                 click("action", twice = true)
                 verify(exactly = 1) { h.ecoJobs.join(h.player, job) }
+                screens.last().buttons.last().id.value shouldBe "action"
                 click("action")
                 screens.last().id shouldBe "ecojobs.leave"
                 screens.last().body.joinToString { plain(it.text) }.contains("Шахтёр") shouldBe true

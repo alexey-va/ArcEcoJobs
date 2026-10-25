@@ -1088,7 +1088,7 @@ class JobsMenu(
                 }
                 active.revision++
             },
-            closeOnEscape = !escapeGoesBack(player),
+            closeOnEscape = !escapeGoesBack(player) && screen.exitButton?.closeDialogBeforeAction != false,
         )
     }
 

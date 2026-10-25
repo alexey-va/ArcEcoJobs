@@ -10,6 +10,7 @@ import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.DialogTables
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogNavigation
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperMenuFrame
 import ru.ruscrafting.ecojobs.config.JobsLocale
@@ -65,7 +66,11 @@ internal object JobsDialogScreens {
                 body = body.map { it.copy(text = JobsDialogStyle.text(it.text)) },
                 buttons = actions,
                 // Core substitutes this footer with the actual shared history action.
-                exitButton = if (escapeGoesBack) back.copy(width = 200) else closeButton.copy(width = 200),
+                exitButton = when {
+                    view != JobsView.Main || suffix.isNotEmpty() -> back.copy(width = 200)
+                    escapeGoesBack -> null
+                    else -> closeButton.copy(width = 200, closeDialogBeforeAction = true)
+                },
                 columns = if (view is JobsView.EarningsHours && suffix.isEmpty()) 4 else if (actions.isEmpty()) 1 else 2,
             )
         val selected = rows.firstOrNull { it.slot == detailSlot }
@@ -96,7 +101,8 @@ internal object JobsDialogScreens {
         }
         val body = mutableListOf(PaperDialogBody(locale.render("dialog.$description.description", player), 468))
         val buttons = mutableListOf<PaperDialogButton>()
-        val pagination = mutableListOf<PaperDialogButton>()
+        var previous: PaperDialogButton? = null
+        var next: PaperDialogButton? = null
         var back: PaperDialogButton? = null
         rows.forEach { row ->
             val title = name(row.item)
@@ -135,22 +141,29 @@ internal object JobsDialogScreens {
                 else -> button("info_${row.id}", label, tooltip, labelRole) { detail(row.slot) }
             }
             if (control != null) when (row.id) {
-                "back", "cancel" -> back = control.copy(label = JobsDialogStyle.back(locale.render("common.back-name", player)))
-                "previous" -> pagination += control.copy(label = JobsDialogStyle.previous(control.label))
-                "next" -> pagination += control.copy(label = JobsDialogStyle.next(control.label))
+                "back", "cancel" -> back = control.copy(
+                    label = JobsDialogStyle.back(locale.render("common.back-name", player)),
+                    tooltip = locale.render("common.back-lore", player),
+                )
+                "previous" -> previous = PaperDialogNavigation.previous(control, locale.render("common.previous-name", player))
+                "next" -> next = PaperDialogNavigation.next(control, locale.render("common.next-name", player))
                 else -> if (view is JobsView.JobCard && row.id == "action" && buttonRole == JobsDialogStyle.Role.SAVE) {
                     buttons.add(0, control)
                 } else buttons += control
             }
         }
-        buttons += pagination
-        return screen(frame.title, body, buttons, requireNotNull(back) { "Jobs dialog requires a parent action" })
+        return PaperDialogNavigation.bottom(
+            screen(frame.title, body, buttons, requireNotNull(back) { "Jobs dialog requires a parent action" }),
+            previous,
+            next,
+        )
     }
 
     private fun name(item: ItemStack): Component =
         (item.itemMeta.displayName() ?: Component.empty()).decoration(TextDecoration.ITALIC, false)
 
     private fun lore(item: ItemStack): List<Component> = item.itemMeta.lore().orEmpty()
+        .filterNot { plain.serialize(it).contains("[▶]") }
         .dropLastWhile { plain.serialize(it).isBlank() }
         .map { it.decoration(TextDecoration.ITALIC, false) }
 

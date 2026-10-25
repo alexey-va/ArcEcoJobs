@@ -177,18 +177,32 @@ internal class JobsAdminMenu(
         visits[player.uniqueId] = visit
         val backButton = navigation(player, "back") { back() }
         val closeButton = navigation(player, "close") { invalidate(player); closeDialog(player) }
-        val goesBack = escapeBack(player)
+        val hasParent = id != "root" && id != "denied"
+        val goesBack = hasParent || escapeBack(player)
         fun guard(button: PaperDialogButton) = button.copy(onClick = { context ->
             if (player.isOnline && (inputs.isNotEmpty() || visits[player.uniqueId] === visit)) {
                 visits.remove(player.uniqueId)
                 button.onClick.handle(context)
             }
         })
-        display.show(player, PaperDialogScreen(
+        val screen = PaperDialogScreen(
             id = "ecojobs.admin.$id", title = JobsDialogStyle.title(title),
             body = body.map { PaperDialogBody(JobsDialogStyle.text(it), 468) }, inputs = inputs,
             buttons = actions.map { guard(it.copy(label = JobsDialogStyle.action(it.id.value, it.label), tooltip = JobsDialogStyle.text(it.tooltip))) },
-            exitButton = guard((if (goesBack) backButton else closeButton).copy(width = 200)), columns = 2,
+            exitButton = when {
+                hasParent -> guard(backButton.copy(width = 200))
+                goesBack -> null
+                else -> guard(closeButton.copy(width = 200, closeDialogBeforeAction = true))
+            }, columns = 2,
+        )
+        display.show(player, PaperDialogNavigation.bottom(
+            screen,
+            screen.buttons.firstOrNull { it.id.value == "previous" }?.let {
+                PaperDialogNavigation.previous(it, locale.render("common.previous-name", player))
+            },
+            screen.buttons.firstOrNull { it.id.value == "next" }?.let {
+                PaperDialogNavigation.next(it, locale.render("common.next-name", player))
+            },
         ), reopen = reopen, onDismiss = { if (visits[player.uniqueId] === visit) invalidate(player) }, closeOnEscape = !goesBack)
         return visit
     }

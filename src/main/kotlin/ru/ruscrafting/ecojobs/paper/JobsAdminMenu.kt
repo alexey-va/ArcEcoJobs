@@ -146,7 +146,8 @@ internal class JobsAdminMenu(
         val commit = button(player, "confirm") { run(player, action, args, back = back) }.let {
             if (action == "revoke") it.copy(id = PaperDialogActionId.of("revoke_confirm"), label = text(player, "action.revoke")) else it
         }
-        show(player, "confirm", text(player, "action.$action"), listOf(text(player, "confirm"), Component.join(JoinConfiguration.newlines(), summary)),
+        // Confirmation, loading and result are one operation visit: Back must not rearm a completed confirmation.
+        show(player, "result.$action", text(player, "action.$action"), listOf(text(player, "confirm"), Component.join(JoinConfiguration.newlines(), summary)),
             listOf(commit), reopen = { confirm(player, action, values, args, back) }, back = back)
     }
 

@@ -7,6 +7,13 @@ import io.mockk.just
 import io.mockk.Runs
 import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperDialogClickContext
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogRuntime
+import io.papermc.paper.connection.PlayerGameConnection
+import io.papermc.paper.dialog.DialogResponseView
+import io.papermc.paper.event.player.PlayerCustomClickEvent
+import net.kyori.adventure.key.Key
 import ru.ruscrafting.ecojobs.earnings.EarningsService
 import ru.ruscrafting.ecojobs.earnings.EarningsReport
 import ru.ruscrafting.ecojobs.earnings.HourlyEarnings
@@ -215,7 +222,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 plain(root.title) shouldBe "Работы"
                 root.title.color()?.value() shouldBe 0xffb277
                 root.buttons.map { it.id.value } shouldBe listOf("catalog", "active", "leaderboard", "boosts", "help")
-                root.exitButton?.id?.value shouldBe "back"
+                root.exitButton shouldNotBe null
                 root.canCloseWithEscape shouldBe true
                 (h.player.openInventory.topInventory?.type == InventoryType.CHEST) shouldBe false
                 root.body.joinToString { plain(it.text) }.contains("MenuQA") shouldBe true
@@ -239,7 +246,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click(screens.last(), "detail_back")
                 screens.last().id shouldBe "ecojobs.help"
                 val old = screens.last()
-                h.menu.onQuit(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
+                paper.callEvent(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
                 click(old, "back")
                 screens.last() shouldBe old
                 h.menu.openRoot(h.player, JobsMenuPresentation.INVENTORY)
@@ -258,7 +265,7 @@ class JobsMenuMockBukkitTest : StringSpec({
         }
     }
 
-    "Escape defaults to Back and honors explicit Close with a native footer" {
+    "automatic root footer honors Close while declared child Back follows native history" {
         MockBukkitTestRuntime.open().use { paper ->
             val screens = mutableListOf<PaperDialogScreen>()
             // Missing metadata and every value except explicit "close" resolve to Back.
@@ -267,8 +274,8 @@ class JobsMenuMockBukkitTest : StringSpec({
                 val job = mockJob(h)
                 every { h.ecoJobs.jobs() } returns listOf(job)
                 h.menu.openRoot(h.player)
-                // Core decides whether Back has an actual parent; the model supplies the localized footer.
-                screens.last().exitButton?.id?.value shouldBe "back"
+                // Core supplies the root footer; explicit child footers remain Back.
+                screens.last().exitButton shouldNotBe null
                 screens.last().buttons.any { it.id.value == "back" } shouldBe false
                 fun click(id: String) {
                     val screen = screens.last()
@@ -466,7 +473,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 }
                 h.menu.open(h.player, view)
                 screens.last().id shouldBe "ecojobs.earnings"
-                h.menu.onQuit(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
+                paper.callEvent(org.bukkit.event.player.PlayerQuitEvent(h.player, Component.empty()))
                 val closedCount = screens.size
                 requests.last().complete(report)
                 paper.performTicks(1)
@@ -495,8 +502,11 @@ class JobsMenuMockBukkitTest : StringSpec({
                 requests.last().completeExceptionally(IllegalStateException("unavailable"))
                 paper.performTicks(1)
                 screens.last().body.joinToString { plain(it.text) }.contains("недоступ") shouldBe true
+                val directEntryCount = screens.size
                 click("back")
-                screens.last().id shouldBe "ecojobs.main"
+                // A direct entry has no visited Main ancestor; its final Back ends the flow.
+                screens.size shouldBe directEntryCount
+                verify(exactly = 1) { h.player.closeDialog() }
             }
         }
     }
@@ -506,18 +516,27 @@ class JobsMenuMockBukkitTest : StringSpec({
             val screens = mutableListOf<PaperDialogScreen>()
             menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
                 val job = mockJob(h)
+                every { h.ecoJobs.jobs() } returns listOf(job)
                 every { h.ecoJobs.canJoin(h.player, job) } returns true
                 every { h.ecoJobs.join(h.player, job) } returns false
-                h.menu.open(h.player, JobsView.JobCard("miner", JobsView.Main))
+                fun click(id: String) {
+                    (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
+                    paper.performTicks(1)
+                }
+                h.menu.openRoot(h.player)
+                click("catalog")
+                click("content_0")
                 val before = screens.last()
                 before.buttons.single { it.id.value == "action" }.onClick.handle(mockk(relaxed = true))
                 paper.performTicks(1)
                 (screens.last() === before) shouldBe false
-                (screens.last().buttons + listOfNotNull(screens.last().exitButton)).single { it.id.value == "back" }.onClick.handle(mockk(relaxed = true))
-                paper.performTicks(1)
+                click("back")
+                screens.last().id shouldBe "ecojobs.catalog"
+                click("back")
                 screens.last().id shouldBe "ecojobs.main"
                 h.player.isOp = true
-                h.menu.open(h.player, JobsView.Admin(JobsView.Main))
+                h.menu.openRoot(h.player)
+                click("admin")
                 val admin = screens.last()
                 h.player.isOp = false
                 admin.buttons.single { it.id.value == "presets" }.onClick.handle(mockk(relaxed = true))
@@ -549,12 +568,13 @@ class JobsMenuMockBukkitTest : StringSpec({
                 screens.last().id shouldBe "ecojobs.admin.root"
                 command.onCommand(h.player, mockk(), "arcjobs", arrayOf("help")) shouldBe true
                 screens.last().buttons.map { it.id.value }.containsAll(listOf("presets", "give", "hand", "list", "grant", "revoke", "diagnose", "reload")) shouldBe true
-                screens.last().exitButton!!.id.value shouldBe "back"
+                screens.last().exitButton shouldNotBe null
                 click("grant")
                 screens.last().inputs.size shouldBe 5
                 val values = mapOf("player" to h.player.name, "duration" to "2h", "multiplier" to "1.5", "type" to "ALL", "jobs" to "all")
                 click("review", values)
-                screens.last().id shouldBe "ecojobs.admin.confirm"
+                screens.last().id shouldBe "ecojobs.admin.result.grant"
+                screens.last().buttons.single().id.value shouldBe "confirm"
                 verify(exactly = 0) { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) }
                 click("back")
                 screens.last().inputs.associate { it.id.value to it.initial } shouldBe values
@@ -564,17 +584,25 @@ class JobsMenuMockBukkitTest : StringSpec({
                 screens.last().body.joinToString { plain(it.text) }.contains("Некорректный срок") shouldBe true
                 verify(exactly = 0) { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) }
                 click("back")
-                click("review", values)
+                screens.last().id shouldBe "ecojobs.admin.grant"
                 every { h.boosts.grantDetailed(any(), any(), any(), any(), any(), any()) } answers {
                     lastArg<(ru.ruscrafting.ecojobs.boost.GrantOutcome) -> Unit>().invoke(
                         ru.ruscrafting.ecojobs.boost.GrantOutcome(ru.ruscrafting.ecojobs.boost.GrantResult.GRANTED, java.time.Duration.ofHours(2)))
                 }
-                val confirm = screens.last().buttons.single { it.id.value == "confirm" }
-                confirm.onClick.handle(mockk(relaxed = true))
-                confirm.onClick.handle(mockk(relaxed = true))
                 val playerId = h.player.uniqueId
-                verify(exactly = 1) { h.boosts.grantDetailed(playerId, BoostType.ALL, 150, java.time.Duration.ofHours(2), setOf("all"), any()) }
-                screens.last().body.joinToString { plain(it.text) }.contains("выдано усиление") shouldBe true
+                repeat(3) { cycle ->
+                    click("review", values)
+                    val confirm = screens.last().buttons.single { it.id.value == "confirm" }
+                    confirm.onClick.handle(mockk(relaxed = true))
+                    confirm.onClick.handle(mockk(relaxed = true))
+                    verify(exactly = cycle + 1) { h.boosts.grantDetailed(playerId, BoostType.ALL, 150, java.time.Duration.ofHours(2), setOf("all"), any()) }
+                    screens.last().body.joinToString { plain(it.text) }.contains("выдано усиление") shouldBe true
+                    click("back")
+                    screens.last().id shouldBe "ecojobs.admin.grant"
+                    screens.last().inputs.associate { it.id.value to it.initial } shouldBe values
+                }
+                click("back")
+                screens.last().id shouldBe "ecojobs.admin.root"
                 h.menu.openAdminCommand(h.player, listOf("reload"))
                 reloads shouldBe 0
                 click("confirm")
@@ -585,7 +613,8 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click("continue", mapOf("player" to h.player.name, "preset" to "workday", "amount" to "2"))
                 screens.last().id shouldBe "ecojobs.admin.give_options"
                 click("continue", mapOf("duration" to "1h", "multiplier" to "2", "type" to "XP", "jobs" to "all"))
-                screens.last().id shouldBe "ecojobs.admin.confirm"
+                screens.last().id shouldBe "ecojobs.admin.result.give_options"
+                screens.last().buttons.single().id.value shouldBe "confirm"
                 click("back")
                 screens.last().inputs.single { it.id.value == "duration" }.initial shouldBe "1h"
                 val registry = BoosterRegistry.load(Path.of(System.getProperty("arcecojobs.projectDir"), "src/main/resources/boosters.yml").toFile(), settings, setOf("miner"))
@@ -655,7 +684,7 @@ class JobsMenuMockBukkitTest : StringSpec({
                 h.menu.openRoot(h.player)
                 policies.last() shouldBe true
                 screens.last().buttons.single { it.id.value == "catalog" }.onClick.handle(mockk(relaxed = true))
-                policies.last() shouldBe true
+                policies.last() shouldBe false
             }
         }
     }
@@ -678,7 +707,8 @@ class JobsMenuMockBukkitTest : StringSpec({
                     screens.last().id shouldBe "ecojobs.admin.result.list"
                 }
                 list()
-                screens.last().exitButton!!.id.value shouldBe "close"
+                screens.last().exitButton!!.id.value shouldBe "back"
+                screens.last().exitButton!!.closeDialogBeforeAction shouldBe false
                 screens.last().exitButton!!.onClick.handle(mockk(relaxed = true))
                 val closed = screens.size
                 replies.last()(emptyList(), null)
@@ -802,18 +832,7 @@ private fun menuHarness(
         reload = { java.util.concurrent.CompletableFuture.completedFuture(Result.success(Unit)) },
         layouts = layouts,
         escapeGoesBack = { escapeBack() },
-        dialogDisplay = display?.let { sink -> object : JobsDialogDisplay {
-            override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen) {
-                captureDialog(screen)
-                sink(player as PlayerMock, screen)
-            }
-            override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen, reopen: (() -> Unit)?, onDismiss: () -> Unit, closeOnEscape: Boolean) {
-                lifecycle?.invoke(screen, reopen, onDismiss, closeOnEscape)
-                show(player, screen)
-            }
-            override fun close(player: org.bukkit.entity.Player) = Unit
-            override fun close() = Unit
-        } },
+        dialogDisplay = display?.let { CapturingJobsDialogDisplay(plugin, lifecycle, it) },
     )
     plugin.server.pluginManager.registerEvents(
         JobsListener({ settings }, locale, menu, boosts, vouchers),
@@ -821,6 +840,51 @@ private fun menuHarness(
     )
     return JobsMenuHarness(plugin, player, menu, ecoJobs, layouts, boosts, boosters, vouchers, dataFolder,
         bridgeTasks, bridgeNative, bridgeWorker)
+}
+
+/** Keep Core's real footer, history and single-use sessions while capturing native presentation. */
+private class CapturingJobsDialogDisplay(
+    private val plugin: JavaPlugin,
+    private val lifecycle: ((PaperDialogScreen, (() -> Unit)?, () -> Unit, Boolean) -> Unit)?,
+    private val display: (PlayerMock, PaperDialogScreen) -> Unit,
+) : JobsDialogDisplay {
+    private lateinit var runtime: PaperDialogRuntime
+
+    init {
+        val presenter: (org.bukkit.entity.Player, PaperDialogScreen, Any) -> Unit = { player, screen, registration ->
+            val nonce = registration.javaClass.getMethod("getNonce").invoke(registration) as String
+            fun route(button: PaperDialogButton) = button.copy(onClick = { context ->
+                val connection = mockk<PlayerGameConnection> { every { this@mockk.player } returns player }
+                val response = mockk<DialogResponseView> {
+                    every { getText(any()) } answers { context.text(PaperDialogInputId.of(firstArg<String>())) }
+                    every { getFloat(any()) } returns null
+                }
+                runtime.onCustomClick(mockk<PlayerCustomClickEvent> {
+                    every { commonConnection } returns connection
+                    every { identifier } returns Key.key("${plugin.name.lowercase(Locale.ROOT)}:dialog/$nonce/${button.id.value}")
+                    every { dialogResponseView } returns response
+                })
+            })
+            captureDialog(screen)
+            display(player as PlayerMock, screen.copy(
+                buttons = screen.buttons.map(::route),
+                exitButton = screen.exitButton?.let(::route),
+            ))
+        }
+        val constructor = PaperDialogRuntime::class.java.getDeclaredConstructor(
+            org.bukkit.plugin.Plugin::class.java, Function3::class.java,
+        ).apply { isAccessible = true }
+        runtime = constructor.newInstance(plugin, presenter) as PaperDialogRuntime
+    }
+
+    override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen) = runtime.open(player, screen)
+    override fun show(player: org.bukkit.entity.Player, screen: PaperDialogScreen, reopen: (() -> Unit)?, onDismiss: () -> Unit, closeOnEscape: Boolean) {
+        lifecycle?.invoke(screen, reopen, onDismiss, closeOnEscape)
+        runtime.open(player, screen, reopen, onDismiss, closeOnEscape)
+    }
+    override fun beginFlow(player: org.bukkit.entity.Player) = runtime.beginFlow(player)
+    override fun close(player: org.bukkit.entity.Player) = runtime.close(player)
+    override fun close() = runtime.close()
 }
 
 private fun clickTop(

@@ -15,6 +15,7 @@ import ru.arc.observability.RuntimeHealthState
 import ru.arc.onetime.OneTimeUseLedger
 import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.paper.runtime.PaperPluginRuntime
+import ru.arc.paper.runtime.PaperPluginHotload
 import ru.arc.paper.sql.PaperSqlServices
 import ru.ruscrafting.ecojobs.boost.BoostService
 import ru.ruscrafting.ecojobs.boost.SigningKeyStore
@@ -84,7 +85,14 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
         val shopStore: AtomicShopPurchaseStore,
     )
 
+    private val hotload = PaperPluginHotload(this) {
+        stopRuntime()
+        mapOf("storage" to shutdownDrain)
+    }
+
     override fun onEnable() {
+        hotload.beginGeneration()
+        hotload.register()
         val lifecycle = PaperPluginRuntime(this, "arc-ecojobs", BukkitTaskScheduler(this)).also {
             pluginRuntime = it
             it.start("version" to pluginMeta.version)
@@ -192,6 +200,11 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
     }
 
     override fun onDisable() {
+        hotload.prepare()
+        hotload.close()
+    }
+
+    private fun stopRuntime() {
         bootstrapTask?.cancel()
         bootstrapTask = null
         val lifecycle = pluginRuntime ?: return
@@ -204,6 +217,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
                 if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
             }
         }
+        attempt { server.servicesManager.unregisterAll(this) }
         attempt { if (::nativeWork.isInitialized) nativeWork.close() }
         attempt { lifecycle.close() }
         // Main continuations are sealed above. These futures only drain accepted IO.
@@ -229,6 +243,7 @@ open class ArcEcoJobsPlugin : JavaPlugin() {
         }
         attempt { activeEarnings?.closeAsync()?.join() }
         attempt { binding?.close() }
+        attempt { hotload.retireGameplayRegistrations() }
         if (failure == null) shutdownDrain.complete(Unit) else {
             shutdownDrain.completeExceptionally(failure)
             logger.log(Level.SEVERE, "Could not close EcoJobs storage", failure)

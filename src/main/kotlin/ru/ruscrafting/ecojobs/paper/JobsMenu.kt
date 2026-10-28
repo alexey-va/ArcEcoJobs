@@ -40,6 +40,9 @@ import ru.ruscrafting.ecojobs.earnings.EarningsReport
 import ru.ruscrafting.ecojobs.earnings.EarningsService
 import ru.ruscrafting.ecojobs.earnings.EarningsTotals
 import ru.ruscrafting.ecojobs.integration.EcoJobsBridge
+import ru.ruscrafting.ecojobs.integration.JobCost
+import ru.ruscrafting.ecojobs.integration.JobJoinBlock
+import ru.ruscrafting.ecojobs.integration.JobMembership
 import ru.ruscrafting.ecojobs.shop.BoosterShopService
 import ru.ruscrafting.ecojobs.shop.PurchaseResult
 import ru.ruscrafting.ecojobs.shop.PlayerShopDeliveryGateway
@@ -132,7 +135,13 @@ class JobsMenu(
         return true
     }
 
-    private class ActiveFrame(val view: JobsView, val frame: PaperMenuFrame, var detailSlot: Int? = null, var revision: Long = 0)
+    private class ActiveFrame(
+        val view: JobsView,
+        val frame: PaperMenuFrame,
+        val membership: JobMembership? = null,
+        var detailSlot: Int? = null,
+        var revision: Long = 0,
+    )
 
     fun openRoot(player: Player, presentation: JobsMenuPresentation? = null) {
         val next = presentation ?: settings().menuPresentation
@@ -391,9 +400,16 @@ class JobsMenu(
     private fun openJobCard(player: Player, view: JobsView.JobCard) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
         val inventory = inventory(player, view, "menu.job.title", mapOf("job" to titleText(ecoJobs.name(job))))
-        val active = ecoJobs.active(player, job)
+        val membership = ecoJobs.membership(player, job)
+        val active = membership.active
+        val conditions = membershipText(player, membership)
         val state = locale.render(
-            if (active) "menu.catalog.state-active" else if (ecoJobs.has(player, job)) "menu.catalog.state-available" else "menu.catalog.state-locked",
+            when {
+                active -> "menu.catalog.state-active"
+                membership.canJoin -> "menu.catalog.state-available"
+                membership.joinBlock == JobJoinBlock.LOCKED -> "menu.catalog.state-locked"
+                else -> "menu.catalog.state-unavailable"
+            },
             player,
         )
         inventory.setItem(element(view, "overview"), jobItem(job, player, "menu.job.overview-lore", mapOf(
@@ -405,7 +421,7 @@ class JobsMenu(
             "required" to text(ecoJobs.requiredXp(player, job)),
             "progress" to text(number.format((ecoJobs.progress(player, job) * 100).coerceIn(0.0, 100.0))),
             "state" to state,
-        ), "menu.job.overview-name", mapOf("job" to ecoJobs.name(job))))
+        ) + conditions, "menu.job.overview-name", mapOf("job" to ecoJobs.name(job))))
         inventory.setItem(element(view, "scale"), item(settings().guiItems["job-scale"], player, "menu.job.scale-name", "menu.job.scale-lore", mapOf("max" to text(job.maxLevel))))
         inventory.setItem(element(view, "earnings"), earningsSummaryItem(player, null))
         inventory.setItem(element(view, "leaderboard"), item(settings().guiItems["job-leaderboard"], player, "menu.job.leaderboard-name", "menu.job.leaderboard-lore", mapOf(
@@ -416,14 +432,12 @@ class JobsMenu(
             "money_multiplier" to text(formatMultiplier(boosts.multiplier(player, job.id, BoostType.MONEY))),
         )))
         when {
-            active -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-leave"], player, "menu.job.leave-name", "menu.job.leave-lore"))
-            ecoJobs.canJoin(player, job) -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-join"], player, "menu.job.join-name", "menu.job.join-lore", mapOf(
-                "free" to text((ecoJobs.limit(player) - ecoJobs.activeJobs(player).size).coerceAtLeast(0)),
-            )))
-            else -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-unavailable"], player, "menu.job.unavailable-name", "menu.job.unavailable-lore"))
+            active -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-leave"], player, "menu.job.leave-name", "menu.job.leave-lore", conditions))
+            membership.canJoin -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-join"], player, "menu.job.join-name", "menu.job.join-lore", conditions))
+            else -> inventory.setItem(element(view, "action"), item(settings().guiItems["job-unavailable"], player, "menu.job.unavailable-name", "menu.job.unavailable-lore", conditions))
         }
         inventory.setItem(element(view, "back"), backItem(player))
-        show(player, view, inventory)
+        show(player, view, inventory, membership)
         loadEarnings(player, view) { report ->
             updateFrame(player, view) { it.setItem(element(view, "earnings"), earningsSummaryItem(player, report)) }
         }
@@ -439,14 +453,26 @@ class JobsMenu(
             }
             element(view, "leaderboard") -> open(player, JobsView.Leaderboard(job.id, 1, view))
             element(view, "boosts") -> open(player, JobsView.Boosts(job.id, 1, view))
-            element(view, "action") -> when {
-                ecoJobs.active(player, job) -> open(player, JobsView.LeaveConfirm(job.id, view))
-                !ecoJobs.canJoin(player, job) -> Unit
-                ecoJobs.join(player, job) -> {
-                    player.sendMessage(locale.render("message.joined", player, mapOf("job" to ecoJobs.name(job))))
-                    open(player, view)
+            element(view, "action") -> {
+                val membership = ecoJobs.membership(player, job)
+                if (membershipChanged(player, view, membership)) return
+                when {
+                    membership.active -> open(player, JobsView.LeaveConfirm(job.id, view))
+                    !membership.canJoin -> {
+                        player.sendMessage(locale.render("message.join-failed", player,
+                            mapOf("job" to ecoJobs.name(job), "reason" to joinReason(player, membership))))
+                        open(player, view)
+                    }
+                    ecoJobs.join(player, job) -> {
+                        player.sendMessage(locale.render("message.joined", player, mapOf("job" to ecoJobs.name(job))))
+                        open(player, view)
+                    }
+                    else -> {
+                        player.sendMessage(locale.render("message.join-failed", player,
+                            mapOf("job" to ecoJobs.name(job), "reason" to joinReason(player, ecoJobs.membership(player, job)))))
+                        open(player, view)
+                    }
                 }
-                else -> player.sendMessage(locale.render("message.join-failed", player, mapOf("job" to ecoJobs.name(job))))
             }
             element(view, "back") -> open(player, view.back)
         }
@@ -454,24 +480,84 @@ class JobsMenu(
 
     private fun openLeave(player: Player, view: JobsView.LeaveConfirm) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
+        val membership = ecoJobs.membership(player, job)
+        if (!membership.active) return open(player, view.back)
         val inventory = inventory(player, view, "menu.leave.title", mapOf("job" to titleText(ecoJobs.name(job))))
-        inventory.setItem(element(view, "confirm"), item(settings().guiItems.confirm, player, "menu.leave.confirm-name", "menu.leave.confirm-lore", mapOf("job" to ecoJobs.name(job))))
+        val conditions = membershipText(player, membership) + ("job" to ecoJobs.name(job))
+        val available = membership.leaveCost.affordable
+        inventory.setItem(element(view, "confirm"), item(
+            if (available) settings().guiItems.confirm else settings().guiItems["job-unavailable"], player,
+            if (available) "menu.leave.confirm-name" else "menu.leave.unavailable-name",
+            if (available) "menu.leave.confirm-lore" else "menu.leave.unavailable-lore", conditions,
+        ))
         inventory.setItem(element(view, "cancel"), item(settings().guiItems.cancel, player, "menu.leave.cancel-name", "menu.leave.cancel-lore"))
-        show(player, view, inventory)
+        show(player, view, inventory, membership)
     }
 
     private fun clickLeave(player: Player, view: JobsView.LeaveConfirm, slot: Int) {
         val job = ecoJobs.job(view.jobId) ?: return open(player, view.back)
         when (slot) {
-            element(view, "confirm") -> if (ecoJobs.leave(player, job)) {
-                player.sendMessage(locale.render("message.left", player, mapOf("job" to ecoJobs.name(job))))
-                open(player, JobsView.JobCard(job.id, (view.back as? JobsView.JobCard)?.back ?: JobsView.Main))
-            } else {
-                player.sendMessage(locale.render("message.leave-failed", player, mapOf("job" to ecoJobs.name(job))))
-                open(player, view.back)
+            element(view, "confirm") -> {
+                val membership = ecoJobs.membership(player, job)
+                if (membershipChanged(player, view, membership)) return
+                if (membership.active && membership.leaveCost.affordable && ecoJobs.leave(player, job)) {
+                    player.sendMessage(locale.render("message.left", player, mapOf("job" to ecoJobs.name(job))))
+                    open(player, JobsView.JobCard(job.id, (view.back as? JobsView.JobCard)?.back ?: JobsView.Main))
+                } else {
+                    player.sendMessage(locale.render("message.leave-failed", player,
+                        mapOf("job" to ecoJobs.name(job), "reason" to leaveReason(player, ecoJobs.membership(player, job)))))
+                    open(player, view)
+                }
             }
             element(view, "cancel") -> open(player, view.back)
         }
+    }
+
+    private fun membershipText(player: Player, membership: JobMembership): Map<String, Component> = mapOf(
+        "free" to text((membership.limit - membership.usedSlots).coerceAtLeast(0)),
+        "join_price" to costText(player, membership.joinCost),
+        "leave_price" to costText(player, membership.leaveCost),
+        "retention" to locale.render(if (membership.resetsProgress) "menu.job.progress-reset" else "menu.job.progress-kept", player),
+        "join_reason" to joinReason(player, membership),
+        "leave_reason" to leaveReason(player, membership),
+    )
+
+    private fun costText(player: Player, cost: JobCost): Component = when {
+        cost.free -> locale.render("menu.job.cost-free", player)
+        cost.coins -> locale.render("menu.job.cost-coins", player, mapOf("amount" to text(number.format(cost.value))))
+        else -> cost.display
+    }
+
+    private fun joinReason(player: Player, membership: JobMembership): Component = when (membership.joinBlock) {
+        JobJoinBlock.LOCKED -> locale.render("menu.job.blocked-locked", player)
+        JobJoinBlock.FULL -> locale.render("menu.job.blocked-full", player,
+            mapOf("used" to text(membership.usedSlots), "limit" to text(membership.limit)))
+        JobJoinBlock.PRICE -> priceReason(player, membership.joinCost)
+        else -> locale.render("menu.job.blocked-unavailable", player)
+    }
+
+    private fun leaveReason(player: Player, membership: JobMembership): Component = when {
+        !membership.active -> locale.render("menu.job.blocked-inactive", player)
+        !membership.leaveCost.affordable -> priceReason(player, membership.leaveCost)
+        else -> locale.render("menu.job.blocked-unavailable", player)
+    }
+
+    private fun priceReason(player: Player, cost: JobCost): Component = locale.render(
+        if (cost.coins) "menu.job.blocked-coins" else "menu.job.blocked-cost", player,
+        mapOf("price" to costText(player, cost)),
+    )
+
+    private fun membershipChanged(player: Player, view: JobsView, current: JobMembership): Boolean {
+        val shown = activeFrames[player.uniqueId]?.membership ?: return false
+        val leaving = view is JobsView.LeaveConfirm
+        val changed = shown.active != current.active || if (leaving) {
+            !shown.leaveCost.sameTerms(current.leaveCost) || shown.resetsProgress != current.resetsProgress
+        } else !shown.joinCost.sameTerms(current.joinCost)
+        if (changed) {
+            player.sendMessage(locale.render("message.conditions-changed", player))
+            open(player, view)
+        }
+        return changed
     }
 
     private fun openLevels(player: Player, view: JobsView.Levels) {
@@ -1036,12 +1122,12 @@ class JobsMenu(
         )
     }
 
-    private fun show(player: Player, view: JobsView, frame: PaperMenuFrame) {
+    private fun show(player: Player, view: JobsView, frame: PaperMenuFrame, membership: JobMembership? = null) {
         val presentation = presentations.getValue(player.uniqueId)
         if (presentation == JobsMenuPresentation.DIALOG) {
             // DialogAfterAction.NONE keeps the client screen open across navigation and refreshes.
             // closeInventory here would send close_window and recenter the mouse on every click.
-            val active = ActiveFrame(view, frame)
+            val active = ActiveFrame(view, frame, membership)
             activeFrames[player.uniqueId] = active
             showDialog(player, active)
         } else {
@@ -1054,7 +1140,7 @@ class JobsMenu(
                 inventoryTransitions -= player.uniqueId
             }
             presentations[player.uniqueId] = presentation
-            activeFrames[player.uniqueId] = ActiveFrame(view, frame)
+            activeFrames[player.uniqueId] = ActiveFrame(view, frame, membership)
             menuRuntime.open(player, JobsMenuLayouts.menu(view)) {
                 val active = activeFrames[player.uniqueId] ?: ActiveFrame(view, frame)
                 active.frame.content { slot, _ -> dispatchClick(player, active.view, slot) }
@@ -1069,8 +1155,8 @@ class JobsMenu(
         val screen = JobsDialogScreens.screen(
             player, active.view, active.frame, layouts, locale, active.detailSlot,
             escapeGoesBack(player),
-            actionable = { id, index -> dialogActionable(player, active.view, id, index) },
-            role = { id, index -> dialogRole(player, active.view, id, index) },
+            actionable = { id, index -> dialogActionable(player, active.view, id, index, active.membership) },
+            role = { id, index -> dialogRole(player, active.view, id, index, active.membership) },
             forward = { id, index -> dialogForward(active.view, id, index) },
             click = { slot -> if (current()) dispatchClick(player, active.view, slot) },
             detail = { slot -> if (current()) { active.detailSlot = slot; showDialog(player, active) } },
@@ -1119,7 +1205,7 @@ class JobsMenu(
         }
     }
 
-    private fun dialogActionable(player: Player, view: JobsView, id: String, index: Int?): Boolean {
+    private fun dialogActionable(player: Player, view: JobsView, id: String, index: Int?, membership: JobMembership?): Boolean {
         if (index != null) return when (view) {
             is JobsView.Catalog, is JobsView.LeaderboardSelector, is JobsView.Earnings, is JobsView.Shop -> true
             is JobsView.Presets -> player.hasPermission("arcecojobs.admin.booster") &&
@@ -1130,11 +1216,11 @@ class JobsMenu(
         return when (view) {
             JobsView.Main -> id != "profile" && (id != "shop" || settings().shop.enabled)
             is JobsView.JobCard -> when (id) {
-                "action" -> ecoJobs.job(view.jobId)?.let { ecoJobs.active(player, it) || ecoJobs.canJoin(player, it) } == true
+                "action" -> membership?.let { it.active || it.canJoin } == true
                 "earnings" -> settings().earnings.enabled && earnings() != null
                 else -> id in setOf("scale", "leaderboard", "boosts")
             }
-            is JobsView.LeaveConfirm -> id == "confirm"
+            is JobsView.LeaveConfirm -> id == "confirm" && membership?.leaveCost?.affordable == true
             is JobsView.ShopConfirm -> id == "confirm" || id == "cancel"
             is JobsView.Earnings -> id == "summary"
             is JobsView.LeaderboardSelector -> id == "global"
@@ -1148,7 +1234,7 @@ class JobsMenu(
         }
     }
 
-    private fun dialogRole(player: Player, view: JobsView, id: String, index: Int?): JobsDialogStyle.Role {
+    private fun dialogRole(player: Player, view: JobsView, id: String, index: Int?, membership: JobMembership?): JobsDialogStyle.Role {
         if (id == "back" || id == "cancel") return JobsDialogStyle.Role.MUTED
         if (id == "previous" || id == "next") return JobsDialogStyle.Role.PAGINATION
         if (index != null) return when (view) {
@@ -1182,15 +1268,19 @@ class JobsMenu(
             }
             is JobsView.JobCard -> when (id) {
                 "action" -> when {
-                    ecoJobs.job(view.jobId)?.let { ecoJobs.active(player, it) } == true -> JobsDialogStyle.Role.DESTRUCTIVE
-                    ecoJobs.job(view.jobId)?.let { ecoJobs.canJoin(player, it) } == true -> JobsDialogStyle.Role.SAVE
+                    membership?.active == true -> JobsDialogStyle.Role.DESTRUCTIVE
+                    membership?.canJoin == true -> JobsDialogStyle.Role.SAVE
                     else -> JobsDialogStyle.Role.UNAVAILABLE
                 }
                 "earnings", "boosts" -> JobsDialogStyle.Role.PERSONAL
                 "scale", "leaderboard" -> JobsDialogStyle.Role.PROGRESSION
                 else -> JobsDialogStyle.Role.DEFAULT
             }
-            is JobsView.LeaveConfirm -> if (id == "confirm") JobsDialogStyle.Role.DESTRUCTIVE else JobsDialogStyle.Role.DEFAULT
+            is JobsView.LeaveConfirm -> when {
+                id != "confirm" -> JobsDialogStyle.Role.DEFAULT
+                membership?.leaveCost?.affordable == true -> JobsDialogStyle.Role.DESTRUCTIVE
+                else -> JobsDialogStyle.Role.UNAVAILABLE
+            }
             is JobsView.ShopConfirm -> if (id == "confirm") JobsDialogStyle.Role.SAVE else JobsDialogStyle.Role.DEFAULT
             is JobsView.Earnings -> if (id == "summary") JobsDialogStyle.Role.PERSONAL else JobsDialogStyle.Role.DEFAULT
             is JobsView.LeaderboardSelector -> if (id == "global") JobsDialogStyle.Role.PROGRESSION else JobsDialogStyle.Role.DEFAULT

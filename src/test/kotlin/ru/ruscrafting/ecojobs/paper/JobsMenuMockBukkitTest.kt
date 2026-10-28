@@ -30,6 +30,9 @@ import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
 import com.willfp.ecojobs.jobs.Job
+import com.willfp.eco.core.price.ConfiguredPrice
+import com.willfp.eco.core.price.Price
+import com.willfp.eco.core.price.impl.PriceEconomy
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -184,6 +187,9 @@ class JobsMenuMockBukkitTest : StringSpec({
                     val job = mockk<Job> {
                         every { id } returns "miner"
                         every { maxLevel } returns 100
+                        every { joinPrice } returns ConfiguredPrice.FREE
+                        every { leavePrice } returns ConfiguredPrice.FREE
+                        every { resetsOnQuit } returns false
                         every { getIcon(harness.player) } returns ItemStack(Material.IRON_PICKAXE)
                     }
                     every { harness.ecoJobs.job("miner") } returns job
@@ -403,6 +409,161 @@ class JobsMenuMockBukkitTest : StringSpec({
                 click("detail_back")
                 click("next")
                 screens.last().buttons.any { it.id.value == "previous" } shouldBe true
+            }
+        }
+    }
+
+    "job cards show provider fees and retained progress before joining in both languages" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG, useClientLocale = true) { _, screen -> screens += screen }.use { h ->
+                val job = mockJob(h)
+                every { h.ecoJobs.canJoin(h.player, job) } returns true
+                val card = JobsView.JobCard("miner", JobsView.Main)
+                listOf("ru-RU", "en-US").forEach { language ->
+                    h.player.setLocale(Locale.forLanguageTag(language))
+                    h.menu.open(h.player, card)
+                    val body = screens.last().body.joinToString { plain(it.text) }
+                    if (language == "ru-RU") {
+                        body.contains("Вступление: бесплатно") shouldBe true
+                        body.contains("Выход: бесплатно") shouldBe true
+                        body.contains("уровень и опыт сохранятся") shouldBe true
+                    } else {
+                        body.contains("Joining: free") shouldBe true
+                        body.contains("Leaving: free") shouldBe true
+                        body.contains("level and XP will be kept") shouldBe true
+                    }
+                    listOf("EcoJobs", "LuckPerms", "PlaceholderAPI").none(body::contains) shouldBe true
+                    screens.last().buttons.first().id.value shouldBe "action"
+                }
+                h.player.setLocale(Locale.forLanguageTag("ru-RU"))
+                every { job.joinPrice } returns coinPrice({ 125.5 })
+                every { job.leavePrice } returns coinPrice({ 25.0 })
+                every { job.resetsOnQuit } returns true
+                h.menu.open(h.player, card)
+                val body = screens.last().body.joinToString { plain(it.text) }
+                body.contains("Вступление: 125.5 💰") shouldBe true
+                body.contains("Выход: 25 💰") shouldBe true
+                body.contains("уровень и опыт будут сброшены") shouldBe true
+                val glyphs = screens.last().body.flatMap { it.text.textDescendants() }
+                    .filter { "💰" in it.content() }
+                glyphs.isNotEmpty() shouldBe true
+                glyphs.all { it.color()?.value() == 0xffffff } shouldBe true
+                verify(exactly = 0) { h.ecoJobs.join(any(), any()) }
+                verify(exactly = 0) { h.ecoJobs.leave(any(), any()) }
+            }
+        }
+    }
+
+    "join restrictions distinguish locked jobs full slots and unaffordable fees" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
+                val job = mockJob(h)
+                every { h.ecoJobs.jobs() } returns listOf(job)
+                every { h.ecoJobs.canJoin(h.player, job) } returns true
+                every { h.ecoJobs.has(h.player, job) } returns false
+                h.menu.open(h.player, JobsView.Catalog(false, 1, JobsView.Main))
+                // A locked catalog entry still opens its information; it cannot join the job.
+                screens.last().buttons.single { it.id.value == "content_0" }.onClick.handle(mockk(relaxed = true))
+                screens.last().id shouldBe "ecojobs.job"
+                screens.last().body.joinToString { plain(it.text) }.contains("профессия ещё не открыта") shouldBe true
+                screens.last().buttons.none { it.id.value == "action" } shouldBe true
+
+                every { h.ecoJobs.has(h.player, job) } returns true
+                every { h.ecoJobs.activeJobs(h.player) } returns List(3) { job }
+                h.menu.open(h.player, JobsView.JobCard("miner", JobsView.Main))
+                screens.last().body.joinToString { plain(it.text) }.contains("Заняты все места: 3/3") shouldBe true
+                screens.last().buttons.none { it.id.value == "action" } shouldBe true
+
+                every { h.ecoJobs.activeJobs(h.player) } returns emptyList()
+                every { job.joinPrice } returns coinPrice({ 40.0 }, { false })
+                h.menu.open(h.player, JobsView.JobCard("miner", JobsView.Main))
+                screens.last().body.joinToString { plain(it.text) }.contains("Недостаточно монет. Для действия нужно: 40 💰") shouldBe true
+                screens.last().buttons.none { it.id.value == "action" } shouldBe true
+                verify(exactly = 0) { h.ecoJobs.join(any(), any()) }
+            }
+        }
+    }
+
+    "membership actions recheck affordability and changed terms before native mutation" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
+                val job = mockJob(h)
+                var active = false
+                var affordable = true
+                var joinFee = 10.0
+                var leaveFee = 0.0
+                var reset = false
+                every { h.ecoJobs.active(h.player, job) } answers { active }
+                every { h.ecoJobs.canJoin(h.player, job) } returns true
+                every { job.joinPrice } returns coinPrice({ joinFee }, { affordable })
+                every { job.leavePrice } returns coinPrice({ leaveFee }, { affordable })
+                every { job.resetsOnQuit } answers { reset }
+                every { h.ecoJobs.join(h.player, job) } answers { active = true; true }
+                every { h.ecoJobs.leave(h.player, job) } answers { active = false; true }
+                fun click(id: String) {
+                    screens.last().buttons.single { it.id.value == id }.onClick.handle(mockk(relaxed = true))
+                }
+                val card = JobsView.JobCard("miner", JobsView.Main)
+                h.menu.open(h.player, card)
+                joinFee = 20.0
+                click("action")
+                verify(exactly = 0) { h.ecoJobs.join(any(), any()) }
+                screens.last().body.joinToString { plain(it.text) }.contains("Вступление: 20 💰") shouldBe true
+                affordable = false
+                click("action")
+                verify(exactly = 0) { h.ecoJobs.join(any(), any()) }
+                screens.last().buttons.none { it.id.value == "action" } shouldBe true
+                affordable = true
+                h.menu.open(h.player, card)
+                click("action")
+                verify(exactly = 1) { h.ecoJobs.join(h.player, job) }
+                click("action")
+                screens.last().body.joinToString { plain(it.text) }.contains("уровень и опыт сохранятся") shouldBe true
+                leaveFee = 30.0
+                reset = true
+                click("confirm")
+                verify(exactly = 0) { h.ecoJobs.leave(any(), any()) }
+                val revised = screens.last().body.joinToString { plain(it.text) }
+                revised.contains("Выход: 30 💰") shouldBe true
+                revised.contains("уровень и опыт будут сброшены") shouldBe true
+                affordable = false
+                click("confirm")
+                verify(exactly = 0) { h.ecoJobs.leave(any(), any()) }
+                screens.last().buttons.none { it.id.value == "confirm" } shouldBe true
+                screens.last().body.joinToString { plain(it.text) }.contains("Недостаточно монет") shouldBe true
+                affordable = true
+                h.menu.open(h.player, JobsView.LeaveConfirm("miner", card))
+                click("confirm")
+                verify(exactly = 1) { h.ecoJobs.leave(h.player, job) }
+            }
+        }
+    }
+
+    "custom job prices preserve the provider display as safe components" {
+        MockBukkitTestRuntime.open().use { paper ->
+            val screens = mutableListOf<PaperDialogScreen>()
+            menuHarness(paper, JobsMenuPresentation.DIALOG) { _, screen -> screens += screen }.use { h ->
+                val job = mockJob(h)
+                val native = mockk<Price>()
+                val price = mockk<ConfiguredPrice> {
+                    every { this@mockk.price } returns native
+                    every { identifier } returns "custom:crystals"
+                    every { getValue(h.player) } returns 3.0
+                    every { getDisplay(h.player) } returns "&b3 crystals <red>"
+                    every { canAfford(h.player) } returns false
+                }
+                every { job.joinPrice } returns price
+                every { h.ecoJobs.canJoin(h.player, job) } returns true
+                h.menu.open(h.player, JobsView.JobCard("miner", JobsView.Main))
+                val body = screens.last().body.joinToString { plain(it.text) }
+                body.contains("Вступление: 3 crystals <red>") shouldBe true
+                body.contains("Недостаточно средств или предметов") shouldBe true
+                body.contains("бесплатно") shouldBe true // The independent leave price remains free.
+                screens.last().buttons.none { it.id.value == "action" } shouldBe true
+                verify(exactly = 0) { h.ecoJobs.join(any(), any()) }
             }
         }
     }
@@ -732,6 +893,9 @@ private fun mockJob(h: JobsMenuHarness): Job {
     val job = mockk<Job> {
         every { id } returns "miner"
         every { maxLevel } returns 100
+        every { joinPrice } returns ConfiguredPrice.FREE
+        every { leavePrice } returns ConfiguredPrice.FREE
+        every { resetsOnQuit } returns false
         every { getIcon(h.player) } returns ItemStack(Material.IRON_PICKAXE)
         every { getExpForLevel(any()) } returns 100.0
     }
@@ -750,6 +914,16 @@ private fun mockJob(h: JobsMenuHarness): Job {
     every { h.ecoJobs.rewards(h.player, job, any()) } returns listOf(Component.text("Награда за уровень"))
     return job
 }
+
+private fun coinPrice(value: () -> Double, affordable: () -> Boolean = { true }): ConfiguredPrice =
+    ConfiguredPrice(mockk<PriceEconomy> {
+        every { getValue(any(), 1.0) } answers { value() }
+        every { canAfford(any(), 1.0) } answers { affordable() }
+        every { identifier } returns "eco:economy"
+    }, "")
+
+private fun Component.textDescendants(): List<net.kyori.adventure.text.TextComponent> =
+    listOfNotNull(this as? net.kyori.adventure.text.TextComponent) + children().flatMap { it.textDescendants() }
 
 private class JobsMenuHarness(
     val plugin: JavaPlugin,
@@ -780,6 +954,7 @@ private fun menuHarness(
     presentation: JobsMenuPresentation = JobsMenuPresentation.INVENTORY,
     earnings: EarningsService? = null,
     escapeBack: () -> Boolean = { true },
+    useClientLocale: Boolean = false,
     lifecycle: ((PaperDialogScreen, (() -> Unit)?, () -> Unit, Boolean) -> Unit)? = null,
     display: ((PlayerMock, PaperDialogScreen) -> Unit)? = null,
 ): JobsMenuHarness {
@@ -798,7 +973,9 @@ private fun menuHarness(
         )
     }
     Files.copy(project.resolve("src/main/resources/config.yml"), dataFolder.resolve("config.yml"))
-    val settings = AddonSettings.load(dataFolder.resolve("config.yml").toFile()).let { it.copy(menuPresentation = presentation, earnings = it.earnings.copy(enabled = earnings != null)) }
+    val settings = AddonSettings.load(dataFolder.resolve("config.yml").toFile()).let {
+        it.copy(menuPresentation = presentation, useClientLocale = useClientLocale, earnings = it.earnings.copy(enabled = earnings != null))
+    }
     val layouts = JobsMenuLayouts(dataFolder)
     val locale = JobsLocale(dataFolder.toFile()) { settings }.also(JobsLocale::validate)
     val bridgeTasks = ru.arc.core.LifecycleTaskScope(ru.arc.core.TestTaskScheduler())

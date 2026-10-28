@@ -126,7 +126,7 @@ internal object JobsDialogScreens {
                     title,
                     buttonRole,
                     locale.render("common.unavailable-prefix", player),
-                    trailingDetail = buttonRole != JobsDialogStyle.Role.UNAVAILABLE,
+                    trailingDetail = row.actionable,
                 )
                 hasForwardMarker -> JobsDialogStyle.forward(title, buttonRole)
                 else -> title
@@ -135,6 +135,7 @@ internal object JobsDialogScreens {
                 JobsDialogStyle.Role.DEFAULT
             } else buttonRole
             val control = when {
+                view is JobsView.Catalog && row.actionable -> button(row.id, label, tooltip, labelRole) { click(row.slot) }
                 buttonRole == JobsDialogStyle.Role.UNAVAILABLE -> if (inline) null else button(row.id, label, tooltip, labelRole) {}
                 row.actionable -> button(row.id, label, tooltip, labelRole) { click(row.slot) }
                 inline -> null

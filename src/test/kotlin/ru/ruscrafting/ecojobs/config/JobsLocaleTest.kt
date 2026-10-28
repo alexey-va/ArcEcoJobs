@@ -5,11 +5,15 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 import java.nio.file.Path
 
 class JobsLocaleTest : StringSpec({
     val project = Path.of(System.getProperty("arcecojobs.projectDir"))
+    var paper: MockBukkitTestRuntime? = null
+    beforeTest { paper = MockBukkitTestRuntime.open() }
+    afterTest { paper?.close(); paper = null }
 
     "standalone lore block placeholders expand to separate rows" {
         val dataFolder = Files.createTempDirectory("arcecojobs-locale-")

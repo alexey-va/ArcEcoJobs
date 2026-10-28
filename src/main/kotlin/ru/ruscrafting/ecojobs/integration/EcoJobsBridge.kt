@@ -14,6 +14,9 @@ import com.willfp.ecojobs.api.joinJob
 import com.willfp.ecojobs.api.leaveJob
 import com.willfp.ecojobs.jobs.Job
 import com.willfp.ecojobs.jobs.Jobs
+import com.willfp.eco.core.price.ConfiguredPrice
+import com.willfp.eco.core.price.impl.PriceEconomy
+import com.willfp.eco.core.price.impl.PriceFree
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.JoinConfiguration
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -32,6 +35,31 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 
 data class RankingEntry(val uuid: UUID, val name: String, val level: Int, val xp: Double)
+
+enum class JobJoinBlock { LOCKED, FULL, PRICE, UNAVAILABLE }
+
+data class JobCost(
+    val value: Double,
+    val identifier: String,
+    val coins: Boolean,
+    val free: Boolean,
+    val display: Component,
+    val affordable: Boolean,
+) {
+    fun sameTerms(other: JobCost): Boolean = copy(affordable = other.affordable) == other
+}
+
+data class JobMembership(
+    val active: Boolean,
+    val usedSlots: Int,
+    val limit: Int,
+    val joinCost: JobCost,
+    val leaveCost: JobCost,
+    val resetsProgress: Boolean,
+    val joinBlock: JobJoinBlock?,
+) {
+    val canJoin: Boolean get() = !active && joinBlock == null
+}
 
 class EcoJobsBridge(
     private val plugin: JavaPlugin,
@@ -68,6 +96,29 @@ class EcoJobsBridge(
     fun has(player: OfflinePlayer, job: Job): Boolean = player.hasJob(job)
     fun active(player: OfflinePlayer, job: Job): Boolean = player.hasJobActive(job)
     fun canJoin(player: Player, job: Job): Boolean = player.canJoinJob(job)
+
+    fun membership(player: Player, job: Job): JobMembership {
+        val active = active(player, job)
+        val used = activeJobs(player).size
+        val limit = limit(player)
+        val joinCost = cost(player, job.joinPrice)
+        return JobMembership(active, used, limit, joinCost, cost(player, job.leavePrice), job.resetsOnQuit, when {
+            active -> null
+            !has(player, job) -> JobJoinBlock.LOCKED
+            used >= limit -> JobJoinBlock.FULL
+            !joinCost.affordable -> JobJoinBlock.PRICE
+            !canJoin(player, job) -> JobJoinBlock.UNAVAILABLE
+            else -> null
+        })
+    }
+
+    internal fun cost(player: Player, price: ConfiguredPrice): JobCost {
+        val value = price.getValue(player)
+        val coins = price.price is PriceEconomy
+        val free = price.price is PriceFree || coins && value == 0.0
+        return JobCost(value, price.identifier, coins, free,
+            if (coins || free) Component.empty() else legacy(price.getDisplay(player)), price.canAfford(player))
+    }
     fun totalLevel(player: OfflinePlayer): Int = jobs().sumOf { job ->
         if (participates(player, job)) level(player, job) else 0
     }
